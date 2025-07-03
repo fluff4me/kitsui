@@ -1,5 +1,6 @@
 export type Mutable<T> = { -readonly [KEY in keyof T]: T[KEY] }
 export const mutable = <T> (value: T): Mutable<T> => value as Mutable<T>
+export type PartialRecord<K extends string, V> = Partial<Record<K, V>>
 
 export const DefineProperty = <O, K extends string & keyof O> (obj: O, key: K, value: O[K]): O[K] => {
 	try {

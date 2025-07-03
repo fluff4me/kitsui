@@ -1,4 +1,4 @@
-import type Component from 'ui/Component'
+import type Component from 'Component'
 import State from 'utility/State'
 
 namespace FocusListener {

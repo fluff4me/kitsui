@@ -4,12 +4,6 @@ import Functions from 'utility/Functions'
 import type { Mutable as MakeMutable } from 'utility/Objects'
 import { DefineMagic, DefineProperty, mutable } from 'utility/Objects'
 
-export type StateOr<T> = State<T> | T
-export type MutableStateOr<T> = MutableState<T> | T
-
-export type UnsubscribeState = () => void
-export type ComparatorFunction<T> = false | ((a: T, b: T) => boolean)
-
 interface State<T, E = T> {
 	readonly isState: true
 	readonly value: T
@@ -20,28 +14,28 @@ interface State<T, E = T> {
 	setId (id: string): this
 
 	/** Subscribe to state change events. Receive the initial state as an event. */
-	use (owner: State.Owner, subscriber: (value: E, oldValue: E | undefined, owner: State.Owner) => unknown): UnsubscribeState
-	useManual (subscriber: (value: E, oldValue: E | undefined, owner: State.Owner) => unknown): UnsubscribeState
+	use (owner: State.Owner, subscriber: (value: E, oldValue: E | undefined, owner: State.Owner) => unknown): State.Unsubscribe
+	useManual (subscriber: (value: E, oldValue: E | undefined, owner: State.Owner) => unknown): State.Unsubscribe
 	/** Subscribe to state change events. The initial state is not sent as an event. */
-	subscribe (owner: State.Owner, subscriber: (value: E, oldValue?: E) => unknown): UnsubscribeState
-	subscribeManual (subscriber: (value: E, oldValue?: E) => unknown): UnsubscribeState
+	subscribe (owner: State.Owner, subscriber: (value: E, oldValue?: E) => unknown): State.Unsubscribe
+	subscribeManual (subscriber: (value: E, oldValue?: E) => unknown): State.Unsubscribe
 	unsubscribe (subscriber: (value: E, oldValue?: E) => unknown): void
 	emit (oldValue?: E): void
-	match<R extends Arrays.Or<T>> (owner: State.Owner, value: R, then: (value: R extends (infer R)[] ? R : R) => unknown): UnsubscribeState
-	matchManual<R extends Arrays.Or<T>> (value: R, then: (value: R extends (infer R)[] ? R : R) => unknown): UnsubscribeState
+	match<R extends Arrays.Or<T>> (owner: State.Owner, value: R, then: (value: R extends (infer R)[] ? R : R) => unknown): State.Unsubscribe
+	matchManual<R extends Arrays.Or<T>> (value: R, then: (value: R extends (infer R)[] ? R : R) => unknown): State.Unsubscribe
 	await (owner: State.Owner, value: T): Promise<T>
 
-	map<R> (owner: State.Owner, mapper: (value: T) => StateOr<R>, equals?: ComparatorFunction<R>): State.Generator<R>
-	mapManual<R> (mapper: (value: T) => StateOr<R>, equals?: ComparatorFunction<R>): State.Generator<R>
+	map<R> (owner: State.Owner, mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State.Generator<R>
+	mapManual<R> (mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State.Generator<R>
 	nonNullish: State.Generator<boolean>
 	truthy: State.Generator<boolean>
 	falsy: State.Generator<boolean>
 	not: State.Generator<boolean>
 	equals (value: T): State.Generator<boolean>
-	coalesce<R> (right: StateOr<R>): State.Generator<Exclude<T, null | undefined> | R>
+	coalesce<R> (right: State.Or<R>): State.Generator<Exclude<T, null | undefined> | R>
 
-	delay (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null, equals?: ComparatorFunction<T>): State<T>
-	delay<R> (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper: (value: T) => StateOr<R>, equals?: ComparatorFunction<R>): State<R>
+	delay (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null, equals?: State.ComparatorFunction<T>): State<T>
+	delay<R> (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>
 
 	asMutable?: MutableState<T>
 }
@@ -52,8 +46,8 @@ interface MutableStateSimple<T> extends State<T> {
 
 interface MutableState<T> extends MutableStateSimple<T> {
 	setValue (value: T): this
-	bind (owner: State.Owner, state: State<T>): UnsubscribeState
-	bindManual (state: State<T>): UnsubscribeState
+	bind (owner: State.Owner, state: State<T>): State.Unsubscribe
+	bindManual (state: State<T>): State.Unsubscribe
 }
 
 // const SYMBOL_UNSUBSCRIBE = Symbol('UNSUBSCRIBE')
@@ -69,10 +63,10 @@ interface InternalState<T> {
 	[SYMBOL_SUBSCRIBERS]: ((value: unknown, oldValue: unknown) => unknown)[]
 }
 
-function State<T> (defaultValue: T, comparator?: ComparatorFunction<T>): MutableState<T> {
-	let unuseBoundState: UnsubscribeState | undefined
+function State<T> (defaultValue: T, comparator?: State.ComparatorFunction<T>): State.Mutable<T> {
+	let unuseBoundState: State.Unsubscribe | undefined
 	let equalsMap: Map<T, State.Generator<boolean>> | undefined
-	const result: MakeMutable<MutableState<T>> & InternalState<T> = {
+	const result: MakeMutable<State.Mutable<T>> & InternalState<T> = {
 		isState: true,
 		setId (id) {
 			result.id = id
@@ -225,7 +219,7 @@ function State<T> (defaultValue: T, comparator?: ComparatorFunction<T>): Mutable
 				return rightState.value
 			}).observeManual(result, rightState)
 		},
-		delay (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null | ((value: T) => StateOr<any>), equals?: ComparatorFunction<any>) {
+		delay (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null | ((value: T) => State.Or<any>), equals?: State.ComparatorFunction<any>) {
 			const delayed = State(!mapper ? result.value : mapper(result.value), equals)
 			let timeout: number | undefined
 			result.subscribe(owner, value => {
@@ -300,6 +294,12 @@ namespace State {
 	export type Mutable<T> = MutableState<T>
 	export type MutableSetOnly<T> = MutableStateSimple<T>
 
+	export type Or<T> = T | State<T>
+	export type MutableOr<T> = T | State.Mutable<T>
+
+	export type Unsubscribe = () => void
+	export type ComparatorFunction<T> = false | ((a: T, b: T) => boolean)
+
 	export function is<T> (value: unknown): value is State<T> {
 		return typeof value === 'object' && (value as State<T>)?.isState === true
 	}
@@ -340,7 +340,7 @@ namespace State {
 		unobserve (...states: (State<any> | undefined)[]): this
 	}
 
-	export function Generator<T> (generate: () => StateOr<T>, equals?: ComparatorFunction<T>): Generator<T> {
+	export function Generator<T> (generate: () => State.Or<T>, equals?: ComparatorFunction<T>): Generator<T> {
 		const result = State(undefined as T, equals) as State<T> as MakeMutable<Generator<T>> & InternalState<T>
 		delete result.asMutable
 
@@ -349,7 +349,7 @@ namespace State {
 		})
 
 		let initial = true
-		let unuseInternalState: UnsubscribeState | undefined
+		let unuseInternalState: State.Unsubscribe | undefined
 		result.refresh = () => refreshInternal()
 		result.regenerate = () => refreshInternal(true)
 
@@ -365,7 +365,7 @@ namespace State {
 			for (const state of states)
 				state?.subscribeManual(result.refresh)
 
-			let unuseOwnerRemove: UnsubscribeState | undefined = ownerClosedState.subscribeManual(removed => removed && onRemove())
+			let unuseOwnerRemove: State.Unsubscribe | undefined = ownerClosedState.subscribeManual(removed => removed && onRemove())
 			return result
 
 			function onRemove () {
@@ -423,13 +423,13 @@ namespace State {
 		unobserve (...states: State<any>[]): this
 	}
 
-	export function JIT<T> (generate: (owner: Owner) => StateOr<T>): JIT<T> {
+	export function JIT<T> (generate: (owner: Owner) => State.Or<T>): JIT<T> {
 		const result = State(undefined!) as State<T, () => T> as MakeMutable<JIT<T>> & InternalState<T>
 		delete result.asMutable
 
 		let isCached = false
 		let cached: T | undefined
-		let unuseInternalState: UnsubscribeState | undefined
+		let unuseInternalState: State.Unsubscribe | undefined
 		let owner: Owner.Removable | undefined
 		DefineMagic(result, 'value', {
 			get: () => {
@@ -651,7 +651,7 @@ namespace State {
 		move (startIndex: number, endIndex: number, newStartIndex: number): this
 		moveAt (indices: number[], newStartIndex: number): this
 
-		useEach (owner: State.Owner, subscriber: ArraySubscriber<T>): UnsubscribeState
+		useEach (owner: State.Owner, subscriber: ArraySubscriber<T>): State.Unsubscribe
 	}
 
 	export function Array<T> (...values: T[]): Array<T> {
@@ -940,12 +940,12 @@ namespace State {
 			.observe(owner, ...anyOfStates)
 	}
 
-	export function Map<const INPUT extends (State<unknown> | undefined)[], OUTPUT> (owner: Owner, inputs: INPUT, outputGenerator: (...inputs: NoInfer<{ [I in keyof INPUT]: INPUT[I] extends State<infer INPUT> ? INPUT : undefined }>) => StateOr<OUTPUT>, equals?: ComparatorFunction<NoInfer<OUTPUT>>): Generator<OUTPUT> {
+	export function Map<const INPUT extends (State<unknown> | undefined)[], OUTPUT> (owner: Owner, inputs: INPUT, outputGenerator: (...inputs: NoInfer<{ [I in keyof INPUT]: INPUT[I] extends State<infer INPUT> ? INPUT : undefined }>) => State.Or<OUTPUT>, equals?: ComparatorFunction<NoInfer<OUTPUT>>): Generator<OUTPUT> {
 		return Generator(() => outputGenerator(...inputs.map(input => input?.value) as never), equals)
 			.observe(owner, ...inputs.filter(FilterNonNullish))
 	}
 
-	export function MapManual<const INPUT extends (State<unknown> | undefined)[], OUTPUT> (inputs: INPUT, outputGenerator: (...inputs: NoInfer<{ [I in keyof INPUT]: Exclude<INPUT[I], undefined> extends State<infer INPUT> ? INPUT : undefined }>) => StateOr<OUTPUT>, equals?: ComparatorFunction<NoInfer<OUTPUT>>): Generator<OUTPUT> {
+	export function MapManual<const INPUT extends (State<unknown> | undefined)[], OUTPUT> (inputs: INPUT, outputGenerator: (...inputs: NoInfer<{ [I in keyof INPUT]: Exclude<INPUT[I], undefined> extends State<infer INPUT> ? INPUT : undefined }>) => State.Or<OUTPUT>, equals?: ComparatorFunction<NoInfer<OUTPUT>>): Generator<OUTPUT> {
 		return Generator(() => outputGenerator(...inputs.map(input => input?.value) as never), equals)
 			.observeManual(...inputs.filter(FilterNonNullish))
 	}

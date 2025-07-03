@@ -1,7 +1,6 @@
-import type Component from 'ui/Component'
-import { Quilt, QuiltHelper } from 'ui/utility/StringApplicator'
-import type { UnsubscribeState } from 'utility/State'
+import type Component from 'Component'
 import State from 'utility/State'
+import type { StringApplicatorSource } from 'utility/StringApplicator'
 
 interface AttributeManipulator<HOST> {
 	has (attribute: string): boolean
@@ -32,8 +31,8 @@ interface AttributeManipulator<HOST> {
 	 * Otherwise, calls the supplier, and sets the attribute to the result, or removes the attribute if it's `undefined` 
 	 */
 	compute (attribute: string, supplier: (host: HOST) => string | undefined): HOST
-	use (attribute: string, keyOrHandler: Quilt.SimpleKey | Quilt.Handler): HOST
-	getUsing (attribute: string): Quilt.SimpleKey | Quilt.Handler | undefined
+	use (attribute: string, source: StringApplicatorSource): HOST
+	getUsing (attribute: string): StringApplicatorSource | undefined
 	remove (...attributes: string[]): HOST
 	toggle (present: boolean, attribute: string, value?: string): HOST
 	copy (component: Component): HOST
@@ -41,17 +40,17 @@ interface AttributeManipulator<HOST> {
 }
 
 interface TranslationHandlerRegistration {
-	handler: Quilt.SimpleKey | Quilt.Handler
-	unuse: UnsubscribeState
+	source: StringApplicatorSource
+	unuse: State.Unsubscribe
 }
 
 function AttributeManipulator (component: Component): AttributeManipulator<Component> {
 	let removed = false
 	let translationHandlers: Record<string, TranslationHandlerRegistration> | undefined
-	const unuseAttributeMap = new Map<string, UnsubscribeState>()
+	const unuseAttributeMap = new Map<string, State.Unsubscribe>()
 	const attributeStates = new Map<string, State<string | undefined>>()
 
-	State.Owner.getOwnershipState(component)?.matchManual(true, () => {
+	State.Owner.getRemovedState(component)?.matchManual(true, () => {
 		removed = true
 
 		for (const registration of Object.values(translationHandlers ?? {}))
@@ -209,7 +208,7 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 			return component
 		},
 		getUsing (attribute) {
-			return translationHandlers?.[attribute]?.handler
+			return translationHandlers?.[attribute]?.source
 		},
 		use (attribute, handler) {
 			if (removed)
@@ -220,7 +219,7 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 				if (!registration)
 					return
 
-				const translationHandler = registration.handler
+				const translationHandler = registration.source
 				const weave = typeof translationHandler === 'string' ? quilt[translationHandler]() : translationHandler(quilt, QuiltHelper)
 				const value = weave?.toString() ?? ''
 				component.element.setAttribute(attribute, value)
@@ -228,7 +227,7 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 			})
 
 			translationHandlers ??= {}
-			translationHandlers[attribute] = { handler, unuse }
+			translationHandlers[attribute] = { source: handler, unuse }
 
 			return component
 		},

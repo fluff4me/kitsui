@@ -1,4 +1,4 @@
-import type Component from 'ui/Component'
+import type Component from 'Component'
 import type { UnsubscribeState } from 'utility/State'
 import State from 'utility/State'
 

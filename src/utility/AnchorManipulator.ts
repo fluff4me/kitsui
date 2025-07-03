@@ -1,10 +1,10 @@
-import type Component from 'ui/Component'
-import Mouse from 'ui/utility/Mouse'
-import Viewport from 'ui/utility/Viewport'
+import type Component from 'Component'
+import Mouse from 'utility/Mouse'
+import type { PartialRecord } from 'utility/Objects'
 import type { UnsubscribeState } from 'utility/State'
 import State from 'utility/State'
 import Time from 'utility/Time'
-import type { PartialRecord } from 'utility/Type'
+import Viewport from 'utility/Viewport'
 
 ////////////////////////////////////
 //#region Anchor Strings

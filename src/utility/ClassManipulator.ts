@@ -1,4 +1,4 @@
-import type Component from 'ui/Component'
+import type Component from 'Component'
 
 interface ClassManipulator<HOST> {
 	has (...classes: string[]): boolean

@@ -1,4 +1,4 @@
-import State from './State'
+import State from 'utility/State'
 
 interface TypeManipulator<HOST, TYPE extends string> {
 	readonly state: State<ReadonlySet<TYPE>>

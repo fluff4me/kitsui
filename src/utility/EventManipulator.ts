@@ -1,7 +1,7 @@
-import type Component from 'ui/Component'
+import type Component from 'Component'
 import Arrays from 'utility/Arrays'
+import type { AnyFunction } from 'utility/Functions'
 import State from 'utility/State'
-import type { AnyFunction } from 'utility/Type'
 
 interface EventExtensions<HOST> {
 	host: HOST
@@ -148,17 +148,17 @@ function EventManipulator<T extends object> (host: T): EventManipulator<T, Nativ
 			initialiser({
 				subscribe (event, handler) {
 					manipulator.subscribe(event, handler)
-					State.Owner.getOwnershipState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler))
+					State.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler))
 					return this
 				},
 				subscribeCapture (event, handler) {
 					manipulator.subscribeCapture(event, handler)
-					State.Owner.getOwnershipState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler))
+					State.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler))
 					return this
 				},
 				subscribePassive (event, handler) {
 					manipulator.subscribePassive(event, handler)
-					State.Owner.getOwnershipState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler))
+					State.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler))
 					return this
 				},
 			})

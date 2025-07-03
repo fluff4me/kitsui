@@ -1,5 +1,6 @@
-import type Component from 'ui/Component'
-import Mouse from 'ui/utility/Mouse'
+import type Component from 'Component'
+import Arrays from 'utility/Arrays'
+import Mouse from 'utility/Mouse'
 
 namespace HoverListener {
 	let lastHovered: Element[] = []
@@ -30,7 +31,7 @@ namespace HoverListener {
 			const hovered = allHovered[allHovered.length - 1]
 
 			if (hovered.clientWidth === 0 || hovered.clientHeight === 0)
-				allHovered.filterInPlace(element => element.computedStyleMap().get('display')?.toString() !== 'none')
+				Arrays.filterInPlace(allHovered, element => element.computedStyleMap().get('display')?.toString() !== 'none')
 
 			if (hovered === lastHovered[lastHovered.length - 1])
 				return
