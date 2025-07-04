@@ -1,26 +1,23 @@
 import type Label from 'ui/component/core/Label'
-import AnchorManipulator from 'ui/utility/AnchorManipulator'
-import AttributeManipulator from 'ui/utility/AttributeManipulator'
-import ClassManipulator from 'ui/utility/ClassManipulator'
-import type { NativeEvents } from 'ui/utility/EventManipulator'
-import EventManipulator from 'ui/utility/EventManipulator'
-import FocusListener from 'ui/utility/FocusListener'
-import StringApplicator from 'ui/utility/StringApplicator'
-import StyleManipulator from 'ui/utility/StyleManipulator'
-import TextManipulator from 'ui/utility/TextManipulator'
-import Viewport from 'ui/utility/Viewport'
+import AnchorManipulator from 'utility/AnchorManipulator'
 import { Truthy } from 'utility/Arrays'
-import Async from 'utility/Async'
-import Errors from 'utility/Errors'
+import AttributeManipulator from 'utility/AttributeManipulator'
+import ClassManipulator from 'utility/ClassManipulator'
+import type { NativeEvents } from 'utility/EventManipulator'
+import EventManipulator from 'utility/EventManipulator'
+import FocusListener from 'utility/FocusListener'
 import type { AnyFunction } from 'utility/Functions'
+import Maps from 'utility/Maps'
 import type { Mutable } from 'utility/Objects'
 import { DefineMagic, DefineProperty, mutable } from 'utility/Objects'
 import SelfScript from 'utility/SelfScript'
 import SourceMapping from 'utility/SourceMapping'
-import type { UnsubscribeState } from 'utility/State'
 import State from 'utility/State'
+import StringApplicator from 'utility/StringApplicator'
 import Strings from 'utility/Strings'
+import TextManipulator from 'utility/TextManipulator'
 import type { Falsy } from 'utility/Type'
+import Viewport from 'utility/Viewport'
 
 const SYMBOL_COMPONENT_BRAND = Symbol('COMPONENT_BRAND')
 export interface ComponentBrand<TYPE extends string> {
@@ -99,7 +96,7 @@ interface BaseComponent<ELEMENT extends HTMLElement = HTMLElement> extends Compo
 	readonly attributes: AttributeManipulator<this>
 	readonly event: EventManipulator<this, ComponentEvents>
 	readonly text: TextManipulator<this>
-	readonly style: StyleManipulator<this>
+	// readonly style: StyleManipulator<this>
 	readonly anchor: AnchorManipulator<this>
 	readonly nojit: Partial<this>
 
@@ -260,11 +257,11 @@ function Component (type: keyof HTMLElementTagNameMap = 'span'): Component {
 	if (!canBuildComponents)
 		throw new Error('Components cannot be built yet')
 
-	let unuseIdState: UnsubscribeState | undefined
-	let unuseNameState: UnsubscribeState | undefined
-	let unuseAriaLabelledByIdState: UnsubscribeState | undefined
-	let unuseAriaControlsIdState: UnsubscribeState | undefined
-	let unuseOwnerRemove: UnsubscribeState | undefined
+	let unuseIdState: State.Unsubscribe | undefined
+	let unuseNameState: State.Unsubscribe | undefined
+	let unuseAriaLabelledByIdState: State.Unsubscribe | undefined
+	let unuseAriaControlsIdState: State.Unsubscribe | undefined
+	let unuseOwnerRemove: State.Unsubscribe | undefined
 
 	let descendantsListeningForScroll: HTMLCollection | undefined
 
@@ -314,7 +311,7 @@ function Component (type: keyof HTMLElementTagNameMap = 'span'): Component {
 			ELEMENT_TO_COMPONENT_MAP.set(newElement, component)
 
 			component.attributes.copy(oldElement)
-			component.style.refresh()
+			// component.style.refresh()
 
 			return component
 		},
@@ -375,7 +372,7 @@ function Component (type: keyof HTMLElementTagNameMap = 'span'): Component {
 		},
 
 		tweakJIT: (property, tweaker) => {
-			const tweaks = jitTweaks.compute(property, () => new Set())
+			const tweaks = Maps.compute(jitTweaks, property, () => new Set())
 			if (tweaks === true)
 				tweaker(component[property] as never, component)
 			else
@@ -390,9 +387,9 @@ function Component (type: keyof HTMLElementTagNameMap = 'span'): Component {
 			return component
 		},
 
-		get style () {
-			return DefineProperty(component, 'style', StyleManipulator(component))
-		},
+		// get style () {
+		// 	return DefineProperty(component, 'style', StyleManipulator(component))
+		// },
 		get classes () {
 			return DefineProperty(component, 'classes', ClassManipulator(component))
 		},
@@ -821,14 +818,14 @@ function Component (type: keyof HTMLElementTagNameMap = 'span'): Component {
 		},
 	} satisfies Pick<Component, keyof BaseComponent>) as any as Mutable<Component>
 
-	WeavingArg.setRenderable(component, () => component.element.textContent ?? '')
-	Objects.stringify.disable(component)
+	// WeavingArg.setRenderable(component, () => component.element.textContent ?? '')
+	// Objects.stringify.disable(component)
 
 	for (const extension of componentExtensionsRegistry)
 		extension(component)
 
 	if (!Component.is(component))
-		throw Errors.Impossible()
+		throw new Error('This should never happen')
 
 	component.element.component = component
 	return component
@@ -1025,7 +1022,7 @@ namespace Component {
 
 			const originalRef = new WeakRef(original)
 			original = undefined
-			await Async.sleep(1000)
+			await new Promise<void>(resolve => setTimeout(resolve, 1000))
 
 			original = originalRef.deref()
 			if (!original || original.rooted.value || original.removed.value)

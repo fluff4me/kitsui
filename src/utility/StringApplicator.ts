@@ -14,7 +14,9 @@ export interface StringApplicatorSourceDefinition<SOURCE extends keyof StringApp
 }
 
 let cumulativeSourceRequiredState: State<unknown> | undefined
-export namespace StringApplicatorSources {
+
+export type StringApplicatorSource = SupplierOr<StringApplicatorSources[keyof StringApplicatorSources]>
+export namespace StringApplicatorSource {
 
 	export const REGISTRY: Partial<Record<keyof StringApplicatorSources, StringApplicatorSourceDefinition>> = {}
 
@@ -50,9 +52,25 @@ export namespace StringApplicatorSources {
 
 		throw new Error(`No StringApplicatorSourceDefinition found for source: ${String(source)}`)
 	}
-}
 
-export type StringApplicatorSource = SupplierOr<StringApplicatorSources[keyof StringApplicatorSources]>
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+	export function apply (applicator: (source?: Exclude<StringApplicatorSource, Function> | null) => unknown, source?: StringApplicatorSource | null) {
+		if (typeof source !== 'function') {
+			applicator(source)
+			return
+		}
+
+		const sourceFunction = source
+		if (!cumulativeSourceRequiredState) {
+			applicator(sourceFunction())
+			return
+		}
+
+		const subOwner = State.Owner.create()
+		cumulativeSourceRequiredState?.use(subOwner, () => applicator(sourceFunction()))
+		return subOwner.remove
+	}
+}
 
 interface StringApplicator<HOST> {
 	readonly state: State<string>
@@ -77,21 +95,6 @@ function BaseStringApplicator<HOST> (
 	const setInternal = set.bind(null, result)
 	return result
 
-	function setFromSource (source?: StringApplicatorSource | null) {
-		subUnown?.(); subUnown = undefined
-
-		if (typeof source !== 'function')
-			return setInternal(source)
-
-		const sourceFunction = source
-		if (!cumulativeSourceRequiredState)
-			return setInternal(sourceFunction())
-
-		const subOwner = State.Owner.create()
-		subUnown = subOwner.remove
-		cumulativeSourceRequiredState?.use(subOwner, () => setInternal(sourceFunction()))
-	}
-
 	function makeApplicator<HOST> (host: HOST): StringApplicator.Optional<HOST> {
 		const hostOwner = host as HOST & State.Owner
 		State.Owner.getRemovedState(host)?.matchManual(true, () => {
@@ -109,7 +112,8 @@ function BaseStringApplicator<HOST> (
 
 				unbind?.(); unbind = undefined
 				unown?.(); unown = undefined
-				setFromSource(value)
+				subUnown?.(); subUnown = undefined
+				StringApplicatorSource.apply(setInternal, value)
 				return host
 			},
 			bind: (state?: State.Or<StringApplicatorSource | null | undefined>) => {
@@ -130,7 +134,10 @@ function BaseStringApplicator<HOST> (
 					return host
 				}
 
-				unbind = state?.use(hostOwner, state => setFromSource(state))
+				unbind = state?.use(hostOwner, state => {
+					subUnown?.(); subUnown = undefined
+					StringApplicatorSource.apply(setInternal, state)
+				})
 				return host
 			},
 			unbind: () => {
@@ -153,7 +160,7 @@ function StringApplicator<HOST> (host: HOST, defaultValueOrApply: string | undef
 
 	return BaseStringApplicator(host, defaultValue, (result, value) => {
 		if (value !== undefined && value !== null)
-			value = StringApplicatorSources.toString(value)
+			value = StringApplicatorSource.toString(value)
 
 		if (result.state.value !== value) {
 			result.state.asMutable?.setValue(value)
@@ -173,7 +180,7 @@ namespace StringApplicator {
 	}
 
 	export function render (content?: StringApplicatorSource | null): Node[] {
-		return !content ? [] : StringApplicatorSources.toNodes(content)
+		return !content ? [] : StringApplicatorSource.toNodes(content)
 	}
 
 	export function Nodes<HOST> (host: HOST, apply: (nodes: Node[]) => unknown): StringApplicator.Optional<HOST>
@@ -183,7 +190,7 @@ namespace StringApplicator {
 		const apply = (maybeApply ?? defaultValueOrApply) as (nodes: Node[]) => unknown
 
 		return BaseStringApplicator(host, defaultValue, (result, value: StringApplicatorSource | null | undefined) => {
-			const valueString = value !== undefined && value !== null ? StringApplicatorSources.toString(value) : undefined
+			const valueString = value !== undefined && value !== null ? StringApplicatorSource.toString(value) : undefined
 			result.state.asMutable?.setValue(valueString)
 			apply(render(value))
 		})
