@@ -1,6 +1,6 @@
-import type { Weave } from 'lang/en-nz'
-import type Component from 'ui/Component'
-import StringApplicator from 'ui/utility/StringApplicator'
+import type Component from 'Component'
+import type { StringApplicatorSource } from 'utility/StringApplicator'
+import StringApplicator from 'utility/StringApplicator'
 
 interface TextManipulator<HOST> extends Omit<StringApplicator.Optional<HOST>, 'rehost'> {
 	prepend (text: string): HOST
@@ -20,11 +20,11 @@ function TextManipulator (component: Component, target = component): TextManipul
 		return Object.assign(
 			applicator,
 			{
-				prepend (text?: string | Weave | null) {
+				prepend (text?: StringApplicatorSource | null) {
 					target.prepend(...StringApplicator.render(text))
 					return component
 				},
-				append (text?: string | Weave | null) {
+				append (text?: StringApplicatorSource | null) {
 					target.append(...StringApplicator.render(text))
 					return component
 				},

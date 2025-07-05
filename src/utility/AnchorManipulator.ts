@@ -1,7 +1,6 @@
 import type Component from 'Component'
 import Mouse from 'utility/Mouse'
 import type { PartialRecord } from 'utility/Objects'
-import type { UnsubscribeState } from 'utility/State'
 import State from 'utility/State'
 import Time from 'utility/Time'
 import Viewport from 'utility/Viewport'
@@ -183,10 +182,10 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 
 	let lastRender = 0
 	let rerenderTimeout: number | undefined
-	const subscribed: UnsubscribeState[] = []
-	const addSubscription = (use?: UnsubscribeState) => use && subscribed.push(use)
+	const subscribed: State.Unsubscribe[] = []
+	const addSubscription = (use?: State.Unsubscribe) => use && subscribed.push(use)
 
-	let unuseFrom: UnsubscribeState | undefined
+	let unuseFrom: State.Unsubscribe | undefined
 
 	const result: AnchorManipulator<HOST> = {
 		state: location,

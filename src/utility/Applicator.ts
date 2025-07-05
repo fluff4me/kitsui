@@ -1,5 +1,4 @@
 import type Component from 'Component'
-import type { UnsubscribeState } from 'utility/State'
 import State from 'utility/State'
 
 interface Applicator<HOST, T> {
@@ -16,7 +15,7 @@ function Applicator<HOST, T> (host: HOST, defaultValueOrApply: T | undefined | (
 	const defaultValue = !apply ? undefined : defaultValueOrApply as T
 	apply ??= defaultValueOrApply as (value?: T) => unknown
 
-	let unbind: UnsubscribeState | undefined
+	let unbind: State.Unsubscribe | undefined
 	const result = makeApplicator(host)
 	return result
 

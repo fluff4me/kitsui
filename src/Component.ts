@@ -1,4 +1,4 @@
-import type Label from 'ui/component/core/Label'
+import type Label from 'component/Label'
 import AnchorManipulator from 'utility/AnchorManipulator'
 import { Truthy } from 'utility/Arrays'
 import AttributeManipulator from 'utility/AttributeManipulator'
@@ -10,14 +10,14 @@ import type { AnyFunction } from 'utility/Functions'
 import Maps from 'utility/Maps'
 import type { Mutable } from 'utility/Objects'
 import { DefineMagic, DefineProperty, mutable } from 'utility/Objects'
-import SelfScript from 'utility/SelfScript'
-import SourceMapping from 'utility/SourceMapping'
 import State from 'utility/State'
 import StringApplicator from 'utility/StringApplicator'
 import Strings from 'utility/Strings'
 import TextManipulator from 'utility/TextManipulator'
 import type { Falsy } from 'utility/Type'
 import Viewport from 'utility/Viewport'
+
+const selfScript = State<string | undefined>(undefined)
 
 const SYMBOL_COMPONENT_BRAND = Symbol('COMPONENT_BRAND')
 export interface ComponentBrand<TYPE extends string> {
@@ -253,7 +253,20 @@ const componentExtensionsRegistry: ((component: Mutable<Component>) => unknown)[
 function Component<TYPE extends keyof HTMLElementTagNameMap> (type: TYPE): Component<HTMLElementTagNameMap[TYPE]>
 function Component (): Component<HTMLSpanElement>
 function Component (type?: keyof HTMLElementTagNameMap): Component
-function Component (type: keyof HTMLElementTagNameMap = 'span'): Component {
+function Component<PARAMS extends any[], COMPONENT extends Component> (builder: (component: Component, ...params: PARAMS) => COMPONENT): Component.Builder<PARAMS, COMPONENT>
+function Component<PARAMS extends any[], COMPONENT extends Component> (builder: (component: Component, ...params: PARAMS) => Promise<COMPONENT>): Component.BuilderAsync<PARAMS, COMPONENT>
+function Component<PARAMS extends any[], COMPONENT extends Component> (initial: keyof HTMLElementTagNameMap | (() => Component), builder: (component: Component, ...params: PARAMS) => COMPONENT): Component.Builder<PARAMS, COMPONENT>
+function Component<PARAMS extends any[], COMPONENT extends Component> (initial: keyof HTMLElementTagNameMap | (() => Component), builder: (component: Component, ...params: PARAMS) => Promise<COMPONENT>): Component.BuilderAsync<PARAMS, COMPONENT>
+function Component<PARAMS extends any[], COMPONENT extends Component | undefined> (builder: (component: Component, ...params: PARAMS) => COMPONENT): Component.Builder<PARAMS, COMPONENT>
+function Component<PARAMS extends any[], COMPONENT extends Component | undefined> (builder: (component: Component, ...params: PARAMS) => Promise<COMPONENT>): Component.BuilderAsync<PARAMS, COMPONENT>
+function Component<PARAMS extends any[], COMPONENT extends Component | undefined> (initial: keyof HTMLElementTagNameMap | (() => Component), builder: (component: Component, ...params: PARAMS) => COMPONENT): Component.Builder<PARAMS, COMPONENT>
+function Component<PARAMS extends any[], COMPONENT extends Component | undefined> (initial: keyof HTMLElementTagNameMap | (() => Component), builder: (component: Component, ...params: PARAMS) => Promise<COMPONENT>): Component.BuilderAsync<PARAMS, COMPONENT>
+function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: (component: Component, ...params: any[]) => Component | Promise<Component>): Component | Component.Builder<any[], any> | Component.BuilderAsync<any[], any> {
+	if (typeof type === 'function' || typeof builder === 'function')
+		return Component.Builder(type as keyof HTMLElementTagNameMap, builder as AnyFunction)
+
+	type ??= 'span'
+
 	if (!canBuildComponents)
 		throw new Error('Components cannot be built yet')
 
@@ -893,6 +906,15 @@ namespace Component {
 	export const getDocument = () => documentComponent ??= wrap(document.documentElement)
 	export const getWindow = () => windowComponent ??= wrap(window as any as HTMLElement)
 
+	export function setComponentLibrarySource (source?: string) {
+		selfScript.value = source
+	}
+
+	let stackSupplier: (() => string) | undefined
+	export function setStackSupplier (_stackSupplier: () => string) {
+		stackSupplier = _stackSupplier
+	}
+
 	export function allowBuilding () {
 		canBuildComponents = true
 	}
@@ -1103,7 +1125,7 @@ namespace Component {
 	let lines: string[] | undefined
 	function getBuilderName (): BuilderName | undefined {
 		if (!lines) {
-			indexjsText ??= (document.currentScript as HTMLScriptElement)?.text ?? SelfScript.value
+			indexjsText ??= (document.currentScript as HTMLScriptElement)?.text ?? selfScript.value
 			if (!indexjsText)
 				return undefined
 
@@ -1114,10 +1136,8 @@ namespace Component {
 		// 	logNode = document.createElement('div')
 		// 	document.body.prepend(logNode)
 		// }
-		SourceMapping.Enabled.value = false
-		const rawStack = new Error().stack ?? ''
+		const rawStack = stackSupplier?.() ?? new Error().stack ?? ''
 		const stack = Strings.shiftLine(rawStack, rawStack.includes('@') ? 2 : 3) // handle safari stack traces (@)
-		SourceMapping.Enabled.value = true
 
 		// logNode.append(document.createTextNode(`original stack ${new Error().stack}`), document.createElement('br'))
 		// logNode.append(document.createTextNode(`shifted stack ${stack}`), document.createElement('br'))
