@@ -20,6 +20,7 @@ export default Task('build', async task => {
 	dts = dts
 		.replace(/declare module "(?!kitsui)/g, 'declare module "kitsui/')
 		.replace(/from "(?!kitsui)/g, 'from "kitsui/')
+		.replace(/import\("(?!kitsui)/g, 'import("kitsui/')
 
 	await fs.writeFile('out/index.js', js, 'utf-8')
 	await fs.writeFile('out/index.d.ts', dts, 'utf-8')
