@@ -129,7 +129,7 @@ define("kitsui/utility/Objects", ["require", "exports"], function (require, expo
     };
     exports.DefineMagic = DefineMagic;
 });
-define("kitsui/utility/State", ["require", "exports", "utility/Arrays", "utility/Functions", "utility/Objects"], function (require, exports, Arrays_1, Functions_1, Objects_1) {
+define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/Functions", "kitsui/utility/Objects"], function (require, exports, Arrays_1, Functions_1, Objects_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Arrays_1 = __importStar(Arrays_1);
@@ -822,7 +822,7 @@ define("kitsui/utility/State", ["require", "exports", "utility/Arrays", "utility
     })(State || (State = {}));
     exports.default = State;
 });
-define("kitsui/component/Label", ["require", "exports", "Component", "utility/State"], function (require, exports, Component_1, State_1) {
+define("kitsui/component/Label", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_1, State_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.LabelTarget = void 0;
@@ -1056,7 +1056,7 @@ define("kitsui/utility/Vector2", ["require", "exports"], function (require, expo
     })(Vector2 || (Vector2 = {}));
     exports.default = Vector2;
 });
-define("kitsui/utility/Mouse", ["require", "exports", "utility/State"], function (require, exports, State_2) {
+define("kitsui/utility/Mouse", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_2 = __importDefault(State_2);
@@ -1259,7 +1259,7 @@ define("kitsui/utility/Strings", ["require", "exports"], function (require, expo
     })(Strings || (Strings = {}));
     exports.default = Strings;
 });
-define("kitsui/utility/Time", ["require", "exports", "utility/Strings"], function (require, exports, Strings_1) {
+define("kitsui/utility/Time", ["require", "exports", "kitsui/utility/Strings"], function (require, exports, Strings_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Strings_1 = __importDefault(Strings_1);
@@ -1370,7 +1370,7 @@ define("kitsui/utility/Time", ["require", "exports", "utility/Strings"], functio
     Object.assign(window, { Time });
     exports.default = Time;
 });
-define("kitsui/utility/Task", ["require", "exports", "utility/Time"], function (require, exports, Time_1) {
+define("kitsui/utility/Task", ["require", "exports", "kitsui/utility/Time"], function (require, exports, Time_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Time_1 = __importDefault(Time_1);
@@ -1404,7 +1404,7 @@ define("kitsui/utility/Task", ["require", "exports", "utility/Time"], function (
     }
     exports.default = Task;
 });
-define("kitsui/utility/Style", ["require", "exports", "utility/State", "utility/Task"], function (require, exports, State_3, Task_1) {
+define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "kitsui/utility/Task"], function (require, exports, State_3, Task_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_3 = __importDefault(State_3);
@@ -1448,7 +1448,7 @@ define("kitsui/utility/Style", ["require", "exports", "utility/State", "utility/
     })(Style || (Style = {}));
     exports.default = Style;
 });
-define("kitsui/utility/Viewport", ["require", "exports", "utility/State", "utility/Style"], function (require, exports, State_4, Style_1) {
+define("kitsui/utility/Viewport", ["require", "exports", "kitsui/utility/State", "kitsui/utility/Style"], function (require, exports, State_4, Style_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_4 = __importDefault(State_4);
@@ -1491,7 +1491,7 @@ define("kitsui/utility/Viewport", ["require", "exports", "utility/State", "utili
     })(Viewport || (Viewport = {}));
     exports.default = Viewport;
 });
-define("kitsui/utility/AnchorManipulator", ["require", "exports", "utility/Mouse", "utility/State", "utility/Time", "utility/Viewport"], function (require, exports, Mouse_1, State_5, Time_2, Viewport_1) {
+define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utility/Mouse", "kitsui/utility/State", "kitsui/utility/Time", "kitsui/utility/Viewport"], function (require, exports, Mouse_1, State_5, Time_2, Viewport_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.AllowXOffscreen = exports.AllowYOffscreen = exports.ANCHOR_LOCATION_ALIGNMENTS = exports.ANCHOR_SIDE_VERTICAL = exports.ANCHOR_SIDE_HORIZONTAL = exports.ANCHOR_TYPES = void 0;
@@ -1775,7 +1775,7 @@ define("kitsui/utility/Maps", ["require", "exports"], function (require, exports
     })(Maps || (Maps = {}));
     exports.default = Maps;
 });
-define("kitsui/utility/StringApplicator", ["require", "exports", "utility/Arrays", "utility/State"], function (require, exports, Arrays_2, State_6) {
+define("kitsui/utility/StringApplicator", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/State"], function (require, exports, Arrays_2, State_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.StringApplicatorSource = void 0;
@@ -1930,7 +1930,7 @@ define("kitsui/utility/StringApplicator", ["require", "exports", "utility/Arrays
     })(StringApplicator || (StringApplicator = {}));
     exports.default = StringApplicator;
 });
-define("kitsui/utility/AttributeManipulator", ["require", "exports", "utility/Maps", "utility/State", "utility/StringApplicator"], function (require, exports, Maps_1, State_7, StringApplicator_1) {
+define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/utility/Maps", "kitsui/utility/State", "kitsui/utility/StringApplicator"], function (require, exports, Maps_1, State_7, StringApplicator_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Maps_1 = __importDefault(Maps_1);
@@ -2160,7 +2160,7 @@ define("kitsui/utility/ClassManipulator", ["require", "exports"], function (requ
     }
     exports.default = ClassManipulator;
 });
-define("kitsui/utility/EventManipulator", ["require", "exports", "utility/Arrays", "utility/State"], function (require, exports, Arrays_3, State_8) {
+define("kitsui/utility/EventManipulator", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/State"], function (require, exports, Arrays_3, State_8) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Arrays_3 = __importDefault(Arrays_3);
@@ -2287,7 +2287,7 @@ define("kitsui/utility/EventManipulator", ["require", "exports", "utility/Arrays
     }
     exports.default = EventManipulator;
 });
-define("kitsui/utility/FocusListener", ["require", "exports", "utility/State"], function (require, exports, State_9) {
+define("kitsui/utility/FocusListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_9) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_9 = __importDefault(State_9);
@@ -2423,7 +2423,7 @@ define("kitsui/utility/FocusListener", ["require", "exports", "utility/State"], 
     exports.default = FocusListener;
     Object.assign(window, { FocusListener });
 });
-define("kitsui/utility/TextManipulator", ["require", "exports", "utility/StringApplicator"], function (require, exports, StringApplicator_2) {
+define("kitsui/utility/TextManipulator", ["require", "exports", "kitsui/utility/StringApplicator"], function (require, exports, StringApplicator_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     StringApplicator_2 = __importDefault(StringApplicator_2);
@@ -2452,7 +2452,7 @@ define("kitsui/utility/TextManipulator", ["require", "exports", "utility/StringA
     }
     exports.default = TextManipulator;
 });
-define("kitsui/Component", ["require", "exports", "utility/AnchorManipulator", "utility/Arrays", "utility/AttributeManipulator", "utility/ClassManipulator", "utility/EventManipulator", "utility/FocusListener", "utility/Maps", "utility/Objects", "utility/State", "utility/StringApplicator", "utility/Strings", "utility/TextManipulator", "utility/Viewport"], function (require, exports, AnchorManipulator_1, Arrays_4, AttributeManipulator_1, ClassManipulator_1, EventManipulator_1, FocusListener_1, Maps_2, Objects_2, State_10, StringApplicator_3, Strings_2, TextManipulator_1, Viewport_2) {
+define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipulator", "kitsui/utility/Arrays", "kitsui/utility/AttributeManipulator", "kitsui/utility/ClassManipulator", "kitsui/utility/EventManipulator", "kitsui/utility/FocusListener", "kitsui/utility/Maps", "kitsui/utility/Objects", "kitsui/utility/State", "kitsui/utility/StringApplicator", "kitsui/utility/Strings", "kitsui/utility/TextManipulator", "kitsui/utility/Viewport"], function (require, exports, AnchorManipulator_1, Arrays_4, AttributeManipulator_1, ClassManipulator_1, EventManipulator_1, FocusListener_1, Maps_2, Objects_2, State_10, StringApplicator_3, Strings_2, TextManipulator_1, Viewport_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ComponentInsertionDestination = void 0;
@@ -3280,7 +3280,7 @@ define("kitsui/Component", ["require", "exports", "utility/AnchorManipulator", "
     })(Component || (Component = {}));
     exports.default = Component;
 });
-define("kitsui", ["require", "exports", "component/Label", "Component", "utility/State"], function (require, exports, Label_1, Component_2, State_11) {
+define("kitsui", ["require", "exports", "kitsui/component/Label", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Label_1, Component_2, State_11) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Kit = exports.State = exports.Component = void 0;
@@ -3342,7 +3342,7 @@ define("kitsui/utility/ActiveListener", ["require", "exports"], function (requir
     exports.default = ActiveListener;
     Object.assign(window, { ActiveListener });
 });
-define("kitsui/utility/Applicator", ["require", "exports", "utility/State"], function (require, exports, State_12) {
+define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_12) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_12 = __importDefault(State_12);
@@ -3384,7 +3384,7 @@ define("kitsui/utility/Applicator", ["require", "exports", "utility/State"], fun
     }
     exports.default = Applicator;
 });
-define("kitsui/utility/BrowserListener", ["require", "exports", "utility/State"], function (require, exports, State_13) {
+define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_13) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_13 = __importDefault(State_13);
@@ -3394,7 +3394,7 @@ define("kitsui/utility/BrowserListener", ["require", "exports", "utility/State"]
     })(BrowserListener || (BrowserListener = {}));
     exports.default = BrowserListener;
 });
-define("kitsui/utility/FontsListener", ["require", "exports", "utility/State"], function (require, exports, State_14) {
+define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_14) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_14 = __importDefault(State_14);
@@ -3409,7 +3409,7 @@ define("kitsui/utility/FontsListener", ["require", "exports", "utility/State"], 
     })(FontsListener || (FontsListener = {}));
     exports.default = FontsListener;
 });
-define("kitsui/utility/HoverListener", ["require", "exports", "utility/Arrays", "utility/Mouse"], function (require, exports, Arrays_5, Mouse_2) {
+define("kitsui/utility/HoverListener", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/Mouse"], function (require, exports, Arrays_5, Mouse_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Arrays_5 = __importDefault(Arrays_5);
@@ -3462,7 +3462,7 @@ define("kitsui/utility/HoverListener", ["require", "exports", "utility/Arrays", 
     exports.default = HoverListener;
     Object.assign(window, { HoverListener });
 });
-define("kitsui/utility/PageListener", ["require", "exports", "utility/State"], function (require, exports, State_15) {
+define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_15) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_15 = __importDefault(State_15);
@@ -3473,7 +3473,7 @@ define("kitsui/utility/PageListener", ["require", "exports", "utility/State"], f
     })(PageListener || (PageListener = {}));
     exports.default = PageListener;
 });
-define("kitsui/utility/TypeManipulator", ["require", "exports", "utility/State"], function (require, exports, State_16) {
+define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_16) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_16 = __importDefault(State_16);

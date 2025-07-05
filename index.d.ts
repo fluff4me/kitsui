@@ -2,7 +2,7 @@ declare module "kitsui/utility/Type" {
     export type Falsy = false | null | undefined | 0 | 0n | '';
 }
 declare module "kitsui/utility/Arrays" {
-    import type { Falsy } from "utility/Type";
+    import type { Falsy } from "kitsui/utility/Type";
     export const NonNullish: <T>(value: T | null | undefined) => value is T;
     export const Truthy: <T>(value: T) => value is Exclude<T, Falsy>;
     namespace Arrays {
@@ -41,8 +41,8 @@ declare module "kitsui/utility/Objects" {
     export default Objects;
 }
 declare module "kitsui/utility/State" {
-    import Arrays from "utility/Arrays";
-    import type { SupplierOr } from "utility/Functions";
+    import Arrays from "kitsui/utility/Arrays";
+    import type { SupplierOr } from "kitsui/utility/Functions";
     interface State<T, E = T> {
         readonly isState: true;
         readonly value: T;
@@ -217,8 +217,8 @@ declare module "kitsui/utility/State" {
     export default State;
 }
 declare module "kitsui/component/Label" {
-    import Component from "Component";
-    import State from "utility/State";
+    import Component from "kitsui/Component";
+    import State from "kitsui/utility/State";
     interface LabelExtensions {
         readonly textWrapper: Component;
         readonly for: State.Mutable<string | undefined>;
@@ -242,7 +242,7 @@ declare module "kitsui/component/Label" {
     export const LabelTarget: Component.Extension<[], Component<HTMLElement>>;
 }
 declare module "kitsui/utility/Vector2" {
-    import type { Mutable } from "utility/Objects";
+    import type { Mutable } from "kitsui/utility/Objects";
     interface Vector2 {
         readonly x: number;
         readonly y: number;
@@ -290,8 +290,8 @@ declare module "kitsui/utility/Vector2" {
     export default Vector2;
 }
 declare module "kitsui/utility/Mouse" {
-    import State from "utility/State";
-    import type Vector2 from "utility/Vector2";
+    import State from "kitsui/utility/State";
+    import type Vector2 from "kitsui/utility/Vector2";
     namespace Mouse {
         const state: State<Vector2>;
         type MouseMoveHandler = (mouse: Vector2) => unknown;
@@ -367,7 +367,7 @@ declare module "kitsui/utility/Task" {
     }
 }
 declare module "kitsui/utility/Style" {
-    import State from "utility/State";
+    import State from "kitsui/utility/State";
     namespace Style {
         const properties: State.JIT<CSSStyleDeclaration>;
         function measure(property: string): State<number>;
@@ -376,7 +376,7 @@ declare module "kitsui/utility/Style" {
     export default Style;
 }
 declare module "kitsui/utility/Viewport" {
-    import State from "utility/State";
+    import State from "kitsui/utility/State";
     namespace Viewport {
         interface Size {
             w: number;
@@ -393,8 +393,8 @@ declare module "kitsui/utility/Viewport" {
     export default Viewport;
 }
 declare module "kitsui/utility/AnchorManipulator" {
-    import type Component from "Component";
-    import State from "utility/State";
+    import type Component from "kitsui/Component";
+    import State from "kitsui/utility/State";
     export const ANCHOR_TYPES: readonly ["off", "aligned"];
     export type AnchorType = (typeof ANCHOR_TYPES)[number];
     export const ANCHOR_SIDE_HORIZONTAL: readonly ["left", "right"];
@@ -488,8 +488,8 @@ declare module "kitsui/utility/Maps" {
     export default Maps;
 }
 declare module "kitsui/utility/StringApplicator" {
-    import type { SupplierOr } from "utility/Functions";
-    import State from "utility/State";
+    import type { SupplierOr } from "kitsui/utility/Functions";
+    import State from "kitsui/utility/State";
     export interface StringApplicatorSources {
         string: string;
     }
@@ -532,9 +532,9 @@ declare module "kitsui/utility/StringApplicator" {
     export default StringApplicator;
 }
 declare module "kitsui/utility/AttributeManipulator" {
-    import type Component from "Component";
-    import State from "utility/State";
-    import { StringApplicatorSource } from "utility/StringApplicator";
+    import type Component from "kitsui/Component";
+    import State from "kitsui/utility/State";
+    import { StringApplicatorSource } from "kitsui/utility/StringApplicator";
     interface AttributeManipulator<HOST> {
         has(attribute: string): boolean;
         get(attribute: string): State<string | undefined>;
@@ -575,7 +575,7 @@ declare module "kitsui/utility/AttributeManipulator" {
     export default AttributeManipulator;
 }
 declare module "kitsui/utility/ClassManipulator" {
-    import type Component from "Component";
+    import type Component from "kitsui/Component";
     interface ClassManipulator<HOST> {
         has(...classes: string[]): boolean;
         some(...classes: string[]): boolean;
@@ -589,9 +589,9 @@ declare module "kitsui/utility/ClassManipulator" {
     export default ClassManipulator;
 }
 declare module "kitsui/utility/EventManipulator" {
-    import type Component from "Component";
-    import Arrays from "utility/Arrays";
-    import State from "utility/State";
+    import type Component from "kitsui/Component";
+    import Arrays from "kitsui/utility/Arrays";
+    import State from "kitsui/utility/State";
     interface EventExtensions<HOST> {
         host: HOST;
         targetComponent: Component | undefined;
@@ -635,8 +635,8 @@ declare module "kitsui/utility/EventManipulator" {
     export default EventManipulator;
 }
 declare module "kitsui/utility/FocusListener" {
-    import type Component from "Component";
-    import State from "utility/State";
+    import type Component from "kitsui/Component";
+    import State from "kitsui/utility/State";
     namespace FocusListener {
         const hasFocus: State.Mutable<boolean>;
         const focused: State.Mutable<Element | undefined>;
@@ -649,8 +649,8 @@ declare module "kitsui/utility/FocusListener" {
     export default FocusListener;
 }
 declare module "kitsui/utility/TextManipulator" {
-    import type Component from "Component";
-    import StringApplicator from "utility/StringApplicator";
+    import type Component from "kitsui/Component";
+    import StringApplicator from "kitsui/utility/StringApplicator";
     interface TextManipulator<HOST> extends Omit<StringApplicator.Optional<HOST>, 'rehost'> {
         prepend(text: string): HOST;
         append(text: string): HOST;
@@ -660,16 +660,16 @@ declare module "kitsui/utility/TextManipulator" {
     export default TextManipulator;
 }
 declare module "kitsui/Component" {
-    import AnchorManipulator from "utility/AnchorManipulator";
-    import AttributeManipulator from "utility/AttributeManipulator";
-    import ClassManipulator from "utility/ClassManipulator";
-    import type { NativeEvents } from "utility/EventManipulator";
-    import EventManipulator from "utility/EventManipulator";
-    import type { Mutable } from "utility/Objects";
-    import State from "utility/State";
-    import StringApplicator from "utility/StringApplicator";
-    import TextManipulator from "utility/TextManipulator";
-    import type { Falsy } from "utility/Type";
+    import AnchorManipulator from "kitsui/utility/AnchorManipulator";
+    import AttributeManipulator from "kitsui/utility/AttributeManipulator";
+    import ClassManipulator from "kitsui/utility/ClassManipulator";
+    import type { NativeEvents } from "kitsui/utility/EventManipulator";
+    import EventManipulator from "kitsui/utility/EventManipulator";
+    import type { Mutable } from "kitsui/utility/Objects";
+    import State from "kitsui/utility/State";
+    import StringApplicator from "kitsui/utility/StringApplicator";
+    import TextManipulator from "kitsui/utility/TextManipulator";
+    import type { Falsy } from "kitsui/utility/Type";
     const SYMBOL_COMPONENT_BRAND: unique symbol;
     export interface ComponentBrand<TYPE extends string> {
         [SYMBOL_COMPONENT_BRAND]: TYPE;
@@ -923,9 +923,9 @@ declare module "kitsui/Component" {
     export default Component;
 }
 declare module "kitsui" {
-    import _Label, { LabelTarget as _LabelTarget } from "component/Label";
-    export { default as Component } from "Component";
-    export { default as State } from "utility/State";
+    import _Label, { LabelTarget as _LabelTarget } from "kitsui/component/Label";
+    export { default as Component } from "kitsui/Component";
+    export { default as State } from "kitsui/utility/State";
     export namespace Kit {
         type Label = _Label;
         const Label: import("Component").default.Builder<[], _Label>;
@@ -934,7 +934,7 @@ declare module "kitsui" {
     }
 }
 declare module "kitsui/utility/ActiveListener" {
-    import type Component from "Component";
+    import type Component from "kitsui/Component";
     namespace ActiveListener {
         function allActive(): readonly Element[];
         function active(): Element | undefined;
@@ -945,7 +945,7 @@ declare module "kitsui/utility/ActiveListener" {
     export default ActiveListener;
 }
 declare module "kitsui/utility/Applicator" {
-    import State from "utility/State";
+    import State from "kitsui/utility/State";
     interface Applicator<HOST, T> {
         readonly state: State<T>;
         set(value: T): HOST;
@@ -966,14 +966,14 @@ declare module "kitsui/utility/Applicator" {
     export default Applicator;
 }
 declare module "kitsui/utility/BrowserListener" {
-    import State from "utility/State";
+    import State from "kitsui/utility/State";
     namespace BrowserListener {
         const isWebkit: State.Mutable<boolean>;
     }
     export default BrowserListener;
 }
 declare module "kitsui/utility/FontsListener" {
-    import State from "utility/State";
+    import State from "kitsui/utility/State";
     namespace FontsListener {
         const loaded: State.Mutable<boolean>;
         function listen(): Promise<void>;
@@ -981,7 +981,7 @@ declare module "kitsui/utility/FontsListener" {
     export default FontsListener;
 }
 declare module "kitsui/utility/HoverListener" {
-    import type Component from "Component";
+    import type Component from "kitsui/Component";
     namespace HoverListener {
         function allHovered(): readonly Element[];
         function hovered(): Element | undefined;
@@ -992,14 +992,14 @@ declare module "kitsui/utility/HoverListener" {
     export default HoverListener;
 }
 declare module "kitsui/utility/PageListener" {
-    import State from "utility/State";
+    import State from "kitsui/utility/State";
     namespace PageListener {
         const visible: State.Mutable<boolean>;
     }
     export default PageListener;
 }
 declare module "kitsui/utility/TypeManipulator" {
-    import State from "utility/State";
+    import State from "kitsui/utility/State";
     interface TypeManipulator<HOST, TYPE extends string> {
         readonly state: State<ReadonlySet<TYPE>>;
         (...types: TYPE[]): HOST;
