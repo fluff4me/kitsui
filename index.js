@@ -1,0 +1,3558 @@
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+define("kitsui/utility/Type", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
+define("kitsui/utility/Arrays", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Truthy = exports.NonNullish = void 0;
+    const NonNullish = (value) => value !== null && value !== undefined;
+    exports.NonNullish = NonNullish;
+    const Truthy = (value) => Boolean(value);
+    exports.Truthy = Truthy;
+    var Arrays;
+    (function (Arrays) {
+        function resolve(value) {
+            return Array.isArray(value) ? value : [value];
+        }
+        Arrays.resolve = resolve;
+        Arrays.filterInPlace = (array, predicate) => {
+            let readCursor = 0;
+            let writeCursor = 0;
+            while (readCursor < array.length) {
+                const value = array[readCursor++];
+                if (predicate(value, readCursor - 1, array))
+                    array[writeCursor++] = value;
+            }
+            array.length = writeCursor;
+            return array;
+        };
+        Arrays.distinctInPlace = (array, mapper) => {
+            const encountered = [];
+            let readCursor = 0;
+            let writeCursor = 0;
+            while (readCursor < array.length) {
+                const value = array[readCursor++];
+                const encounterValue = mapper ? mapper(value) : value;
+                if (encountered.includes(encounterValue))
+                    continue;
+                encountered.push(encounterValue);
+                array[writeCursor++] = value;
+            }
+            array.length = writeCursor;
+            return array;
+        };
+    })(Arrays || (Arrays = {}));
+    exports.default = Arrays;
+});
+define("kitsui/utility/Functions", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var Functions;
+    (function (Functions) {
+        Functions.NO_OP = () => { };
+        function resolve(fn, ...args) {
+            return typeof fn === 'function' ? fn(...args) : fn;
+        }
+        Functions.resolve = resolve;
+        function throwing(message) {
+            return () => {
+                throw new Error(message);
+            };
+        }
+        Functions.throwing = throwing;
+    })(Functions || (Functions = {}));
+    exports.default = Functions;
+});
+define("kitsui/utility/Objects", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DefineMagic = exports.DefineProperty = exports.mutable = void 0;
+    const mutable = (value) => value;
+    exports.mutable = mutable;
+    const DefineProperty = (obj, key, value) => {
+        try {
+            Object.defineProperty(obj, key, {
+                configurable: true,
+                writable: true,
+                value,
+            });
+        }
+        catch { }
+        return value;
+    };
+    exports.DefineProperty = DefineProperty;
+    const DefineMagic = (obj, key, definition) => {
+        try {
+            Object.defineProperty(obj, key, {
+                configurable: true,
+                ...definition,
+            });
+        }
+        catch { }
+    };
+    exports.DefineMagic = DefineMagic;
+});
+define("kitsui/utility/State", ["require", "exports", "utility/Arrays", "utility/Functions", "utility/Objects"], function (require, exports, Arrays_1, Functions_1, Objects_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Arrays_1 = __importStar(Arrays_1);
+    Functions_1 = __importDefault(Functions_1);
+    // const SYMBOL_UNSUBSCRIBE = Symbol('UNSUBSCRIBE')
+    // interface SubscriberFunction<T> {
+    // 	(value: T, oldValue: T): unknown
+    // 	[SYMBOL_UNSUBSCRIBE]?: Set<() => void>
+    // }
+    const SYMBOL_VALUE = Symbol('VALUE');
+    const SYMBOL_SUBSCRIBERS = Symbol('SUBSCRIBERS');
+    function State(defaultValue, comparator) {
+        let unuseBoundState;
+        let equalsMap;
+        const result = {
+            isState: true,
+            setId(id) {
+                result.id = id;
+                return result;
+            },
+            [SYMBOL_VALUE]: defaultValue,
+            [SYMBOL_SUBSCRIBERS]: [],
+            get value() {
+                return result[SYMBOL_VALUE];
+            },
+            set value(value) {
+                unuseBoundState?.();
+                setValue(value);
+            },
+            setValue(value) {
+                unuseBoundState?.();
+                setValue(value);
+                return result;
+            },
+            comparator: value => comparator === false ? false
+                : result[SYMBOL_VALUE] === value || comparator?.(result[SYMBOL_VALUE], value) || false,
+            emit: oldValue => {
+                if (result.id !== undefined)
+                    console.log('emit', result.id);
+                for (const subscriber of result[SYMBOL_SUBSCRIBERS].slice())
+                    subscriber(result[SYMBOL_VALUE], oldValue);
+                return result;
+            },
+            bind(owner, state) {
+                if (state.id)
+                    console.log('bind', state.id);
+                unuseBoundState?.();
+                unuseBoundState = state.use(owner, setValue);
+                return unuseBoundState;
+            },
+            bindManual(state) {
+                if (state.id)
+                    console.log('bind', state.id);
+                unuseBoundState?.();
+                unuseBoundState = state.useManual(setValue);
+                return unuseBoundState;
+            },
+            use: (owner, subscriber) => {
+                let subOwner;
+                result.subscribe(owner, executeSubscriber);
+                executeSubscriber(result[SYMBOL_VALUE], undefined);
+                return () => result.unsubscribe(executeSubscriber);
+                function executeSubscriber(value, oldValue) {
+                    subOwner?.remove();
+                    subOwner = State.Owner.create();
+                    subscriber(value, oldValue, subOwner);
+                }
+            },
+            useManual: subscriber => {
+                let subOwner;
+                result.subscribeManual(executeSubscriber);
+                executeSubscriber(result[SYMBOL_VALUE], undefined);
+                return () => result.unsubscribe(executeSubscriber);
+                function executeSubscriber(value, oldValue) {
+                    subOwner?.remove();
+                    subOwner = State.Owner.create();
+                    subscriber(value, oldValue, subOwner);
+                }
+            },
+            subscribe: (owner, subscriber) => {
+                const ownerClosedState = State.Owner.getRemovedState(owner);
+                if (!ownerClosedState || ownerClosedState.value)
+                    return Functions_1.default.NO_OP;
+                function cleanup() {
+                    ownerClosedState.unsubscribe(cleanup);
+                    result.unsubscribe(subscriber);
+                    // fn[SYMBOL_UNSUBSCRIBE]?.delete(cleanup)
+                }
+                State.OwnerMetadata.setHasSubscriptions(owner);
+                // const fn = subscriber as SubscriberFunction<T>
+                // fn[SYMBOL_UNSUBSCRIBE] ??= new Set()
+                // fn[SYMBOL_UNSUBSCRIBE].add(cleanup)
+                ownerClosedState.subscribeManual(cleanup);
+                result.subscribeManual(subscriber);
+                return cleanup;
+            },
+            subscribeManual: subscriber => {
+                result[SYMBOL_SUBSCRIBERS].push(subscriber);
+                return () => result.unsubscribe(subscriber);
+            },
+            unsubscribe: subscriber => {
+                Arrays_1.default.filterInPlace(result[SYMBOL_SUBSCRIBERS], s => s !== subscriber);
+                return result;
+            },
+            match(owner, values, then) {
+                return result.use(owner, function awaitValue(newValue) {
+                    if (newValue !== values && (!Array.isArray(values) || !values.includes(newValue)))
+                        return;
+                    result.unsubscribe(awaitValue);
+                    then(newValue);
+                });
+            },
+            matchManual(values, then) {
+                return result.useManual(function awaitValue(newValue) {
+                    if (newValue !== values && (!Array.isArray(values) || !values.includes(newValue)))
+                        return;
+                    result.unsubscribe(awaitValue);
+                    then(newValue);
+                });
+            },
+            await(owner, value) {
+                return new Promise(resolve => result.match(owner, value, () => { resolve(result.value); }));
+            },
+            map: (owner, mapper, equals) => State.Map(owner, [result], mapper, equals),
+            mapManual: (mapper, equals) => State.MapManual([result], mapper, equals),
+            get nonNullish() {
+                return (0, Objects_1.DefineProperty)(result, 'nonNullish', State
+                    .Generator(() => result.value !== undefined && result.value !== null)
+                    .observeManual(result));
+            },
+            get truthy() {
+                return (0, Objects_1.DefineProperty)(result, 'truthy', State
+                    .Generator(() => !!result.value)
+                    .observeManual(result));
+            },
+            get not() {
+                return getNot();
+            },
+            get falsy() {
+                return getNot();
+            },
+            equals(value) {
+                equalsMap ??= new Map();
+                let equalsResult = equalsMap.get(value);
+                if (equalsResult === undefined)
+                    equalsMap.set(value, equalsResult = State.Generator(() => result.value === value).observeManual(result));
+                return equalsResult;
+            },
+            coalesce(right) {
+                const rightState = State.get(right);
+                return State.Generator(() => {
+                    const leftValue = result.value;
+                    if (leftValue !== undefined && leftValue !== null)
+                        return leftValue;
+                    return rightState.value;
+                }).observeManual(result, rightState);
+            },
+            delay(owner, delay, mapper, equals) {
+                const delayed = State(!mapper ? result.value : mapper(result.value), equals);
+                let timeout;
+                result.subscribe(owner, value => {
+                    window.clearTimeout(timeout);
+                    const ms = Functions_1.default.resolve(delay, value);
+                    if (!ms)
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                        return delayed.value = !mapper ? value : mapper(value);
+                    timeout = window.setTimeout(() => {
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                        delayed.value = !mapper ? value : mapper(value);
+                    }, ms);
+                });
+                return delayed;
+            },
+        };
+        result.asMutable = result;
+        return result; // Objects.stringify.disable(result)
+        function setValue(value) {
+            if (comparator !== false && (result[SYMBOL_VALUE] === value || comparator?.(result[SYMBOL_VALUE], value)))
+                return;
+            const oldValue = result[SYMBOL_VALUE];
+            result[SYMBOL_VALUE] = value;
+            result.emit(oldValue);
+        }
+        function getNot() {
+            const not = State
+                .Generator(() => !result.value)
+                .observeManual(result);
+            (0, Objects_1.DefineProperty)(result, 'not', not);
+            (0, Objects_1.DefineProperty)(result, 'falsy', not);
+            return not;
+        }
+    }
+    (function (State) {
+        let Owner;
+        (function (Owner) {
+            function getRemovedState(ownerIn) {
+                const state = ownerIn?.removed;
+                if (is(state))
+                    return state;
+                return undefined;
+            }
+            Owner.getRemovedState = getRemovedState;
+            function create() {
+                const removed = State(false);
+                return {
+                    removed,
+                    remove: () => removed.value = true,
+                };
+            }
+            Owner.create = create;
+        })(Owner = State.Owner || (State.Owner = {}));
+        function is(value) {
+            return typeof value === 'object' && value?.isState === true;
+        }
+        State.is = is;
+        function get(value) {
+            return is(value) ? value : State(value);
+        }
+        State.get = get;
+        function value(state) {
+            return is(state) ? state.value : state;
+        }
+        State.value = value;
+        function getInternalValue(state) {
+            return is(state) ? state[SYMBOL_VALUE] : state;
+        }
+        State.getInternalValue = getInternalValue;
+        const SYMBOL_HAS_SUBSCRIPTIONS = Symbol('HAS_SUBSCRIPTIONS');
+        let OwnerMetadata;
+        (function (OwnerMetadata) {
+            function setHasSubscriptions(owner) {
+                owner[SYMBOL_HAS_SUBSCRIPTIONS] = true;
+            }
+            OwnerMetadata.setHasSubscriptions = setHasSubscriptions;
+            function hasSubscriptions(owner) {
+                return owner[SYMBOL_HAS_SUBSCRIPTIONS] === true;
+            }
+            OwnerMetadata.hasSubscriptions = hasSubscriptions;
+        })(OwnerMetadata = State.OwnerMetadata || (State.OwnerMetadata = {}));
+        function Generator(generate, equals) {
+            const result = State(undefined, equals);
+            delete result.asMutable;
+            (0, Objects_1.DefineMagic)(result, 'value', {
+                get: () => result[SYMBOL_VALUE],
+            });
+            let initial = true;
+            let unuseInternalState;
+            result.refresh = () => refreshInternal();
+            result.regenerate = () => refreshInternal(true);
+            result.refresh();
+            result.observe = (owner, ...states) => {
+                const ownerClosedState = Owner.getRemovedState(owner);
+                if (!ownerClosedState || ownerClosedState.value)
+                    return result;
+                OwnerMetadata.setHasSubscriptions(owner);
+                for (const state of states)
+                    state?.subscribeManual(result.refresh);
+                let unuseOwnerRemove = ownerClosedState.subscribeManual(removed => removed && onRemove());
+                return result;
+                function onRemove() {
+                    unuseOwnerRemove?.();
+                    unuseOwnerRemove = undefined;
+                    for (const state of states)
+                        state?.unsubscribe(result.refresh);
+                }
+            };
+            result.observeManual = (...states) => {
+                for (const state of states)
+                    state?.subscribeManual(result.refresh);
+                return result;
+            };
+            result.unobserve = (...states) => {
+                for (const state of states)
+                    state?.unsubscribe(result.refresh);
+                return result;
+            };
+            return result;
+            function refreshInternal(forceOverwrite) {
+                unuseInternalState?.();
+                unuseInternalState = undefined;
+                const value = generate();
+                if (State.is(value)) {
+                    unuseInternalState = value.useManual(value => {
+                        if (result.comparator(value))
+                            return result;
+                        const oldValue = result[SYMBOL_VALUE];
+                        result[SYMBOL_VALUE] = value;
+                        result.emit(oldValue);
+                    });
+                    return result;
+                }
+                if (result.comparator(value) && !initial && !forceOverwrite)
+                    return result;
+                initial = false;
+                const oldValue = result[SYMBOL_VALUE];
+                result[SYMBOL_VALUE] = value;
+                result.emit(oldValue);
+                return result;
+            }
+        }
+        State.Generator = Generator;
+        function JIT(generate) {
+            const result = State(undefined);
+            delete result.asMutable;
+            let isCached = false;
+            let cached;
+            let unuseInternalState;
+            let owner;
+            (0, Objects_1.DefineMagic)(result, 'value', {
+                get: () => {
+                    if (!isCached) {
+                        unuseInternalState?.();
+                        unuseInternalState = undefined;
+                        owner?.remove();
+                        owner = undefined;
+                        isCached = true;
+                        owner = Owner.create();
+                        const result = generate(owner);
+                        if (State.is(result))
+                            unuseInternalState = result.useManual(value => cached = value);
+                        else
+                            cached = result;
+                    }
+                    return cached;
+                },
+            });
+            const get = () => result.value;
+            result.emit = () => {
+                for (const subscriber of result[SYMBOL_SUBSCRIBERS].slice())
+                    subscriber(get, cached);
+                return result;
+            };
+            result.use = (owner, subscriber) => {
+                let subOwner;
+                result.subscribe(owner, executeSubscriber);
+                executeSubscriber(get, undefined);
+                return () => result.unsubscribe(executeSubscriber);
+                function executeSubscriber(value, oldValue) {
+                    subOwner?.remove();
+                    subOwner = State.Owner.create();
+                    subscriber(value, oldValue, subOwner);
+                }
+            };
+            result.useManual = subscriber => {
+                let subOwner;
+                result.subscribeManual(executeSubscriber);
+                executeSubscriber(get, undefined);
+                return () => result.unsubscribe(executeSubscriber);
+                function executeSubscriber(value, oldValue) {
+                    subOwner?.remove();
+                    subOwner = State.Owner.create();
+                    subscriber(value, oldValue, subOwner);
+                }
+            };
+            result.markDirty = () => {
+                unuseInternalState?.();
+                unuseInternalState = undefined;
+                owner?.remove();
+                owner = undefined;
+                const oldValue = cached;
+                isCached = false;
+                cached = undefined;
+                result.emit(oldValue);
+                return result;
+            };
+            result.observe = (...states) => {
+                for (const state of states)
+                    state.subscribeManual(result.markDirty);
+                return result;
+            };
+            result.unobserve = (...states) => {
+                for (const state of states)
+                    state.unsubscribe(result.markDirty);
+                return result;
+            };
+            return result;
+        }
+        State.JIT = JIT;
+        function Async(owner, from, generator) {
+            const state = State({
+                settled: false,
+                value: undefined,
+                lastValue: undefined,
+                error: undefined,
+                progress: undefined,
+            });
+            const settled = state.mapManual(state => state.settled);
+            const error = state.mapManual(state => state.error);
+            const value = state.mapManual(state => state.value);
+            const lastValue = state.mapManual(state => state.lastValue);
+            const progress = state.mapManual(state => state.progress);
+            let abortController;
+            let promise;
+            from.use(owner, async (from) => {
+                abortController?.abort();
+                const lastValue = state.value.value;
+                state.value = {
+                    settled: false,
+                    value: undefined,
+                    lastValue,
+                    error: undefined,
+                    progress: undefined,
+                };
+                abortController = new AbortController();
+                promise = Promise.resolve(generator(from, abortController.signal, (progress, details) => {
+                    (0, Objects_1.mutable)(state.value).progress = { progress, details };
+                    state.emit();
+                }));
+                const { value, error } = await promise.then(value => ({ value, error: undefined }), error => ({ error: new Error('Async state rejection:', { cause: error }), value: undefined }));
+                if (abortController.signal.aborted)
+                    return;
+                state.value = {
+                    settled: true,
+                    value,
+                    lastValue,
+                    error,
+                    progress: undefined,
+                };
+            });
+            const result = Object.assign(value, {
+                settled,
+                lastValue,
+                error,
+                state,
+                progress,
+            });
+            Object.defineProperty(result, 'promise', {
+                get: () => promise,
+            });
+            return result;
+        }
+        State.Async = Async;
+        function Array(...values) {
+            const itemStates = [];
+            const subscribers = [];
+            const state = Object.assign(State(values), {
+                length: undefined,
+                set(index, value) {
+                    values[index] = value;
+                    const itemState = itemStates[index];
+                    itemState.value.value = value;
+                    itemState.emit();
+                    state.emit();
+                    return state;
+                },
+                emitItem(index) {
+                    itemStates[index]?.emit();
+                    return state;
+                },
+                modify(index, modifier) {
+                    let value = values[index];
+                    value = modifier(value, index, state) ?? value;
+                    state.set(index, value);
+                    return state;
+                },
+                clear() {
+                    values.length = 0;
+                    itemStates.length = 0;
+                    state.emit();
+                    return state;
+                },
+                push(...newValues) {
+                    const start = state.value.length;
+                    values.push(...newValues);
+                    for (let i = 0; i < newValues.length; i++)
+                        itemStates.push(addState(newValues[i], start + i));
+                    state.emit();
+                    return state;
+                },
+                unshift(...newValues) {
+                    values.unshift(...newValues);
+                    for (let i = 0; i < newValues.length; i++)
+                        itemStates.unshift(addState(newValues[i], i));
+                    for (let i = newValues.length; i < itemStates.length; i++)
+                        itemStates[i].value.index = i;
+                    for (let i = newValues.length; i < itemStates.length; i++)
+                        itemStates[i].emit();
+                    state.emit();
+                    return state;
+                },
+                pop() {
+                    values.pop();
+                    itemStates.pop();
+                    state.emit();
+                    return state;
+                },
+                shift() {
+                    values.shift();
+                    itemStates.shift();
+                    for (let i = 0; i < itemStates.length; i++)
+                        itemStates[i].value.index = i;
+                    for (const itemState of itemStates)
+                        itemState.emit();
+                    state.emit();
+                    return state;
+                },
+                splice(start, deleteCount, ...newValues) {
+                    values.splice(start, deleteCount, ...newValues);
+                    itemStates.splice(start, deleteCount, ...newValues
+                        .map((value, i) => addState(value, start + i)));
+                    for (let i = start + newValues.length; i < itemStates.length; i++)
+                        itemStates[i].value.index = i;
+                    for (let i = start + newValues.length; i < itemStates.length; i++)
+                        itemStates[i].emit();
+                    state.emit();
+                    return state;
+                },
+                filterInPlace(predicate) {
+                    Arrays_1.default.filterInPlace(values, predicate);
+                    let oldStatesI = 0;
+                    NextValue: for (let i = 0; i < values.length; i++) {
+                        while (oldStatesI < itemStates.length) {
+                            if (itemStates[oldStatesI].value.value !== values[i]) {
+                                itemStates[oldStatesI].value.removed.asMutable?.setValue(true);
+                                oldStatesI++;
+                                continue;
+                            }
+                            itemStates[i] = itemStates[oldStatesI];
+                            itemStates[i].value.index = i;
+                            oldStatesI++;
+                            continue NextValue;
+                        }
+                    }
+                    // clip off the states that were pulled back or not included
+                    for (let i = oldStatesI; i < itemStates.length; i++)
+                        itemStates[i].value.removed.asMutable?.setValue(true);
+                    itemStates.length = values.length;
+                    for (const itemState of itemStates)
+                        itemState.emit();
+                    state.emit();
+                    return state;
+                },
+                move(startIndex, endIndex, newStartIndex) {
+                    startIndex = Math.max(0, startIndex);
+                    endIndex = Math.min(endIndex, values.length);
+                    newStartIndex = Math.max(0, Math.min(newStartIndex, values.length));
+                    if (startIndex >= endIndex)
+                        return state;
+                    if (newStartIndex >= startIndex && newStartIndex < endIndex)
+                        // if the slice is moved to a new position within itself, do nothing
+                        return state;
+                    const valuesToMove = values.splice(startIndex, endIndex - startIndex);
+                    const statesToMove = itemStates.splice(startIndex, endIndex - startIndex);
+                    const actualInsertionIndex = startIndex < newStartIndex
+                        ? newStartIndex - (endIndex - startIndex) + 1 // account for spliced out indices
+                        : newStartIndex;
+                    values.splice(actualInsertionIndex, 0, ...valuesToMove);
+                    itemStates.splice(actualInsertionIndex, 0, ...statesToMove);
+                    const emitIndices = [];
+                    for (let i = 0; i < itemStates.length; i++) {
+                        const savedIndex = itemStates[i].value.index;
+                        if (savedIndex !== i) {
+                            itemStates[i].value.index = i;
+                            emitIndices.push(i);
+                        }
+                    }
+                    for (const index of emitIndices)
+                        itemStates[index]?.emit();
+                    for (const subscriber of subscribers)
+                        subscriber.onMove(startIndex, endIndex, newStartIndex);
+                    state.emit();
+                    return state;
+                },
+                moveAt(movingIndices, newStartIndex) {
+                    if (!movingIndices.length)
+                        return state;
+                    const length = values.length;
+                    movingIndices = movingIndices.map(i => Math.max(0, Math.min(length - 1, i)));
+                    Arrays_1.default.distinctInPlace(movingIndices);
+                    movingIndices.sort((a, b) => a - b);
+                    newStartIndex = Math.min(newStartIndex, length - movingIndices.length);
+                    let staticReadIndex = 0;
+                    let movingReadIndex = 0;
+                    let writeIndex = 0;
+                    let movedCount = 0;
+                    const sourceValues = values.slice();
+                    const sourceItems = itemStates.slice();
+                    let mode;
+                    while (writeIndex < length) {
+                        mode = writeIndex >= newStartIndex && movedCount < movingIndices.length ? 'moving' : 'static';
+                        if (mode === 'static') {
+                            for (let i = staticReadIndex; i < length; i++)
+                                if (!movingIndices.includes(i)) {
+                                    staticReadIndex = i;
+                                    break;
+                                }
+                            values[writeIndex] = sourceValues[staticReadIndex];
+                            itemStates[writeIndex] = sourceItems[staticReadIndex];
+                            staticReadIndex++;
+                            writeIndex++;
+                        }
+                        else {
+                            values[writeIndex] = sourceValues[movingIndices[movingReadIndex]];
+                            itemStates[writeIndex] = sourceItems[movingIndices[movingReadIndex]];
+                            movingReadIndex++;
+                            movedCount++;
+                            writeIndex++;
+                        }
+                    }
+                    const emitIndices = [];
+                    for (let i = 0; i < itemStates.length; i++) {
+                        const savedIndex = itemStates[i].value.index;
+                        if (savedIndex !== i) {
+                            itemStates[i].value.index = i;
+                            emitIndices.push(i);
+                        }
+                    }
+                    for (const index of emitIndices)
+                        itemStates[index]?.emit();
+                    for (const subscriber of subscribers)
+                        subscriber.onMoveAt(movingIndices, newStartIndex);
+                    state.emit();
+                    return state;
+                },
+                useEach(owner, subscriber) {
+                    const ownerClosedState = State.Owner.getRemovedState(owner);
+                    if (!ownerClosedState || ownerClosedState.value)
+                        return Functions_1.default.NO_OP;
+                    for (const itemState of itemStates)
+                        subscriber.onItem(itemState, state);
+                    State.OwnerMetadata.setHasSubscriptions(owner);
+                    // const fn = subscriber as SubscriberFunction<T>
+                    // fn[SYMBOL_UNSUBSCRIBE] ??= new Set()
+                    // fn[SYMBOL_UNSUBSCRIBE].add(cleanup)
+                    ownerClosedState.subscribeManual(cleanup);
+                    subscribers.push(subscriber);
+                    return cleanup;
+                    function cleanup() {
+                        ownerClosedState.unsubscribe(cleanup);
+                        Arrays_1.default.filterInPlace(subscribers, s => s !== subscriber);
+                        // fn[SYMBOL_UNSUBSCRIBE]?.delete(cleanup)
+                    }
+                },
+            });
+            (0, Objects_1.mutable)(state).length = state.mapManual(state => state.length);
+            return state;
+            function addState(value, index) {
+                const itemState = State({ value, index, removed: State(false) });
+                for (const subscriber of subscribers)
+                    subscriber.onItem(itemState, state);
+                return itemState;
+            }
+        }
+        State.Array = Array;
+        function Truthy(owner, state) {
+            return Generator(() => !!state.value)
+                .observe(owner, state);
+        }
+        State.Truthy = Truthy;
+        function NonNullish(owner, state) {
+            return Generator(() => state.value !== undefined && state.value !== null)
+                .observe(owner, state);
+        }
+        State.NonNullish = NonNullish;
+        function Falsy(owner, state) {
+            return Generator(() => !!state.value)
+                .observe(owner, state);
+        }
+        State.Falsy = Falsy;
+        function Some(owner, ...anyOfStates) {
+            return Generator(() => anyOfStates.some(state => state.value))
+                .observe(owner, ...anyOfStates);
+        }
+        State.Some = Some;
+        function Every(owner, ...anyOfStates) {
+            return Generator(() => anyOfStates.every(state => state.value))
+                .observe(owner, ...anyOfStates);
+        }
+        State.Every = Every;
+        function Map(owner, inputs, outputGenerator, equals) {
+            return Generator(() => outputGenerator(...inputs.map(input => input?.value)), equals)
+                .observe(owner, ...inputs.filter(Arrays_1.NonNullish));
+        }
+        State.Map = Map;
+        function MapManual(inputs, outputGenerator, equals) {
+            return Generator(() => outputGenerator(...inputs.map(input => input?.value)), equals)
+                .observeManual(...inputs.filter(Arrays_1.NonNullish));
+        }
+        State.MapManual = MapManual;
+        function Use(owner, input) {
+            return Generator(() => Object.fromEntries(Object.entries(input).map(([key, state]) => [key, state?.value])))
+                .observe(owner, ...Object.values(input).filter(Arrays_1.NonNullish));
+        }
+        State.Use = Use;
+        function UseManual(input) {
+            return Generator(() => Object.fromEntries(Object.entries(input).map(([key, state]) => [key, state?.value])))
+                .observeManual(...Object.values(input).filter(Arrays_1.NonNullish));
+        }
+        State.UseManual = UseManual;
+    })(State || (State = {}));
+    exports.default = State;
+});
+define("kitsui/component/Label", ["require", "exports", "Component", "utility/State"], function (require, exports, Component_1, State_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.LabelTarget = void 0;
+    Component_1 = __importDefault(Component_1);
+    State_1 = __importDefault(State_1);
+    const Label = (0, Component_1.default)('label', (label) => {
+        const textWrapper = (0, Component_1.default)()
+            .appendTo(label);
+        let requiredOwner;
+        let unuseTarget;
+        return label
+            .extend(label => ({
+            textWrapper,
+            for: (0, State_1.default)(undefined),
+            required: (0, State_1.default)(false),
+            invalid: (0, State_1.default)(false),
+            setFor: inputName => {
+                label.attributes.set('for', inputName);
+                label.for.asMutable?.setValue(inputName);
+                return label;
+            },
+            setRequired: (required = true) => {
+                requiredOwner?.remove();
+                requiredOwner = undefined;
+                if (typeof required === 'boolean')
+                    label.required.value = required;
+                else {
+                    requiredOwner = State_1.default.Owner.create();
+                    label.required.bind(requiredOwner, required);
+                }
+                return label;
+            },
+            setTarget: target => {
+                unuseTarget?.();
+                unuseTarget = undefined;
+                label.setFor(target?.name.value);
+                label.setRequired(target?.required);
+                const targetInvalidOwner = State_1.default.Owner.create();
+                if (target?.invalid)
+                    State_1.default.Use(targetInvalidOwner, { invalid: target.invalid, touched: target.touched })
+                        .use(targetInvalidOwner, ({ invalid, touched }) => label.invalid.asMutable?.setValue(!!invalid && (touched ?? true)));
+                unuseTarget = !target ? undefined : () => {
+                    targetInvalidOwner.remove();
+                    unuseTarget = undefined;
+                };
+                return label;
+            },
+        }))
+            .extendJIT('text', label => label.textWrapper.text.rehost(label))
+            .onRooted(label => {
+            label.for.subscribeManual(inputName => label.setFor(inputName));
+            label.required.subscribeManual(required => {
+                if (requiredOwner)
+                    return; // don't recursively setRequired when required is bound to another state
+                label.setRequired(required);
+            });
+        })
+            .onRemoveManual(() => {
+            requiredOwner?.remove();
+        });
+    });
+    exports.default = Label;
+    exports.LabelTarget = Component_1.default.Extension(component => {
+        return component;
+    });
+});
+define("kitsui/utility/Vector2", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    function Vector2(x = 0, y) {
+        if (y === undefined)
+            y = x;
+        return { x, y };
+    }
+    (function (Vector2) {
+        ////////////////////////////////////
+        //#region Constructors
+        Vector2.ZERO = { x: 0, y: 0 };
+        Vector2.ONE = { x: 1, y: 1 };
+        function mutable(x = 0, y) {
+            if (y === undefined)
+                y = x;
+            return { x, y };
+        }
+        Vector2.mutable = mutable;
+        function fromClient(clientSource) {
+            return { x: clientSource.clientX, y: clientSource.clientY };
+        }
+        Vector2.fromClient = fromClient;
+        //#endregion
+        ////////////////////////////////////
+        function equals(v1, v2) {
+            return v1.x === v2.x && v1.y === v2.y;
+        }
+        Vector2.equals = equals;
+        function distance(v1, v2) {
+            return Math.sqrt((v2.x - v1.x) ** 2 + (v2.y - v1.y) ** 2);
+        }
+        Vector2.distance = distance;
+        function distanceWithin(within, v1, v2) {
+            return (v2.x - v1.x) ** 2 + (v2.y - v1.y) ** 2 < within ** 2;
+        }
+        Vector2.distanceWithin = distanceWithin;
+        function add(v1, v2) {
+            return { x: v1.x + v2.x, y: v1.y + v2.y };
+        }
+        Vector2.add = add;
+        function addInPlace(v1, v2) {
+            v1.x += v2.x;
+            v1.y += v2.y;
+            return v1;
+        }
+        Vector2.addInPlace = addInPlace;
+        function subtract(v1, v2) {
+            return { x: v1.x - v2.x, y: v1.y - v2.y };
+        }
+        Vector2.subtract = subtract;
+        function subtractInPlace(v1, v2) {
+            v1.x -= v2.x;
+            v1.y -= v2.y;
+            return v1;
+        }
+        Vector2.subtractInPlace = subtractInPlace;
+        function multiply(v, scalar) {
+            return { x: v.x * scalar, y: v.y * scalar };
+        }
+        Vector2.multiply = multiply;
+        function multiplyInPlace(v, scalar) {
+            v.x *= scalar;
+            v.y *= scalar;
+            return v;
+        }
+        Vector2.multiplyInPlace = multiplyInPlace;
+        function divide(v, scalar) {
+            return { x: v.x / scalar, y: v.y / scalar };
+        }
+        Vector2.divide = divide;
+        function divideInPlace(v, scalar) {
+            v.x /= scalar;
+            v.y /= scalar;
+            return v;
+        }
+        Vector2.divideInPlace = divideInPlace;
+        function modTruncate(v, scalar) {
+            return { x: v.x % scalar, y: v.y % scalar };
+        }
+        Vector2.modTruncate = modTruncate;
+        function modTruncateInPlace(v, scalar) {
+            v.x %= scalar;
+            v.y %= scalar;
+            return v;
+        }
+        Vector2.modTruncateInPlace = modTruncateInPlace;
+        function modFloor(v, scalar) {
+            return {
+                x: (v.x % scalar + scalar) % scalar,
+                y: (v.y % scalar + scalar) % scalar,
+            };
+        }
+        Vector2.modFloor = modFloor;
+        function modFloorInPlace(v, scalar) {
+            v.x = (v.x % scalar + scalar) % scalar;
+            v.y = (v.y % scalar + scalar) % scalar;
+            return v;
+        }
+        Vector2.modFloorInPlace = modFloorInPlace;
+        function dot(v1, v2) {
+            return v1.x * v2.x + v1.y * v2.y;
+        }
+        Vector2.dot = dot;
+        /** IE, distance from 0,0 */
+        function magnitude(v) {
+            return Math.sqrt(v.x ** 2 + v.y ** 2);
+        }
+        Vector2.magnitude = magnitude;
+        function normalise(v) {
+            const magnitude = Vector2.magnitude(v);
+            return Vector2.divide(v, magnitude);
+        }
+        Vector2.normalise = normalise;
+        function normaliseInPlace(v) {
+            const magnitude = Vector2.magnitude(v);
+            return Vector2.divideInPlace(v, magnitude);
+        }
+        Vector2.normaliseInPlace = normaliseInPlace;
+        function angle(v1, v2) {
+            const dot = Vector2.dot(v1, v2);
+            const lengths = Vector2.magnitude(v1) * Vector2.magnitude(v2);
+            const cosTheta = Math.max(-1, Math.min(1, dot / lengths));
+            return Math.acos(cosTheta);
+        }
+        Vector2.angle = angle;
+        function rotate(v, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            return {
+                x: v.x * cos - v.y * sin,
+                y: v.x * sin + v.y * cos,
+            };
+        }
+        Vector2.rotate = rotate;
+        function rotateInPlace(v, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const x = v.x;
+            v.x = x * cos - v.y * sin;
+            v.y = x * sin + v.y * cos;
+            return v;
+        }
+        Vector2.rotateInPlace = rotateInPlace;
+        function lerp(v1, v2, t) {
+            return {
+                x: v1.x + (v2.x - v1.x) * t,
+                y: v1.y + (v2.y - v1.y) * t,
+            };
+        }
+        Vector2.lerp = lerp;
+        function clamp(v, min, max) {
+            return {
+                x: Math.min(Math.max(v.x, min.x), max.x),
+                y: Math.min(Math.max(v.y, min.y), max.y),
+            };
+        }
+        Vector2.clamp = clamp;
+        function clampInPlace(v, min, max) {
+            v.x = Math.min(Math.max(v.x, min.x), max.x);
+            v.y = Math.min(Math.max(v.y, min.y), max.y);
+            return v;
+        }
+        Vector2.clampInPlace = clampInPlace;
+    })(Vector2 || (Vector2 = {}));
+    exports.default = Vector2;
+});
+define("kitsui/utility/Mouse", ["require", "exports", "utility/State"], function (require, exports, State_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_2 = __importDefault(State_2);
+    var Mouse;
+    (function (Mouse) {
+        const pos = { x: 0, y: 0 };
+        Mouse.state = (0, State_2.default)(pos);
+        const handlers = new Set();
+        function onMove(handler) {
+            handlers.add(handler);
+        }
+        Mouse.onMove = onMove;
+        function offMove(handler) {
+            handlers.delete(handler);
+        }
+        Mouse.offMove = offMove;
+        function listen() {
+            document.addEventListener('mousemove', event => {
+                if (pos.x === event.clientX && pos.y === event.clientY)
+                    return;
+                pos.x = event.clientX;
+                pos.y = event.clientY;
+                Mouse.state.emit();
+                for (const handler of handlers)
+                    handler(pos);
+            });
+        }
+        Mouse.listen = listen;
+    })(Mouse || (Mouse = {}));
+    exports.default = Mouse;
+});
+define("kitsui/utility/Strings", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var Strings;
+    (function (Strings) {
+        /**
+         * Generates a unique string valid for an ID on an element, in the format `_<base 36 timestamp><base 36 random number>`
+         * For example: `_m6rpr4mo02bw589br2ze`
+         */
+        function uid() {
+            return `_${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+        }
+        Strings.uid = uid;
+        function simplify(string) {
+            return string.toLowerCase()
+                .replace(/\W+/g, ' ');
+        }
+        Strings.simplify = simplify;
+        function areSameWords(a, b) {
+            return a === undefined || b === undefined ? false
+                : simplify(a) === simplify(b);
+        }
+        Strings.areSameWords = areSameWords;
+        function includesAt(string, substring, index) {
+            if (index < 0)
+                index = string.length + index;
+            if (index + substring.length > string.length)
+                return false;
+            for (let i = 0; i < substring.length; i++)
+                if (string[i + index] !== substring[i])
+                    return false;
+            return true;
+        }
+        Strings.includesAt = includesAt;
+        function splitOnce(string, separator) {
+            const index = string.indexOf(separator);
+            if (index === -1)
+                return [string];
+            return [string.slice(0, index), string.slice(index + separator.length)];
+        }
+        Strings.splitOnce = splitOnce;
+        function sliceTo(string, substring, startAt) {
+            const index = string.indexOf(substring, startAt);
+            if (index === -1)
+                return string;
+            return string.slice(0, index);
+        }
+        Strings.sliceTo = sliceTo;
+        function sliceAfter(string, substring, startAt) {
+            const index = string.indexOf(substring, startAt);
+            if (index === -1)
+                return string;
+            return string.slice(index + substring.length);
+        }
+        Strings.sliceAfter = sliceAfter;
+        function trimTextMatchingFromStart(string, substring, startAt) {
+            if (string.length < substring.length)
+                return string;
+            const index = string.indexOf(substring, startAt);
+            if (index !== 0)
+                return string;
+            return string.slice(index + substring.length);
+        }
+        Strings.trimTextMatchingFromStart = trimTextMatchingFromStart;
+        function trimTextMatchingFromEnd(string, substring, startAt) {
+            if (string.length < substring.length)
+                return string;
+            const index = string.lastIndexOf(substring, startAt);
+            if (index !== string.length - substring.length)
+                return string;
+            return string.slice(0, index);
+        }
+        Strings.trimTextMatchingFromEnd = trimTextMatchingFromEnd;
+        function extractFromQuotes(string) {
+            let substring = (string ?? '').trim();
+            if (substring[0] === '"')
+                substring = substring.slice(1);
+            if (substring[substring.length - 1] === '"')
+                substring = substring.slice(0, -1);
+            return substring.trim();
+        }
+        Strings.extractFromQuotes = extractFromQuotes;
+        function extractFromSquareBrackets(string) {
+            let substring = (string ?? '');
+            if (substring[0] === '[')
+                substring = substring.slice(1).trimStart();
+            if (substring[substring.length - 1] === ']')
+                substring = substring.slice(0, -1).trimEnd();
+            return substring;
+        }
+        Strings.extractFromSquareBrackets = extractFromSquareBrackets;
+        function mergeRegularExpressions(flags, ...expressions) {
+            let exprString = '';
+            for (const expr of expressions)
+                exprString += '|' + expr.source;
+            return new RegExp(exprString.slice(1), flags);
+        }
+        Strings.mergeRegularExpressions = mergeRegularExpressions;
+        function count(string, substring, stopAtCount = Infinity) {
+            let count = 0;
+            let lastIndex = -1;
+            while (count < stopAtCount) {
+                const index = string.indexOf(substring, lastIndex + 1);
+                if (index === -1)
+                    return count;
+                count++;
+                lastIndex = index;
+            }
+            return count;
+        }
+        Strings.count = count;
+        function includesOnce(string, substring) {
+            return count(string, substring, 2) === 1;
+        }
+        Strings.includesOnce = includesOnce;
+        function getVariations(name) {
+            const variations = [name];
+            variations.push(name + 'd', name + 'ed');
+            if (name.endsWith('d'))
+                variations.push(...getVariations(name.slice(0, -1)));
+            if (name.endsWith('ed'))
+                variations.push(...getVariations(name.slice(0, -2)));
+            if (name.endsWith('ing')) {
+                variations.push(name.slice(0, -3));
+                if (name[name.length - 4] === name[name.length - 5])
+                    variations.push(name.slice(0, -4));
+            }
+            else {
+                variations.push(name + 'ing', name + name[name.length - 1] + 'ing');
+                if (name.endsWith('y'))
+                    variations.push(name.slice(0, -1) + 'ing');
+            }
+            if (name.endsWith('ion')) {
+                variations.push(...getVariations(name.slice(0, -3)));
+                if (name[name.length - 4] === name[name.length - 5])
+                    variations.push(name.slice(0, -4));
+            }
+            else
+                variations.push(name + 'ion');
+            if (name.endsWith('er'))
+                variations.push(name.slice(0, -1), name.slice(0, -2));
+            else {
+                variations.push(name + 'r', name + 'er');
+                if (name.endsWith('y'))
+                    variations.push(name.slice(0, -1) + 'ier');
+            }
+            if (name.endsWith('ier'))
+                variations.push(name.slice(0, -3) + 'y');
+            variations.push(name + 's', name + 'es');
+            if (name.endsWith('s'))
+                variations.push(name.slice(0, -1));
+            else {
+                if (name.endsWith('y'))
+                    variations.push(name.slice(0, -1) + 'ies');
+            }
+            return variations;
+        }
+        Strings.getVariations = getVariations;
+        function shiftLine(lines, count = 1) {
+            for (let i = 0; i < count; i++) {
+                const index = lines.indexOf('\n');
+                if (index === -1)
+                    return lines;
+                lines = lines.slice(index + 1);
+            }
+            return lines;
+        }
+        Strings.shiftLine = shiftLine;
+    })(Strings || (Strings = {}));
+    exports.default = Strings;
+});
+define("kitsui/utility/Time", ["require", "exports", "utility/Strings"], function (require, exports, Strings_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Strings_1 = __importDefault(Strings_1);
+    var Time;
+    (function (Time) {
+        function floor(interval) {
+            return Math.floor(Date.now() / interval) * interval;
+        }
+        Time.floor = floor;
+        Time.frame = seconds(1) / 144;
+        function ms(ms) { return ms; }
+        Time.ms = ms;
+        function seconds(seconds) { return seconds * 1000; }
+        Time.seconds = seconds;
+        function minutes(minutes) { return minutes * 1000 * 60; }
+        Time.minutes = minutes;
+        function hours(hours) { return hours * 1000 * 60 * 60; }
+        Time.hours = hours;
+        function days(days) { return days * 1000 * 60 * 60 * 24; }
+        Time.days = days;
+        function weeks(weeks) { return weeks * 1000 * 60 * 60 * 24 * 7; }
+        Time.weeks = weeks;
+        function months(months) { return Math.floor(months * 1000 * 60 * 60 * 24 * (365.2422 / 12)); }
+        Time.months = months;
+        function years(years) { return Math.floor(years * 1000 * 60 * 60 * 24 * 365.2422); }
+        Time.years = years;
+        function decades(decades) { return Math.floor(decades * 1000 * 60 * 60 * 24 * 365.2422 * 10); }
+        Time.decades = decades;
+        function centuries(centuries) { return Math.floor(centuries * 1000 * 60 * 60 * 24 * 365.2422 * 10 * 10); }
+        Time.centuries = centuries;
+        function millenia(millenia) { return Math.floor(millenia * 1000 * 60 * 60 * 24 * 365.2422 * 10 * 10 * 10); }
+        Time.millenia = millenia;
+        function relative(unixTimeMs, options = {}) {
+            let ms = unixTimeMs - Date.now();
+            const locale = navigator.language || 'en-NZ';
+            if (!locale.startsWith('en'))
+                return relativeIntl(ms, locale, options);
+            if (Math.abs(ms) < seconds(1))
+                return 'now';
+            const ago = ms < 0;
+            if (ago)
+                ms = Math.abs(ms);
+            let limit = options.components ?? Infinity;
+            let value = ms;
+            let result = !ago && options.label !== false ? 'in ' : '';
+            value = Math.floor(ms / years(1));
+            ms -= value * years(1);
+            if (value && limit-- > 0)
+                result += `${value} year${value === 1 ? '' : 's'}${limit > 0 ? ', ' : ''}`;
+            value = Math.floor(ms / months(1));
+            ms -= value * months(1);
+            if (value && limit-- > 0)
+                result += `${value} month${value === 1 ? '' : 's'}${limit > 0 ? ', ' : ''}`;
+            value = Math.floor(ms / weeks(1));
+            ms -= value * weeks(1);
+            if (value && limit-- > 0)
+                result += `${value} week${value === 1 ? '' : 's'}${limit > 0 ? ', ' : ''}`;
+            value = Math.floor(ms / days(1));
+            ms -= value * days(1);
+            if (value && limit-- > 0)
+                result += `${value} day${value === 1 ? '' : 's'}${limit > 0 ? ', ' : ''}`;
+            value = Math.floor(ms / hours(1));
+            ms -= value * hours(1);
+            if (value && limit-- > 0)
+                result += `${value} hour${value === 1 ? '' : 's'}${limit > 0 ? ', ' : ''}`;
+            value = Math.floor(ms / minutes(1));
+            ms -= value * minutes(1);
+            if (value && limit-- > 0)
+                result += `${value} minute${value === 1 ? '' : 's'}${limit > 0 ? ', ' : ''}`;
+            value = Math.floor(ms / seconds(1));
+            if (value && limit-- > 0 && (!options.secondsExclusive || !result.includes(',')))
+                result += `${value} second${value === 1 ? '' : 's'}`;
+            result = Strings_1.default.trimTextMatchingFromEnd(result, ', ');
+            return `${result}${ago && options.label !== false ? ' ago' : ''}`;
+        }
+        Time.relative = relative;
+        function relativeIntl(ms, locale, options) {
+            const rtf = new Intl.RelativeTimeFormat(locale, options);
+            let value = ms;
+            value = Math.trunc(ms / years(1));
+            if (value)
+                return rtf.format(value, 'year');
+            value = Math.trunc(ms / months(1));
+            if (value)
+                return rtf.format(value, 'month');
+            value = Math.trunc(ms / weeks(1));
+            if (value)
+                return rtf.format(value, 'week');
+            value = Math.trunc(ms / days(1));
+            if (value)
+                return rtf.format(value, 'day');
+            value = Math.trunc(ms / hours(1));
+            if (value)
+                return rtf.format(value, 'hour');
+            value = Math.trunc(ms / minutes(1));
+            if (value)
+                return rtf.format(value, 'minute');
+            value = Math.trunc(ms / seconds(1));
+            return rtf.format(value, 'second');
+        }
+        function absolute(ms, options = { dateStyle: 'full', timeStyle: 'medium' }) {
+            const locale = navigator.language || 'en-NZ';
+            const rtf = new Intl.DateTimeFormat(locale, options);
+            return rtf.format(ms);
+        }
+        Time.absolute = absolute;
+    })(Time || (Time = {}));
+    Object.assign(window, { Time });
+    exports.default = Time;
+});
+define("kitsui/utility/Task", ["require", "exports", "utility/Time"], function (require, exports, Time_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Time_1 = __importDefault(Time_1);
+    const DEFAULT_INTERVAL = Time_1.default.seconds(1) / 144;
+    class Task {
+        interval;
+        static async yield(instantIfUnsupported = false) {
+            if (typeof scheduler !== 'undefined' && typeof scheduler.yield === 'function')
+                return scheduler.yield();
+            if (!instantIfUnsupported)
+                await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        static post(callback, priority) {
+            if (typeof scheduler === 'undefined' || typeof scheduler.postTask !== 'function')
+                return callback();
+            return scheduler.postTask(callback, { priority });
+        }
+        lastYieldEnd = Date.now();
+        constructor(interval = DEFAULT_INTERVAL) {
+            this.interval = interval;
+        }
+        reset() {
+            this.lastYieldEnd = Date.now();
+        }
+        async yield(instantIfUnsupported = false) {
+            if (Date.now() - this.lastYieldEnd > this.interval) {
+                await Task.yield(instantIfUnsupported);
+                this.lastYieldEnd = Date.now();
+            }
+        }
+    }
+    exports.default = Task;
+});
+define("kitsui/utility/Style", ["require", "exports", "utility/State", "utility/Task"], function (require, exports, State_3, Task_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_3 = __importDefault(State_3);
+    Task_1 = __importDefault(Task_1);
+    var Style;
+    (function (Style) {
+        Style.properties = State_3.default.JIT(() => window.getComputedStyle(document.documentElement));
+        const measured = {};
+        function measure(property) {
+            if (measured[property])
+                return measured[property];
+            return Style.properties.mapManual(properties => {
+                const value = properties.getPropertyValue(property);
+                const element = document.createElement('div');
+                element.style.width = value;
+                element.style.pointerEvents = 'none';
+                element.style.opacity = '0';
+                element.style.position = 'fixed';
+                document.body.appendChild(element);
+                const state = measured[property] = (0, State_3.default)(0);
+                void Task_1.default.yield().then(() => {
+                    state.value = element.clientWidth;
+                    element.remove();
+                });
+                return measured[property];
+            });
+        }
+        Style.measure = measure;
+        async function reload(path) {
+            const oldStyle = document.querySelector(`link[rel=stylesheet][href^="${path}"]`);
+            const style = document.createElement('link');
+            style.rel = 'stylesheet';
+            style.href = `${path}?${Date.now()}`;
+            return new Promise((resolve, reject) => {
+                style.onload = () => resolve();
+                style.onerror = reject;
+                document.head.appendChild(style);
+            }).finally(() => oldStyle?.remove());
+        }
+        Style.reload = reload;
+    })(Style || (Style = {}));
+    exports.default = Style;
+});
+define("kitsui/utility/Viewport", ["require", "exports", "utility/State", "utility/Style"], function (require, exports, State_4, Style_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_4 = __importDefault(State_4);
+    Style_1 = __importDefault(Style_1);
+    var Viewport;
+    (function (Viewport) {
+        Viewport.size = State_4.default.JIT(() => ({ w: window.innerWidth, h: window.innerHeight }));
+        Viewport.mobile = State_4.default.JIT(owner => {
+            const contentWidth = Style_1.default.measure('--content-width');
+            const result = Viewport.size.value.w < contentWidth.value;
+            contentWidth.subscribe(owner, Viewport.mobile.markDirty);
+            Viewport.size.subscribe(owner, Viewport.mobile.markDirty);
+            return result;
+        });
+        Viewport.tablet = State_4.default.JIT(owner => {
+            const tabletWidth = Style_1.default.measure('--tablet-width');
+            const result = Viewport.size.value.w < tabletWidth.value;
+            tabletWidth.subscribe(owner, Viewport.tablet.markDirty);
+            Viewport.size.subscribe(owner, Viewport.tablet.markDirty);
+            return result;
+        });
+        Viewport.laptop = State_4.default.JIT(owner => {
+            const laptopWidth = Style_1.default.measure('--laptop-width');
+            const result = Viewport.size.value.w < laptopWidth.value;
+            laptopWidth.subscribe(owner, Viewport.laptop.markDirty);
+            Viewport.size.subscribe(owner, Viewport.laptop.markDirty);
+            return result;
+        });
+        Viewport.state = State_4.default.JIT(owner => {
+            const result = Viewport.mobile.value ? 'mobile' : Viewport.tablet.value ? 'tablet' : Viewport.laptop.value ? 'laptop' : 'desktop';
+            Viewport.mobile.subscribe(owner, Viewport.state.markDirty);
+            Viewport.tablet.subscribe(owner, Viewport.state.markDirty);
+            Viewport.laptop.subscribe(owner, Viewport.state.markDirty);
+            return result;
+        });
+        function listen() {
+            window.addEventListener('resize', Viewport.size.markDirty);
+        }
+        Viewport.listen = listen;
+    })(Viewport || (Viewport = {}));
+    exports.default = Viewport;
+});
+define("kitsui/utility/AnchorManipulator", ["require", "exports", "utility/Mouse", "utility/State", "utility/Time", "utility/Viewport"], function (require, exports, Mouse_1, State_5, Time_2, Viewport_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.AllowXOffscreen = exports.AllowYOffscreen = exports.ANCHOR_LOCATION_ALIGNMENTS = exports.ANCHOR_SIDE_VERTICAL = exports.ANCHOR_SIDE_HORIZONTAL = exports.ANCHOR_TYPES = void 0;
+    Mouse_1 = __importDefault(Mouse_1);
+    State_5 = __importDefault(State_5);
+    Time_2 = __importDefault(Time_2);
+    Viewport_1 = __importDefault(Viewport_1);
+    ////////////////////////////////////
+    //#region Anchor Strings
+    exports.ANCHOR_TYPES = ['off', 'aligned'];
+    exports.ANCHOR_SIDE_HORIZONTAL = ['left', 'right'];
+    exports.ANCHOR_SIDE_VERTICAL = ['top', 'bottom'];
+    const anchorStrings = new Set(exports.ANCHOR_TYPES
+        .flatMap(type => [exports.ANCHOR_SIDE_HORIZONTAL, exports.ANCHOR_SIDE_VERTICAL]
+        .flatMap(sides => sides
+        .map(side => `${type} ${side}`)))
+        .flatMap(type => [type, `sticky ${type}`]));
+    anchorStrings.add('centre');
+    anchorStrings.add('sticky centre');
+    function isAnchorString(value) {
+        if (anchorStrings.has(value)) {
+            return true;
+        }
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const lastSpace = value.lastIndexOf(' ');
+        if (lastSpace === -1) {
+            return false;
+        }
+        const simpleAnchorString = value.slice(0, lastSpace);
+        if (!anchorStrings.has(simpleAnchorString)) {
+            return false;
+        }
+        const offsetString = value.slice(lastSpace + 1);
+        return !isNaN(+offsetString);
+    }
+    function parseAnchor(anchor) {
+        const sticky = anchor.startsWith('sticky');
+        if (sticky) {
+            anchor = anchor.slice(7);
+        }
+        const simpleAnchor = anchor;
+        if (simpleAnchor === 'centre') {
+            return { sticky, type: 'centre', side: 'centre', offset: 0 };
+        }
+        const [type, side, offset] = simpleAnchor.split(' ');
+        return {
+            sticky,
+            type,
+            side,
+            offset: offset ? +offset : 0,
+        };
+    }
+    exports.ANCHOR_LOCATION_ALIGNMENTS = ['left', 'centre', 'right'];
+    //#endregion
+    ////////////////////////////////////
+    ////////////////////////////////////
+    //#region Implementation
+    exports.AllowYOffscreen = { allowYOffscreen: true };
+    exports.AllowXOffscreen = { allowXOffscreen: true };
+    function AnchorManipulator(host) {
+        let locationPreference;
+        let refCache;
+        const location = (0, State_5.default)(undefined);
+        let currentAlignment;
+        let from;
+        let lastRender = 0;
+        let rerenderTimeout;
+        const subscribed = [];
+        const addSubscription = (use) => use && subscribed.push(use);
+        let unuseFrom;
+        const result = {
+            state: location,
+            isMouse: () => !locationPreference?.length,
+            from: component => {
+                unuseFrom?.();
+                from = component;
+                unuseFrom = from?.removed.useManual(removed => {
+                    if (removed) {
+                        from = undefined;
+                        unuseFrom?.();
+                        unuseFrom = undefined;
+                    }
+                });
+                return host;
+            },
+            reset: () => {
+                locationPreference = undefined;
+                result.markDirty();
+                return host;
+            },
+            add: (...config) => {
+                const options = typeof config[config.length - 1] === 'string' ? undefined
+                    : config.pop();
+                let [xAnchor, xRefSelector, yAnchor, yRefSelector] = config;
+                if (isAnchorString(xRefSelector)) {
+                    yRefSelector = yAnchor;
+                    yAnchor = xRefSelector;
+                    xRefSelector = '*';
+                }
+                yRefSelector ??= '*';
+                locationPreference ??= [];
+                locationPreference.push({
+                    xAnchor: parseAnchor(xAnchor),
+                    xRefSelector,
+                    yAnchor: parseAnchor(yAnchor),
+                    yRefSelector,
+                    options,
+                });
+                result.markDirty();
+                return host;
+            },
+            orElseHide: () => {
+                locationPreference?.push(false);
+                return host;
+            },
+            markDirty: () => {
+                location.value = undefined;
+                if (lastRender) {
+                    const timeSinceLastRender = Date.now() - lastRender;
+                    if (timeSinceLastRender > Time_2.default.frame)
+                        result.apply();
+                    else if (rerenderTimeout === undefined)
+                        rerenderTimeout = window.setTimeout(result.apply, Time_2.default.frame - timeSinceLastRender);
+                }
+                return host;
+            },
+            get: () => {
+                if (location.value)
+                    return location.value;
+                for (const unuse of subscribed)
+                    unuse();
+                subscribed.length = 0;
+                const anchoredBox = host?.rect.value;
+                if (!anchoredBox.width || !anchoredBox.height) {
+                    location.value = undefined;
+                    return { x: 0, y: 0, mouse: false };
+                }
+                if (anchoredBox && locationPreference && from) {
+                    for (const preference of locationPreference) {
+                        if (!preference)
+                            return location.value ??= { mouse: false, x: -10000, y: -10000, padX: false };
+                        let alignment = 'left';
+                        const xConf = preference.xAnchor;
+                        const xRef = resolveAnchorRef(preference.xRefSelector);
+                        if (preference.xRefSelector !== '*' && !xRef)
+                            continue;
+                        const xBox = xRef?.rect.value;
+                        addSubscription(xRef?.rect.subscribe(host, result.markDirty));
+                        const xCenter = (xBox?.left ?? 0) + (xBox?.width ?? Viewport_1.default.size.value.w) / 2;
+                        const xRefX = (xConf.side === 'right' ? xBox?.right : xConf.side === 'left' ? xBox?.left : xCenter) ?? xCenter;
+                        let x;
+                        switch (xConf.type) {
+                            case 'aligned':
+                                x = xConf.side === 'right' ? xRefX - anchoredBox.width - xConf.offset : xRefX + xConf.offset;
+                                alignment = xConf.side;
+                                break;
+                            case 'off':
+                                x = xConf.side === 'right' ? xRefX + xConf.offset : xRefX - anchoredBox.width - xConf.offset;
+                                // alignment is inverted side for "off"
+                                alignment = xConf.side === 'left' ? 'right' : 'left';
+                                break;
+                            case 'centre':
+                                x = xRefX - anchoredBox.width / 2;
+                                alignment = 'centre';
+                                break;
+                        }
+                        if (preference.options?.xValid?.(x, xBox, anchoredBox) === false) {
+                            continue;
+                        }
+                        if (!xConf.sticky && anchoredBox.width < Viewport_1.default.size.value.w && !preference.options?.allowXOffscreen) {
+                            const isXOffScreen = x < 0 || x + anchoredBox.width > Viewport_1.default.size.value.w;
+                            if (isXOffScreen) {
+                                continue;
+                            }
+                        }
+                        const yConf = preference.yAnchor;
+                        const yRef = resolveAnchorRef(preference.yRefSelector);
+                        if (preference.yRefSelector !== '*' && !yRef)
+                            continue;
+                        const yBox = yRef?.rect.value;
+                        addSubscription(yRef?.rect.subscribe(host, result.markDirty));
+                        const yCenter = (yBox?.top ?? 0) + (yBox?.height ?? Viewport_1.default.size.value.h) / 2;
+                        const yRefY = (yConf.side === 'bottom' ? yBox?.bottom : yConf.side === 'top' ? yBox?.top : yCenter) ?? yCenter;
+                        let y;
+                        switch (yConf.type) {
+                            case 'aligned':
+                                y = yConf.side === 'bottom' ? yRefY - anchoredBox.height - yConf.offset : yRefY + yConf.offset;
+                                break;
+                            case 'off':
+                                y = yConf.side === 'bottom' ? yRefY + yConf.offset : yRefY - anchoredBox.height - yConf.offset;
+                                break;
+                            case 'centre':
+                                y = yRefY - anchoredBox.height / 2;
+                                break;
+                        }
+                        if (preference.options?.yValid?.(y, yBox, anchoredBox) === false) {
+                            continue;
+                        }
+                        if (!yConf.sticky && anchoredBox.height < Viewport_1.default.size.value.h && !preference.options?.allowYOffscreen) {
+                            const isYOffScreen = y < 0
+                                || y + anchoredBox.height > Viewport_1.default.size.value.h;
+                            if (isYOffScreen) {
+                                continue;
+                            }
+                        }
+                        return location.value ??= { mouse: false, padX: xConf.type === 'off', alignment, x, y, yRefBox: yBox, xRefBox: xBox, preference };
+                    }
+                }
+                return location.value ??= { mouse: true, padX: true, ...Mouse_1.default.state.value };
+            },
+            apply: () => {
+                const location = result.get();
+                let alignment = location.alignment ?? currentAlignment;
+                if (location.mouse) {
+                    const shouldFlip = currentAlignment === 'centre' || (currentAlignment === 'right' ? location.x < Viewport_1.default.size.value.w / 2 - 200 : location.x > Viewport_1.default.size.value.w / 2 + 200);
+                    if (shouldFlip) {
+                        alignment = currentAlignment === 'left' ? 'right' : 'left';
+                    }
+                }
+                if (currentAlignment !== alignment) {
+                    currentAlignment = alignment;
+                    // this.surface.classes.removeStartingWith("aligned-")
+                    // this.surface.classes.add(`aligned-${this.currentAlignment}`)
+                }
+                // this.surface.classes.toggle(location.padX, "pad-x")
+                host.element.style.left = `${location.x}px`;
+                host.element.style.top = `${location.y}px`;
+                host.rect.markDirty();
+                rerenderTimeout = undefined;
+                lastRender = Date.now();
+                return host;
+            },
+        };
+        return result;
+        function resolveAnchorRef(selector) {
+            const refRef = refCache?.[selector];
+            let ref;
+            if (refRef) {
+                ref = refRef.deref();
+            }
+            else {
+                ref = selector.startsWith('>>')
+                    ? from?.element.querySelector(selector.slice(2))?.component
+                    : from?.element.closest(selector)?.component;
+                if (ref) {
+                    if (getComputedStyle(ref.element).display === 'contents') {
+                        const children = ref.element.children;
+                        if (!children.length)
+                            console.warn('Anchor ref has display: contents and no children');
+                        else {
+                            ref = children[0].component ?? ref;
+                            if (children.length > 1)
+                                console.warn('Anchor ref has display: contents and multiple children');
+                        }
+                    }
+                    refCache ??= {};
+                    refCache[selector] = new WeakRef(ref);
+                }
+            }
+            return ref;
+        }
+    }
+    exports.default = AnchorManipulator;
+});
+//#endregion
+////////////////////////////////////
+define("kitsui/utility/Maps", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var Maps;
+    (function (Maps) {
+        function compute(map, key, computer) {
+            const value = map.get(key);
+            if (value === undefined)
+                return computer(key);
+            return value;
+        }
+        Maps.compute = compute;
+    })(Maps || (Maps = {}));
+    exports.default = Maps;
+});
+define("kitsui/utility/StringApplicator", ["require", "exports", "utility/Arrays", "utility/State"], function (require, exports, Arrays_2, State_6) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.StringApplicatorSource = void 0;
+    State_6 = __importDefault(State_6);
+    let cumulativeSourceRequiredState;
+    var StringApplicatorSource;
+    (function (StringApplicatorSource) {
+        StringApplicatorSource.REGISTRY = {};
+        function register(source, value) {
+            StringApplicatorSource.REGISTRY[source] = value;
+            cumulativeSourceRequiredState = State_6.default.MapManual(Object.values(StringApplicatorSource.REGISTRY).map(def => def.requiredState).filter(Arrays_2.NonNullish), () => null, false);
+        }
+        StringApplicatorSource.register = register;
+        function toString(source) {
+            if (typeof source === 'function')
+                source = source();
+            if (typeof source === 'string')
+                return source;
+            for (const def of Object.values(StringApplicatorSource.REGISTRY))
+                if (def.match(source))
+                    return def.toString(source);
+            throw new Error(`No StringApplicatorSourceDefinition found for source: ${String(source)}`);
+        }
+        StringApplicatorSource.toString = toString;
+        function toNodes(source) {
+            if (typeof source === 'function')
+                source = source();
+            if (typeof source === 'string')
+                return [document.createTextNode(source)];
+            for (const def of Object.values(StringApplicatorSource.REGISTRY))
+                if (def.match(source))
+                    return def.toNodes(source);
+            throw new Error(`No StringApplicatorSourceDefinition found for source: ${String(source)}`);
+        }
+        StringApplicatorSource.toNodes = toNodes;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+        function apply(applicator, source) {
+            if (typeof source !== 'function') {
+                applicator(source);
+                return;
+            }
+            const sourceFunction = source;
+            if (!cumulativeSourceRequiredState) {
+                applicator(sourceFunction());
+                return;
+            }
+            const subOwner = State_6.default.Owner.create();
+            cumulativeSourceRequiredState?.use(subOwner, () => applicator(sourceFunction()));
+            return subOwner.remove;
+        }
+        StringApplicatorSource.apply = apply;
+    })(StringApplicatorSource || (exports.StringApplicatorSource = StringApplicatorSource = {}));
+    function BaseStringApplicator(host, defaultValue, set) {
+        let unbind;
+        let unown;
+        let subUnown;
+        let removed = false;
+        const state = (0, State_6.default)(defaultValue);
+        const result = makeApplicator(host);
+        const setInternal = set.bind(null, result);
+        return result;
+        function makeApplicator(host) {
+            const hostOwner = host;
+            State_6.default.Owner.getRemovedState(host)?.matchManual(true, () => {
+                removed = true;
+                unbind?.();
+                unbind = undefined;
+                unown?.();
+                unown = undefined;
+                subUnown?.();
+                subUnown = undefined;
+            });
+            return {
+                state,
+                set: value => {
+                    if (removed)
+                        return host;
+                    unbind?.();
+                    unbind = undefined;
+                    unown?.();
+                    unown = undefined;
+                    subUnown?.();
+                    subUnown = undefined;
+                    StringApplicatorSource.apply(setInternal, value);
+                    return host;
+                },
+                bind: (state) => {
+                    if (removed)
+                        return host;
+                    unbind?.();
+                    unbind = undefined;
+                    unown?.();
+                    unown = undefined;
+                    subUnown?.();
+                    subUnown = undefined;
+                    if (state === undefined || state === null) {
+                        setInternal(defaultValue);
+                        return host;
+                    }
+                    if (!State_6.default.is(state)) {
+                        setInternal(state);
+                        return host;
+                    }
+                    unbind = state?.use(hostOwner, state => {
+                        subUnown?.();
+                        subUnown = undefined;
+                        StringApplicatorSource.apply(setInternal, state);
+                    });
+                    return host;
+                },
+                unbind: () => {
+                    unbind?.();
+                    unbind = undefined;
+                    unown?.();
+                    unown = undefined;
+                    subUnown?.();
+                    subUnown = undefined;
+                    setInternal(defaultValue);
+                    return host;
+                },
+                rehost: makeApplicator,
+            };
+        }
+    }
+    function StringApplicator(host, defaultValueOrApply, maybeApply) {
+        const defaultValue = !maybeApply ? undefined : defaultValueOrApply;
+        const apply = (maybeApply ?? defaultValueOrApply);
+        return BaseStringApplicator(host, defaultValue, (result, value) => {
+            if (value !== undefined && value !== null)
+                value = StringApplicatorSource.toString(value);
+            if (result.state.value !== value) {
+                result.state.asMutable?.setValue(value);
+                apply(value ?? undefined);
+            }
+        });
+    }
+    (function (StringApplicator) {
+        function render(content) {
+            return !content ? [] : StringApplicatorSource.toNodes(content);
+        }
+        StringApplicator.render = render;
+        function Nodes(host, defaultValueOrApply, maybeApply) {
+            const defaultValue = !maybeApply ? undefined : defaultValueOrApply;
+            const apply = (maybeApply ?? defaultValueOrApply);
+            return BaseStringApplicator(host, defaultValue, (result, value) => {
+                const valueString = value !== undefined && value !== null ? StringApplicatorSource.toString(value) : undefined;
+                result.state.asMutable?.setValue(valueString);
+                apply(render(value));
+            });
+        }
+        StringApplicator.Nodes = Nodes;
+    })(StringApplicator || (StringApplicator = {}));
+    exports.default = StringApplicator;
+});
+define("kitsui/utility/AttributeManipulator", ["require", "exports", "utility/Maps", "utility/State", "utility/StringApplicator"], function (require, exports, Maps_1, State_7, StringApplicator_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Maps_1 = __importDefault(Maps_1);
+    State_7 = __importDefault(State_7);
+    function AttributeManipulator(component) {
+        let removed = false;
+        let translationHandlers;
+        const unuseAttributeMap = new Map();
+        const attributeStates = new Map();
+        State_7.default.Owner.getRemovedState(component)?.matchManual(true, () => {
+            removed = true;
+            for (const registration of Object.values(translationHandlers ?? {}))
+                registration.unuse?.();
+            translationHandlers = undefined;
+        });
+        const result = {
+            has(attribute) {
+                return component.element.hasAttribute(attribute);
+            },
+            get(attribute) {
+                return Maps_1.default.compute(attributeStates, attribute, () => (0, State_7.default)(component.element.getAttribute(attribute) ?? undefined));
+            },
+            append(...attributes) {
+                for (const attribute of attributes) {
+                    translationHandlers?.[attribute]?.unuse?.();
+                    delete translationHandlers?.[attribute];
+                    component.element.setAttribute(attribute, '');
+                    attributeStates.get(attribute)?.asMutable?.setValue('');
+                }
+                return component;
+            },
+            prepend(...attributes) {
+                const oldAttributes = {};
+                for (const attribute of [...component.element.attributes]) {
+                    oldAttributes[attribute.name] = attribute.value;
+                    component.element.removeAttribute(attribute.name);
+                }
+                for (const attribute of attributes) {
+                    const value = oldAttributes[attribute] ?? '';
+                    component.element.setAttribute(attribute, value);
+                    attributeStates.get(attribute)?.asMutable?.setValue(value);
+                }
+                for (const name of Object.keys(oldAttributes))
+                    component.element.setAttribute(name, oldAttributes[name]);
+                return component;
+            },
+            insertBefore(referenceAttribute, ...attributes) {
+                const oldAttributes = {};
+                for (const attribute of [...component.element.attributes]) {
+                    oldAttributes[attribute.name] = attribute.value;
+                    component.element.removeAttribute(attribute.name);
+                }
+                for (const attribute of Object.keys(oldAttributes)) {
+                    if (attribute === referenceAttribute)
+                        for (const attribute of attributes) {
+                            const value = oldAttributes[attribute] ?? '';
+                            component.element.setAttribute(attribute, value);
+                            attributeStates.get(attribute)?.asMutable?.setValue(value);
+                        }
+                    component.element.setAttribute(attribute, oldAttributes[attribute]);
+                }
+                return component;
+            },
+            insertAfter(referenceAttribute, ...attributes) {
+                const oldAttributes = {};
+                for (const attribute of [...component.element.attributes]) {
+                    oldAttributes[attribute.name] = attribute.value;
+                    component.element.removeAttribute(attribute.name);
+                }
+                if (!(referenceAttribute in oldAttributes))
+                    for (const attribute of attributes) {
+                        const value = oldAttributes[attribute] ?? '';
+                        component.element.setAttribute(attribute, value);
+                        attributeStates.get(attribute)?.asMutable?.setValue(value);
+                    }
+                for (const attribute of Object.keys(oldAttributes)) {
+                    component.element.setAttribute(attribute, oldAttributes[attribute]);
+                    if (attribute === referenceAttribute)
+                        for (const attribute of attributes) {
+                            const value = oldAttributes[attribute] ?? '';
+                            component.element.setAttribute(attribute, value);
+                            attributeStates.get(attribute)?.asMutable?.setValue(value);
+                        }
+                }
+                return component;
+            },
+            set(attribute, value) {
+                translationHandlers?.[attribute]?.unuse?.();
+                delete translationHandlers?.[attribute];
+                if (value === undefined) {
+                    component.element.removeAttribute(attribute);
+                    attributeStates.get(attribute)?.asMutable?.setValue(undefined);
+                }
+                else {
+                    component.element.setAttribute(attribute, value);
+                    attributeStates.get(attribute)?.asMutable?.setValue(value);
+                }
+                return component;
+            },
+            bind(...args) {
+                if (typeof args[0] === 'string') {
+                    const [attribute, state] = args;
+                    unuseAttributeMap.get(attribute)?.();
+                    unuseAttributeMap.set(attribute, state.use(component, value => {
+                        if (value === undefined) {
+                            component.element.removeAttribute(attribute);
+                            attributeStates.get(attribute)?.asMutable?.setValue(undefined);
+                        }
+                        else {
+                            component.element.setAttribute(attribute, value);
+                            attributeStates.get(attribute)?.asMutable?.setValue(value);
+                        }
+                    }));
+                }
+                else {
+                    let [state, attribute, value, orElse] = args;
+                    unuseAttributeMap.get(attribute)?.();
+                    unuseAttributeMap.set(attribute, state.use(component, active => {
+                        if (active) {
+                            value ??= '';
+                            component.element.setAttribute(attribute, value);
+                            attributeStates.get(attribute)?.asMutable?.setValue(value);
+                        }
+                        else if (orElse !== undefined) {
+                            component.element.setAttribute(attribute, orElse);
+                            attributeStates.get(attribute)?.asMutable?.setValue(orElse);
+                        }
+                        else {
+                            component.element.removeAttribute(attribute);
+                            attributeStates.get(attribute)?.asMutable?.setValue(undefined);
+                        }
+                    }));
+                }
+                return component;
+            },
+            compute(attribute, supplier) {
+                if (component.element.hasAttribute(attribute))
+                    return component;
+                translationHandlers?.[attribute]?.unuse?.();
+                delete translationHandlers?.[attribute];
+                const value = supplier(component);
+                if (value === undefined) {
+                    component.element.removeAttribute(attribute);
+                    attributeStates.get(attribute)?.asMutable?.setValue(undefined);
+                }
+                else {
+                    component.element.setAttribute(attribute, value);
+                    attributeStates.get(attribute)?.asMutable?.setValue(value);
+                }
+                return component;
+            },
+            getUsing(attribute) {
+                return translationHandlers?.[attribute]?.source;
+            },
+            use(attribute, source) {
+                if (removed)
+                    return component;
+                translationHandlers?.[attribute]?.unuse?.();
+                delete translationHandlers?.[attribute];
+                const unuse = StringApplicator_1.StringApplicatorSource.apply(source => {
+                    const registration = translationHandlers?.[attribute];
+                    if (!registration)
+                        return;
+                    const value = StringApplicator_1.StringApplicatorSource.toString(source ?? '');
+                    component.element.setAttribute(attribute, value);
+                    attributeStates.get(attribute)?.asMutable?.setValue(value);
+                }, source);
+                translationHandlers ??= {};
+                translationHandlers[attribute] = { source: source, unuse };
+                return component;
+            },
+            remove(...attributes) {
+                for (const attribute of attributes) {
+                    translationHandlers?.[attribute]?.unuse?.();
+                    delete translationHandlers?.[attribute];
+                    component.element.removeAttribute(attribute);
+                    attributeStates.get(attribute)?.asMutable?.setValue(undefined);
+                }
+                return component;
+            },
+            toggle(present, attribute, value = '') {
+                return this[present ? 'set' : 'remove'](attribute, value);
+            },
+            copy(element) {
+                if ('element' in element)
+                    element = element.element;
+                for (const attribute of element.attributes) {
+                    component.element.setAttribute(attribute.name, attribute.value);
+                    attributeStates.get(attribute.name)?.asMutable?.setValue(attribute.value);
+                }
+                return component;
+            },
+        };
+        return result;
+    }
+    exports.default = AttributeManipulator;
+});
+define("kitsui/utility/ClassManipulator", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    function ClassManipulator(component) {
+        return {
+            has(...classes) {
+                return classes.every(className => component.element.classList.contains(className));
+            },
+            some(...classes) {
+                return classes.some(className => component.element.classList.contains(className));
+            },
+            add(...classes) {
+                component.element.classList.add(...classes);
+                return component;
+            },
+            remove(...classes) {
+                component.element.classList.remove(...classes);
+                return component;
+            },
+            toggle(present, ...classes) {
+                return this[present ? 'add' : 'remove'](...classes);
+            },
+            copy(element) {
+                if ('element' in element)
+                    element = element.element;
+                component.element.classList.add(...element.classList);
+                return component;
+            },
+        };
+    }
+    exports.default = ClassManipulator;
+});
+define("kitsui/utility/EventManipulator", ["require", "exports", "utility/Arrays", "utility/State"], function (require, exports, Arrays_3, State_8) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Arrays_3 = __importDefault(Arrays_3);
+    State_8 = __importDefault(State_8);
+    const SYMBOL_REGISTERED_FUNCTION = Symbol('REGISTERED_FUNCTION');
+    function isComponent(host) {
+        return typeof host === 'object' && host !== null && 'isComponent' in host;
+    }
+    function EventManipulator(host) {
+        const elementHost = isComponent(host)
+            ? host
+            : { element: document.createElement('span') };
+        const manipulator = {
+            emit(event, ...params) {
+                const detail = { result: [], params };
+                let stoppedPropagation = false;
+                let preventedDefault = false;
+                const eventObject = Object.assign(new CustomEvent(event, { detail }), {
+                    preventDefault() {
+                        Event.prototype.preventDefault.call(this);
+                        preventedDefault ||= true;
+                    },
+                    stopPropagation() {
+                        stoppedPropagation ||= true;
+                    },
+                    stopImmediatePropagation() {
+                        stoppedPropagation = 'immediate';
+                    },
+                });
+                elementHost.element.dispatchEvent(eventObject);
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+                return Object.assign(detail.result, { defaultPrevented: eventObject.defaultPrevented || preventedDefault, stoppedPropagation });
+            },
+            bubble(event, ...params) {
+                const detail = { result: [], params };
+                let stoppedPropagation = false;
+                let preventedDefault = false;
+                const eventObject = Object.assign(new CustomEvent(event, { detail, bubbles: true }), {
+                    preventDefault() {
+                        Event.prototype.preventDefault.call(this);
+                        preventedDefault ||= true;
+                    },
+                    stopPropagation() {
+                        stoppedPropagation ||= true;
+                    },
+                    stopImmediatePropagation() {
+                        stoppedPropagation = 'immediate';
+                    },
+                });
+                elementHost.element.dispatchEvent(eventObject);
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+                return Object.assign(detail.result, { defaultPrevented: eventObject.defaultPrevented || preventedDefault, stoppedPropagation });
+            },
+            subscribe(events, handler) {
+                return subscribe(handler, events);
+            },
+            subscribePassive(events, handler) {
+                return subscribe(handler, events, { passive: true });
+            },
+            subscribeCapture(events, handler) {
+                return subscribe(handler, events, { capture: true });
+            },
+            unsubscribe(events, handler) {
+                const realHandler = handler[SYMBOL_REGISTERED_FUNCTION];
+                if (!realHandler)
+                    return host;
+                delete handler[SYMBOL_REGISTERED_FUNCTION];
+                for (const event of Arrays_3.default.resolve(events))
+                    elementHost.element.removeEventListener(event, realHandler);
+                return host;
+            },
+            until(owner, initialiser) {
+                initialiser({
+                    subscribe(event, handler) {
+                        manipulator.subscribe(event, handler);
+                        State_8.default.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler));
+                        return this;
+                    },
+                    subscribeCapture(event, handler) {
+                        manipulator.subscribeCapture(event, handler);
+                        State_8.default.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler));
+                        return this;
+                    },
+                    subscribePassive(event, handler) {
+                        manipulator.subscribePassive(event, handler);
+                        State_8.default.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler));
+                        return this;
+                    },
+                });
+                return host;
+            },
+        };
+        return manipulator;
+        function subscribe(handler, events, options) {
+            if (handler[SYMBOL_REGISTERED_FUNCTION]) {
+                console.error(`Can't register handler for event(s) ${Arrays_3.default.resolve(events).join(', ')}, already used for other events`, handler);
+                return host;
+            }
+            const realHandler = (event) => {
+                const customEvent = event instanceof CustomEvent ? event : undefined;
+                const eventDetail = customEvent?.detail;
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
+                const result = handler(Object.assign(event, {
+                    host,
+                    targetComponent: getNearestComponent(event.target),
+                }), ...eventDetail?.params ?? []);
+                eventDetail?.result.push(result);
+            };
+            Object.assign(handler, { [SYMBOL_REGISTERED_FUNCTION]: realHandler });
+            for (const event of Arrays_3.default.resolve(events))
+                elementHost.element.addEventListener(event, realHandler, options);
+            return host;
+        }
+    }
+    function getNearestComponent(target) {
+        if (!target || !(target instanceof Node))
+            return undefined;
+        let node = target;
+        do {
+            const component = node.component;
+            if (component)
+                return component;
+        } while ((node = node.parentNode));
+    }
+    exports.default = EventManipulator;
+});
+define("kitsui/utility/FocusListener", ["require", "exports", "utility/State"], function (require, exports, State_9) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_9 = __importDefault(State_9);
+    var FocusListener;
+    (function (FocusListener) {
+        FocusListener.hasFocus = (0, State_9.default)(false);
+        FocusListener.focused = (0, State_9.default)(undefined);
+        FocusListener.focusedLast = (0, State_9.default)(undefined);
+        function focusedComponent() {
+            return FocusListener.focused.value?.component;
+        }
+        FocusListener.focusedComponent = focusedComponent;
+        // interface QueuedFocusChange {
+        // 	type: "focus" | "blur"
+        // 	element: HTMLElement
+        // }
+        // let updatingFocusState = false
+        // let cursor = 0
+        // const queue: QueuedFocusChange[] = []
+        function focus(element) {
+            // if (updatingFocusState || exhaustingQueue) {
+            // 	queue.splice(cursor, 0, { type: "focus", element })
+            // 	cursor++
+            // 	return
+            // }
+            focusInternal(element);
+        }
+        FocusListener.focus = focus;
+        let focusedThisTick = 0;
+        let focusTimeout;
+        function focusInternal(element) {
+            if (document.querySelector(':focus-visible') === element)
+                return;
+            if (focusedThisTick > 100)
+                return;
+            focusedThisTick++;
+            element.focus();
+            window.clearTimeout(focusTimeout);
+            window.setTimeout(() => focusedThisTick = 0);
+        }
+        function blur(element) {
+            // if (updatingFocusState || exhaustingQueue) {
+            // 	queue.splice(cursor, 0, { type: "blur", element })
+            // 	cursor++
+            // 	return
+            // }
+            blurInternal(element);
+        }
+        FocusListener.blur = blur;
+        function blurInternal(element) {
+            if (document.querySelector(':focus-visible') !== element)
+                return;
+            element.blur();
+        }
+        function listen() {
+            document.addEventListener('focusin', onFocusIn);
+            document.addEventListener('focusout', onFocusOut);
+        }
+        FocusListener.listen = listen;
+        function onFocusIn() {
+            updateFocusState();
+        }
+        function onFocusOut(event) {
+            if (event.relatedTarget === null)
+                updateFocusState();
+        }
+        // let exhaustingQueue = false
+        function updateFocusState() {
+            if (document.activeElement && document.activeElement !== document.body && location.hash && document.activeElement.id !== location.hash.slice(1))
+                history.pushState(undefined, '', ' ');
+            const newFocused = document.querySelector(':focus-visible') ?? undefined;
+            if (newFocused === FocusListener.focused.value)
+                return;
+            // updatingFocusState = true
+            const lastLastFocusedComponent = FocusListener.focusedLast.value?.component;
+            if (lastLastFocusedComponent) {
+                lastLastFocusedComponent.hadFocusedLast.asMutable?.setValue(false);
+                for (const ancestor of lastLastFocusedComponent.getAncestorComponents())
+                    ancestor.hadFocusedLast.asMutable?.setValue(false);
+            }
+            const lastFocusedComponent = FocusListener.focused.value?.component;
+            const focusedComponent = newFocused?.component;
+            const oldAncestors = !lastFocusedComponent ? undefined : [...lastFocusedComponent.getAncestorComponents()];
+            const newAncestors = !focusedComponent ? undefined : [...focusedComponent.getAncestorComponents()];
+            const lastFocusedContainsFocused = FocusListener.focused.value?.contains(newFocused ?? null);
+            FocusListener.focusedLast.value = FocusListener.focused.value;
+            FocusListener.focused.value = newFocused;
+            FocusListener.hasFocus.value = !!newFocused;
+            if (lastFocusedComponent) {
+                if (!lastFocusedContainsFocused) {
+                    if (!focusedComponent)
+                        // setting "had focused" must happen before clearing "has focused"
+                        // just in case anything is listening for hasFocused || hadFocusedLast
+                        lastFocusedComponent.hadFocusedLast.asMutable?.setValue(true);
+                    lastFocusedComponent.hasFocusedTime.asMutable?.setValue(undefined);
+                }
+                lastFocusedComponent.focusedTime.asMutable?.setValue(undefined);
+            }
+            if (focusedComponent) {
+                focusedComponent.focusedTime.asMutable?.setValue(Date.now());
+                focusedComponent.hasFocusedTime.asMutable?.setValue(Date.now());
+            }
+            if (oldAncestors)
+                for (const ancestor of oldAncestors)
+                    if (!newAncestors?.includes(ancestor))
+                        if (ancestor) {
+                            if (!focusedComponent)
+                                // setting "had focused" must happen before clearing "has focused"
+                                // just in case anything is listening for hasFocused || hadFocusedLast
+                                ancestor.hadFocusedLast.asMutable?.setValue(true);
+                            ancestor.hasFocusedTime.asMutable?.setValue(undefined);
+                        }
+            if (newAncestors)
+                for (const ancestor of newAncestors)
+                    if (ancestor)
+                        ancestor.hasFocusedTime.asMutable?.setValue(Date.now());
+            // updatingFocusState = false
+            // if (exhaustingQueue)
+            // 	return
+            // exhaustingQueue = true
+            // for (cursor = 0; cursor < queue.length; cursor++) {
+            // 	const change = queue[cursor]
+            // 	if (change.type === "blur")
+            // 		blurInternal(change.element)
+            // 	else if (change.type === "focus")
+            // 		focusInternal(change.element)
+            // }
+            // queue.splice(0, Infinity)
+            // cursor = 0
+            // exhaustingQueue = false
+        }
+    })(FocusListener || (FocusListener = {}));
+    exports.default = FocusListener;
+    Object.assign(window, { FocusListener });
+});
+define("kitsui/utility/TextManipulator", ["require", "exports", "utility/StringApplicator"], function (require, exports, StringApplicator_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    StringApplicator_2 = __importDefault(StringApplicator_2);
+    function TextManipulator(component, target = component) {
+        return apply(StringApplicator_2.default.Nodes(component, nodes => {
+            target.removeContents();
+            target.append(...nodes);
+            return nodes;
+        }));
+        function apply(applicator) {
+            const rehost = applicator.rehost;
+            return Object.assign(applicator, {
+                prepend(text) {
+                    target.prepend(...StringApplicator_2.default.render(text));
+                    return component;
+                },
+                append(text) {
+                    target.append(...StringApplicator_2.default.render(text));
+                    return component;
+                },
+                rehost(component) {
+                    return apply(rehost(component));
+                },
+            });
+        }
+    }
+    exports.default = TextManipulator;
+});
+define("kitsui/Component", ["require", "exports", "utility/AnchorManipulator", "utility/Arrays", "utility/AttributeManipulator", "utility/ClassManipulator", "utility/EventManipulator", "utility/FocusListener", "utility/Maps", "utility/Objects", "utility/State", "utility/StringApplicator", "utility/Strings", "utility/TextManipulator", "utility/Viewport"], function (require, exports, AnchorManipulator_1, Arrays_4, AttributeManipulator_1, ClassManipulator_1, EventManipulator_1, FocusListener_1, Maps_2, Objects_2, State_10, StringApplicator_3, Strings_2, TextManipulator_1, Viewport_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ComponentInsertionDestination = void 0;
+    AnchorManipulator_1 = __importDefault(AnchorManipulator_1);
+    AttributeManipulator_1 = __importDefault(AttributeManipulator_1);
+    ClassManipulator_1 = __importDefault(ClassManipulator_1);
+    EventManipulator_1 = __importDefault(EventManipulator_1);
+    FocusListener_1 = __importDefault(FocusListener_1);
+    Maps_2 = __importDefault(Maps_2);
+    State_10 = __importDefault(State_10);
+    StringApplicator_3 = __importDefault(StringApplicator_3);
+    Strings_2 = __importDefault(Strings_2);
+    TextManipulator_1 = __importDefault(TextManipulator_1);
+    Viewport_2 = __importDefault(Viewport_2);
+    const selfScript = (0, State_10.default)(undefined);
+    const SYMBOL_COMPONENT_BRAND = Symbol('COMPONENT_BRAND');
+    const ELEMENT_TO_COMPONENT_MAP = new WeakMap();
+    (0, Objects_2.DefineMagic)(Element.prototype, 'component', {
+        get() {
+            return ELEMENT_TO_COMPONENT_MAP.get(this);
+        },
+        set(component) {
+            if (component) {
+                ELEMENT_TO_COMPONENT_MAP.set(this, component);
+            }
+            else {
+                ELEMENT_TO_COMPONENT_MAP.delete(this);
+            }
+        },
+    });
+    var ComponentInsertionDestination;
+    (function (ComponentInsertionDestination) {
+        function is(value) {
+            return typeof value === 'object' && !!value?.isInsertionDestination;
+        }
+        ComponentInsertionDestination.is = is;
+    })(ComponentInsertionDestination || (exports.ComponentInsertionDestination = ComponentInsertionDestination = {}));
+    var Classes;
+    (function (Classes) {
+        Classes["ReceiveRootedEvents"] = "_receive-rooted-events";
+        Classes["ReceiveAncestorInsertEvents"] = "_receieve-ancestor-insert-events";
+        Classes["ReceiveDescendantInsertEvents"] = "_receieve-descendant-insert-events";
+        Classes["ReceiveDescendantRemoveEvents"] = "_receieve-descendant-remove-events";
+        Classes["ReceiveAncestorRectDirtyEvents"] = "_receieve-ancestor-rect-dirty-events";
+        Classes["ReceiveChildrenInsertEvents"] = "_receive-children-insert-events";
+        Classes["ReceiveInsertEvents"] = "_receive-insert-events";
+        Classes["ReceiveScrollEvents"] = "_receieve-scroll-events";
+    })(Classes || (Classes = {}));
+    const componentExtensionsRegistry = [];
+    function Component(type, builder) {
+        if (typeof type === 'function' || typeof builder === 'function')
+            return Component.Builder(type, builder);
+        type ??= 'span';
+        if (!canBuildComponents)
+            throw new Error('Components cannot be built yet');
+        let unuseIdState;
+        let unuseNameState;
+        let unuseAriaLabelledByIdState;
+        let unuseAriaControlsIdState;
+        let unuseOwnerRemove;
+        let descendantsListeningForScroll;
+        const jitTweaks = new Map();
+        const nojit = {};
+        let component = {
+            supers: (0, State_10.default)([]),
+            isComponent: true,
+            isInsertionDestination: true,
+            element: document.createElement(type),
+            removed: (0, State_10.default)(false),
+            rooted: (0, State_10.default)(false),
+            nojit: nojit,
+            get tagName() {
+                return component.element.tagName;
+            },
+            setOwner: newOwner => {
+                unuseOwnerRemove?.();
+                unuseOwnerRemove = State_10.default.Owner.getRemovedState(newOwner)?.use(component, removed => removed && component.remove());
+                return component;
+            },
+            replaceElement: (newElement, keepContent) => {
+                if (typeof newElement === 'string' && newElement.toUpperCase() === component.element.tagName.toUpperCase())
+                    return component; // already correct tag type
+                if (typeof newElement === 'string')
+                    newElement = document.createElement(newElement);
+                const oldElement = component.element;
+                if (!keepContent) {
+                    Component.removeContents(newElement);
+                    newElement.replaceChildren(...component.element.childNodes);
+                }
+                if (component.element.parentNode)
+                    component.element.replaceWith(newElement);
+                component.element = newElement;
+                type = component.element.tagName;
+                ELEMENT_TO_COMPONENT_MAP.delete(oldElement);
+                ELEMENT_TO_COMPONENT_MAP.set(newElement, component);
+                component.attributes.copy(oldElement);
+                // component.style.refresh()
+                return component;
+            },
+            is: (builder) => !builder || (Array.isArray(builder) ? builder : [builder]).some(builder => component.supers.value.includes(builder)),
+            as: (builder) => !builder || component.supers.value.includes(builder) ? component : undefined,
+            cast: () => component,
+            and(builder, ...params) {
+                if (component.is(builder))
+                    return component;
+                const result = builder.from(component, ...params);
+                if (result instanceof Promise)
+                    return result.then(result => {
+                        component = result;
+                        component.supers.value.push(builder);
+                        component.supers.emit();
+                        if (builder.name)
+                            component.attributes.prepend(`:${builder.name.kebabcase}`);
+                        return component;
+                    });
+                component = result;
+                component.supers.value.push(builder);
+                component.supers.emit();
+                if (builder.name)
+                    component.attributes.prepend(`:${builder.name.kebabcase}`);
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+                return component;
+            },
+            extend: extension => Object.assign(component, extension(component)),
+            override: (property, provider) => {
+                const original = component[property];
+                component[property] = provider(component, original);
+                return component;
+            },
+            extendMagic: (property, magic) => {
+                (0, Objects_2.DefineMagic)(component, property, magic(component));
+                return component;
+            },
+            extendJIT: (property, supplier) => {
+                (0, Objects_2.DefineMagic)(component, property, {
+                    get: () => {
+                        const value = supplier(component);
+                        (0, Objects_2.DefineProperty)(component, property, value);
+                        const tweaks = jitTweaks.get(property);
+                        if (tweaks && tweaks !== true)
+                            for (const tweaker of tweaks)
+                                tweaker(value, component);
+                        jitTweaks.set(property, true);
+                        return value;
+                    },
+                    set: value => {
+                        (0, Objects_2.DefineProperty)(component, property, value);
+                        nojit[property] = value;
+                    },
+                });
+                return component;
+            },
+            tweakJIT: (property, tweaker) => {
+                const tweaks = Maps_2.default.compute(jitTweaks, property, () => new Set());
+                if (tweaks === true)
+                    tweaker(component[property], component);
+                else
+                    tweaks.add(tweaker);
+                return component;
+            },
+            tweak: (tweaker, ...params) => {
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+                tweaker?.(component, ...params);
+                return component;
+            },
+            // get style () {
+            // 	return DefineProperty(component, 'style', StyleManipulator(component))
+            // },
+            get classes() {
+                return (0, Objects_2.DefineProperty)(component, 'classes', (0, ClassManipulator_1.default)(component));
+            },
+            get attributes() {
+                return (0, Objects_2.DefineProperty)(component, 'attributes', (0, AttributeManipulator_1.default)(component));
+            },
+            get event() {
+                return (0, Objects_2.DefineProperty)(component, 'event', (0, EventManipulator_1.default)(component));
+            },
+            get text() {
+                return (0, Objects_2.DefineProperty)(component, 'text', (0, TextManipulator_1.default)(component));
+            },
+            get anchor() {
+                return (0, Objects_2.DefineProperty)(component, 'anchor', (0, AnchorManipulator_1.default)(component));
+            },
+            get hovered() {
+                return (0, Objects_2.DefineProperty)(component, 'hovered', component.hoveredTime.mapManual(time => !!time));
+            },
+            get hoveredTime() {
+                return (0, Objects_2.DefineProperty)(component, 'hoveredTime', (0, State_10.default)(undefined));
+            },
+            get focused() {
+                return (0, Objects_2.DefineProperty)(component, 'focused', component.focusedTime.mapManual(time => !!time));
+            },
+            get focusedTime() {
+                return (0, Objects_2.DefineProperty)(component, 'focusedTime', (0, State_10.default)(undefined));
+            },
+            get hasFocused() {
+                return (0, Objects_2.DefineProperty)(component, 'hasFocused', component.hasFocusedTime.mapManual(time => !!time));
+            },
+            get hasFocusedTime() {
+                return (0, Objects_2.DefineProperty)(component, 'hasFocusedTime', (0, State_10.default)(undefined));
+            },
+            get hadFocusedLast() {
+                return (0, Objects_2.DefineProperty)(component, 'hadFocusedLast', (0, State_10.default)(false));
+            },
+            get hoveredOrFocused() {
+                return (0, Objects_2.DefineProperty)(component, 'hoveredOrFocused', component.hoveredOrFocusedTime.mapManual(time => !!time));
+            },
+            get hoveredOrFocusedTime() {
+                return (0, Objects_2.DefineProperty)(component, 'hoveredOrFocusedTime', State_10.default.Generator(() => Math.max(component.hoveredTime.value ?? 0, component.focusedTime.value ?? 0) || undefined)
+                    .observe(component, component.hoveredTime, component.focusedTime));
+            },
+            get hoveredOrHasFocused() {
+                return (0, Objects_2.DefineProperty)(component, 'hoveredOrHasFocused', component.hoveredOrHasFocusedTime.mapManual(time => !!time));
+            },
+            get hoveredOrHasFocusedTime() {
+                return (0, Objects_2.DefineProperty)(component, 'hoveredOrHasFocusedTime', State_10.default.Generator(() => Math.max(component.hoveredTime.value ?? 0, component.hasFocusedTime.value ?? 0) || undefined)
+                    .observe(component, component.hoveredTime, component.hasFocusedTime));
+            },
+            get active() {
+                return (0, Objects_2.DefineProperty)(component, 'active', component.activeTime.mapManual(time => !!time));
+            },
+            get activeTime() {
+                return (0, Objects_2.DefineProperty)(component, 'activeTime', (0, State_10.default)(undefined));
+            },
+            get id() {
+                return (0, Objects_2.DefineProperty)(component, 'id', (0, State_10.default)(undefined));
+            },
+            get name() {
+                return (0, Objects_2.DefineProperty)(component, 'name', (0, State_10.default)(undefined));
+            },
+            get rect() {
+                const rectState = State_10.default.JIT(() => component.element.getBoundingClientRect());
+                const oldMarkDirty = rectState.markDirty;
+                rectState.markDirty = () => {
+                    oldMarkDirty();
+                    for (const descendant of this.element.getElementsByClassName(Classes.ReceiveAncestorRectDirtyEvents))
+                        descendant.component?.event.emit('ancestorRectDirty');
+                    return rectState;
+                };
+                this.receiveInsertEvents();
+                this.receiveAncestorInsertEvents();
+                this.receiveAncestorScrollEvents();
+                this.classes.add(Classes.ReceiveAncestorRectDirtyEvents);
+                this.event.subscribe(['insert', 'ancestorInsert', 'ancestorScroll', 'ancestorRectDirty'], rectState.markDirty);
+                Viewport_2.default.size.subscribe(component, rectState.markDirty);
+                return (0, Objects_2.DefineProperty)(component, 'rect', rectState);
+            },
+            get fullType() {
+                return ''
+                    + (component.tagName.startsWith(':') ? '' : `<${component.tagName}> `)
+                    + (!component.supers.value.length ? ''
+                        : ':' + component.supers.value.map((t) => t.name.kebabcase).join(' :'));
+            },
+            setId: id => {
+                unuseIdState?.();
+                unuseIdState = undefined;
+                if (id && typeof id !== 'string')
+                    unuseIdState = id.use(component, setId);
+                else
+                    setId(id);
+                return component;
+                function setId(id) {
+                    if (id) {
+                        component.element.setAttribute('id', id);
+                        component.id.asMutable?.setValue(id);
+                    }
+                    else {
+                        component.element.removeAttribute('id');
+                        component.id.asMutable?.setValue(undefined);
+                    }
+                }
+            },
+            setRandomId: () => {
+                component.setId(Strings_2.default.uid());
+                return component;
+            },
+            setName: name => {
+                unuseNameState?.();
+                unuseNameState = undefined;
+                if (name && typeof name !== 'string')
+                    unuseNameState = name.use(component, setName);
+                else
+                    setName(name);
+                return component;
+                function setName(name) {
+                    if (name) {
+                        name = name.replace(/[^\w-]+/g, '-').toLowerCase();
+                        component.element.setAttribute('name', name);
+                        component.name.asMutable?.setValue(name);
+                    }
+                    else {
+                        component.element.removeAttribute('name');
+                        component.name.asMutable?.setValue(undefined);
+                    }
+                }
+            },
+            disableInsertion() {
+                return component;
+            },
+            remove() {
+                component.removeContents();
+                component.removed.asMutable?.setValue(true);
+                component.rooted.asMutable?.setValue(false);
+                component.element.component = undefined;
+                component.element.remove();
+                emitRemove(component);
+                if (component.classes.has(Classes.ReceiveRootedEvents))
+                    component.event.emit('unroot');
+                unuseOwnerRemove?.();
+                unuseOwnerRemove = undefined;
+                unuseAriaControlsIdState?.();
+                unuseAriaControlsIdState = undefined;
+                unuseAriaLabelledByIdState?.();
+                unuseAriaLabelledByIdState = undefined;
+                unuseIdState?.();
+                unuseIdState = undefined;
+                unuseNameState?.();
+                unuseNameState = undefined;
+            },
+            appendTo(destination) {
+                destination.append(component.element);
+                component.emitInsert();
+                return component;
+            },
+            prependTo(destination) {
+                destination.prepend(component.element);
+                component.emitInsert();
+                return component;
+            },
+            insertTo(destination, direction, sibling) {
+                if (ComponentInsertionDestination.is(destination)) {
+                    destination.insert(direction, sibling, component);
+                    component.emitInsert();
+                    return component;
+                }
+                const siblingElement = sibling ? Component.element(sibling) : null;
+                if (direction === 'before')
+                    destination.insertBefore(component.element, siblingElement);
+                else
+                    destination.insertBefore(component.element, siblingElement?.nextSibling ?? null);
+                component.emitInsert();
+                return component;
+            },
+            append(...contents) {
+                const elements = contents.filter(Arrays_4.Truthy).map(Component.element);
+                component.element.append(...elements);
+                for (const element of elements)
+                    element.component?.emitInsert();
+                if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
+                    component.event.emit('childrenInsert', elements);
+                return component;
+            },
+            prepend(...contents) {
+                const elements = contents.filter(Arrays_4.Truthy).map(Component.element);
+                component.element.prepend(...elements);
+                for (const element of elements)
+                    element.component?.emitInsert();
+                if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
+                    component.event.emit('childrenInsert', elements);
+                return component;
+            },
+            insert(direction, sibling, ...contents) {
+                const siblingElement = sibling ? Component.element(sibling) : null;
+                const elements = contents.filter(Arrays_4.Truthy).map(Component.element);
+                if (direction === 'before')
+                    for (let i = elements.length - 1; i >= 0; i--)
+                        component.element.insertBefore(elements[i], siblingElement);
+                else
+                    for (const element of elements)
+                        component.element.insertBefore(element, siblingElement?.nextSibling ?? null);
+                for (const element of elements)
+                    element.component?.emitInsert();
+                if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
+                    component.event.emit('childrenInsert', elements);
+                return component;
+            },
+            removeContents() {
+                Component.removeContents(component.element);
+                return component;
+            },
+            closest(builder) {
+                return Component.closest(builder, component);
+            },
+            getStateForClosest(builders) {
+                const state = State_10.default.JIT(() => component.closest(builders));
+                component.receiveAncestorInsertEvents();
+                component.onRooted(() => {
+                    state.markDirty();
+                    component.receiveInsertEvents();
+                    component.event.subscribe(['insert', 'ancestorInsert'], () => state.markDirty());
+                });
+                return state;
+            },
+            get parent() {
+                return component.element.parentElement?.component;
+            },
+            get previousSibling() {
+                return component.element.previousElementSibling?.component;
+            },
+            getPreviousSibling(builder) {
+                const [sibling] = component.getPreviousSiblings(builder);
+                return sibling;
+            },
+            get nextSibling() {
+                return component.element.nextElementSibling?.component;
+            },
+            getNextSibling(builder) {
+                const [sibling] = component.getNextSiblings(builder);
+                return sibling;
+            },
+            *getAncestorComponents(builder) {
+                let cursor = component.element;
+                while (cursor) {
+                    cursor = cursor.parentElement;
+                    const component = cursor?.component;
+                    if (component?.is(builder))
+                        yield component;
+                }
+            },
+            *getChildren(builder) {
+                for (const child of component.element.children) {
+                    const component = child.component;
+                    if (component?.is(builder))
+                        yield component;
+                }
+            },
+            *getSiblings(builder) {
+                const parent = component.element.parentElement;
+                for (const child of parent?.children ?? [])
+                    if (child !== component.element) {
+                        const component = child.component;
+                        if (component?.is(builder))
+                            yield component;
+                    }
+            },
+            *getPreviousSiblings(builder) {
+                const parent = component.element.parentElement;
+                for (const child of parent?.children ?? []) {
+                    if (child === component.element)
+                        break;
+                    const childComponent = child.component;
+                    if (childComponent?.is(builder))
+                        yield childComponent;
+                }
+            },
+            *getNextSiblings(builder) {
+                let cursor = component.element;
+                while ((cursor = cursor.nextElementSibling)) {
+                    const component = cursor.component;
+                    if (component?.is(builder))
+                        yield component;
+                }
+            },
+            *getDescendants(builder) {
+                const walker = document.createTreeWalker(component.element, NodeFilter.SHOW_ELEMENT);
+                let node;
+                while ((node = walker.nextNode())) {
+                    const component = node.component;
+                    if (component?.is(builder))
+                        yield component;
+                }
+            },
+            getFirstDescendant(builder) {
+                const [first] = component.getDescendants(builder);
+                return first;
+            },
+            receiveRootedEvents() {
+                component.element.classList.add(Classes.ReceiveRootedEvents);
+                return component;
+            },
+            receiveAncestorInsertEvents: () => {
+                component.element.classList.add(Classes.ReceiveAncestorInsertEvents);
+                return component;
+            },
+            receiveDescendantInsertEvents: () => {
+                component.element.classList.add(Classes.ReceiveDescendantInsertEvents);
+                return component;
+            },
+            receiveDescendantRemoveEvents: () => {
+                component.element.classList.add(Classes.ReceiveDescendantRemoveEvents);
+                return component;
+            },
+            receiveAncestorScrollEvents() {
+                component.element.classList.add(Classes.ReceiveScrollEvents);
+                return component;
+            },
+            receiveChildrenInsertEvents() {
+                component.element.classList.add(Classes.ReceiveChildrenInsertEvents);
+                return component;
+            },
+            receiveInsertEvents() {
+                component.element.classList.add(Classes.ReceiveInsertEvents);
+                return component;
+            },
+            emitInsert: () => {
+                updateRooted(component);
+                emitInsert(component);
+                return component;
+            },
+            monitorScrollEvents() {
+                descendantsListeningForScroll ??= (component.element === window ? document.documentElement : component.element).getElementsByClassName(Classes.ReceiveScrollEvents);
+                component.event.subscribe('scroll', () => {
+                    for (const descendant of [...descendantsListeningForScroll])
+                        descendant.component?.event.emit('ancestorScroll');
+                });
+                return component;
+            },
+            onRooted(callback) {
+                component.rooted.matchManual(true, () => callback(component));
+                return component;
+            },
+            onRemove(owner, callback) {
+                component.removed.match(owner, true, () => callback(component));
+                return component;
+            },
+            onRemoveManual(callback) {
+                component.removed.matchManual(true, () => callback(component));
+                return component;
+            },
+            ariaRole: (role) => {
+                if (!role)
+                    return component.attributes.remove('role');
+                return component.attributes.set('role', role);
+            },
+            get ariaLabel() {
+                return (0, Objects_2.DefineProperty)(component, 'ariaLabel', (0, StringApplicator_3.default)(component, value => component.attributes.set('aria-label', value)));
+            },
+            ariaLabelledBy: labelledBy => {
+                unuseAriaLabelledByIdState?.();
+                unuseAriaLabelledByIdState = undefined;
+                if (labelledBy) {
+                    const state = State_10.default.Generator(() => labelledBy.id.value ?? labelledBy.attributes.get('for'))
+                        .observe(component, labelledBy.id, labelledBy.cast()?.for);
+                    unuseAriaLabelledByIdState = state.use(component, id => component.attributes.set('aria-labelledby', id));
+                }
+                return component;
+            },
+            ariaHidden: () => component.attributes.set('aria-hidden', 'true'),
+            ariaChecked: state => {
+                state.use(component, state => component.attributes.set('aria-checked', `${state}`));
+                return component;
+            },
+            ariaControls: target => {
+                unuseAriaControlsIdState?.();
+                unuseAriaControlsIdState = target?.id.use(component, id => component.attributes.set('aria-controls', id));
+                return component;
+            },
+            tabIndex: index => {
+                if (index === undefined)
+                    component.element.removeAttribute('tabindex');
+                else if (index === 'programmatic')
+                    component.element.setAttribute('tabindex', '-1');
+                else if (index === 'auto')
+                    component.element.setAttribute('tabindex', '0');
+                else
+                    component.element.setAttribute('tabindex', `${index}`);
+                return component;
+            },
+            focus: () => {
+                FocusListener_1.default.focus(component.element);
+                return component;
+            },
+            blur: () => {
+                FocusListener_1.default.blur(component.element);
+                return component;
+            },
+        };
+        // WeavingArg.setRenderable(component, () => component.element.textContent ?? '')
+        // Objects.stringify.disable(component)
+        for (const extension of componentExtensionsRegistry)
+            extension(component);
+        if (!Component.is(component))
+            throw new Error('This should never happen');
+        component.element.component = component;
+        return component;
+    }
+    function emitInsert(component) {
+        if (!component)
+            return;
+        if (component.classes.has(Classes.ReceiveInsertEvents))
+            component.event.emit('insert');
+        const descendantsListeningForEvent = component.element.getElementsByClassName(Classes.ReceiveAncestorInsertEvents);
+        for (const descendant of descendantsListeningForEvent)
+            descendant.component?.event.emit('ancestorInsert');
+        let cursor = component.element.parentElement;
+        while (cursor) {
+            if (cursor.classList.contains(Classes.ReceiveDescendantInsertEvents))
+                cursor.component?.event.emit('descendantInsert');
+            cursor = cursor.parentElement;
+        }
+    }
+    function updateRooted(component) {
+        if (component) {
+            const rooted = document.documentElement.contains(component.element);
+            if (component.rooted.value === rooted)
+                return;
+            component.rooted.asMutable?.setValue(rooted);
+            if (component.classes.has(Classes.ReceiveRootedEvents))
+                component.event.emit(rooted ? 'root' : 'unroot');
+            for (const descendant of component.element.querySelectorAll('*')) {
+                const component = descendant.component;
+                if (component) {
+                    component.rooted.asMutable?.setValue(rooted);
+                    if (component.classes.has(Classes.ReceiveRootedEvents))
+                        component.event.emit(rooted ? 'root' : 'unroot');
+                }
+            }
+        }
+    }
+    function emitRemove(component) {
+        if (!component)
+            return;
+        let cursor = component.element.parentElement;
+        while (cursor) {
+            if (cursor.classList.contains(Classes.ReceiveDescendantRemoveEvents))
+                cursor.component?.event.emit('descendantRemove');
+            cursor = cursor.parentElement;
+        }
+    }
+    let canBuildComponents = false;
+    (function (Component) {
+        let bodyComponent, documentComponent, windowComponent;
+        Component.getBody = () => bodyComponent ??= wrap(document.body);
+        Component.getDocument = () => documentComponent ??= wrap(document.documentElement);
+        Component.getWindow = () => windowComponent ??= wrap(window);
+        function setComponentLibrarySource(source) {
+            selfScript.value = source;
+        }
+        Component.setComponentLibrarySource = setComponentLibrarySource;
+        let stackSupplier;
+        function setStackSupplier(_stackSupplier) {
+            stackSupplier = _stackSupplier;
+        }
+        Component.setStackSupplier = setStackSupplier;
+        function allowBuilding() {
+            canBuildComponents = true;
+        }
+        Component.allowBuilding = allowBuilding;
+        function is(value) {
+            return typeof value === 'object' && !!value?.isComponent;
+        }
+        Component.is = is;
+        function element(from) {
+            return is(from) ? from.element : from;
+        }
+        Component.element = element;
+        function wrap(element) {
+            const component = Component();
+            (0, Objects_2.mutable)(component).element = element;
+            return component;
+        }
+        Component.wrap = wrap;
+        Component.SYMBOL_COMPONENT_TYPE_BRAND = Symbol('COMPONENT_TYPE_BRAND');
+        const defaultBuilder = (type) => Component(type);
+        function Builder(initialOrBuilder, builder) {
+            let name = getBuilderName();
+            const type = typeof initialOrBuilder === 'string' ? initialOrBuilder : undefined;
+            const initialBuilder = !builder || typeof initialOrBuilder === 'string' ? defaultBuilder : initialOrBuilder;
+            builder ??= initialOrBuilder;
+            const realBuilder = (component = initialBuilder(type), ...params) => {
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+                const result = builder(component, ...params);
+                if (result instanceof Promise)
+                    return result.then(result => {
+                        if (result !== component)
+                            void ensureOriginalComponentNotSubscriptionOwner(component);
+                        return result;
+                    });
+                if (result !== component)
+                    void ensureOriginalComponentNotSubscriptionOwner(component);
+                return result;
+            };
+            const simpleBuilder = (...params) => {
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+                const component = realBuilder(undefined, ...params);
+                if (component instanceof Promise)
+                    return component.then(completeComponent);
+                return completeComponent(component);
+            };
+            Object.defineProperty(builder, 'name', { value: name, configurable: true });
+            Object.defineProperty(builder, Symbol.toStringTag, { value: name, configurable: true });
+            Object.defineProperty(realBuilder, 'name', { value: name, configurable: true });
+            Object.defineProperty(realBuilder, Symbol.toStringTag, { value: name, configurable: true });
+            Object.defineProperty(simpleBuilder, 'name', { value: name, configurable: true });
+            Object.defineProperty(simpleBuilder, Symbol.toStringTag, { value: name, configurable: true });
+            const extensions = [];
+            const resultBuilder = Object.assign(simpleBuilder, {
+                from: realBuilder,
+                setName(newName) {
+                    name = addKebabCase(newName);
+                    Object.defineProperty(simpleBuilder, 'name', { value: name });
+                    return resultBuilder;
+                },
+                extend(extensionProvider) {
+                    extensions.push(extensionProvider);
+                    return resultBuilder;
+                },
+            });
+            return resultBuilder;
+            function completeComponent(component) {
+                if (!component)
+                    return component;
+                for (const extension of extensions)
+                    Object.assign(component, extension(component));
+                if (name) {
+                    component[Symbol.toStringTag] ??= name.toString();
+                    const tagName = `:${name.kebabcase}`;
+                    if (component.element.tagName === 'SPAN') {
+                        component.replaceElement(tagName);
+                    }
+                    else {
+                        component.attributes.prepend(tagName);
+                    }
+                }
+                component.supers.value.push(simpleBuilder);
+                component.supers.emit();
+                return component;
+            }
+            async function ensureOriginalComponentNotSubscriptionOwner(original) {
+                if (!original || !State_10.default.OwnerMetadata.hasSubscriptions(original))
+                    return;
+                const originalRef = new WeakRef(original);
+                original = undefined;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                original = originalRef.deref();
+                if (!original || original.rooted.value || original.removed.value)
+                    return;
+                console.error(`${String(name ?? 'Component')} builder returned a replacement component, but the original component was used as a subscription owner and is not in the tree!`);
+            }
+        }
+        Component.Builder = Builder;
+        function Extension(builder) {
+            return {
+                name: getBuilderName(),
+                from: builder,
+                setName(newName) {
+                    (0, Objects_2.mutable)(this).name = addKebabCase(newName);
+                    return this;
+                },
+            };
+        }
+        Component.Extension = Extension;
+        function Tag() {
+            return Extension(component => component);
+        }
+        Component.Tag = Tag;
+        function extend(extension) {
+            componentExtensionsRegistry.push(extension);
+        }
+        Component.extend = extend;
+        /**
+         * Returns the component for the given element, if it exists
+         */
+        function get(element) {
+            if (!element || (typeof element !== 'object' && typeof element !== 'function'))
+                return undefined;
+            return ELEMENT_TO_COMPONENT_MAP.get(element);
+        }
+        Component.get = get;
+        // const STACK_FILE_NAME_REGEX = /\(http.*?(\w+)\.ts:\d+:\d+\)/
+        const STACK_FILE_LINE_REGEX = /\(http.*?\w+\.[tj]s:(\d+):\d+\)|@http.*?\w+\.[tj]s:(\d+):\d+/;
+        const VARIABLE_NAME_REGEX = /\s*(?:const |exports\.(?!default))(\w+) = /;
+        const LAST_MODULE_DEF_REGEX = /.*\bdefine\("(?:[^"]+\/)*(\w+)", /s;
+        const PASCAL_CASE_WORD_START = /(?<=[a-z0-9_-])(?=[A-Z])/g;
+        function addKebabCase(name) {
+            return Object.assign(String(name), {
+                kebabcase: name.replaceAll(PASCAL_CASE_WORD_START, '-').toLowerCase(),
+            });
+        }
+        // let logNode: HTMLElement | undefined
+        let indexjsText;
+        let lines;
+        function getBuilderName() {
+            if (!lines) {
+                indexjsText ??= document.currentScript?.text ?? selfScript.value;
+                if (!indexjsText)
+                    return undefined;
+                lines = indexjsText.split('\n');
+            }
+            // if (!logNode) {
+            // 	logNode = document.createElement('div')
+            // 	document.body.prepend(logNode)
+            // }
+            const rawStack = stackSupplier?.() ?? new Error().stack ?? '';
+            const stack = Strings_2.default.shiftLine(rawStack, rawStack.includes('@') ? 2 : 3); // handle safari stack traces (@)
+            // logNode.append(document.createTextNode(`original stack ${new Error().stack}`), document.createElement('br'))
+            // logNode.append(document.createTextNode(`shifted stack ${stack}`), document.createElement('br'))
+            const lineMatch = stack.match(STACK_FILE_LINE_REGEX);
+            const line = Number(lineMatch?.[1] ?? lineMatch?.[2]);
+            const lineText = lines[line - 1];
+            // logNode.append(document.createTextNode(`found ${lineMatch?.[1] ?? lineMatch?.[2]} ${line} ${lineText}`))
+            // logNode.append(document.createElement('br'), document.createElement('br'))
+            if (!lineText)
+                return undefined;
+            const varName = lineText.match(VARIABLE_NAME_REGEX)?.[1];
+            if (varName)
+                return addKebabCase(varName);
+            const sliceUntilLine = indexjsText.slice(0, indexjsText.indexOf(lineText));
+            const moduleName = sliceUntilLine.match(LAST_MODULE_DEF_REGEX)?.[1];
+            if (!moduleName)
+                return undefined;
+            return addKebabCase(moduleName);
+        }
+        function removeContents(element) {
+            for (const child of [...element.childNodes]) {
+                if (child.component)
+                    child.component.remove();
+                else {
+                    removeContents(child);
+                    child.remove();
+                }
+            }
+        }
+        Component.removeContents = removeContents;
+        function closest(builder, element) {
+            let cursor = is(element) ? element.element : element ?? null;
+            while (cursor) {
+                const component = cursor?.component;
+                if (component?.is(builder))
+                    return component;
+                cursor = cursor.parentElement;
+            }
+        }
+        Component.closest = closest;
+    })(Component || (Component = {}));
+    exports.default = Component;
+});
+define("kitsui", ["require", "exports", "component/Label", "Component", "utility/State"], function (require, exports, Label_1, Component_2, State_11) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Kit = exports.State = exports.Component = void 0;
+    Label_1 = __importStar(Label_1);
+    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_2).default; } });
+    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_11).default; } });
+    var Kit;
+    (function (Kit) {
+        Kit.Label = Label_1.default;
+        Kit.LabelTarget = Label_1.LabelTarget;
+    })(Kit || (exports.Kit = Kit = {}));
+});
+define("kitsui/utility/ActiveListener", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var ActiveListener;
+    (function (ActiveListener) {
+        let lastActive = [];
+        function allActive() {
+            return lastActive;
+        }
+        ActiveListener.allActive = allActive;
+        function active() {
+            return lastActive.at(-1);
+        }
+        ActiveListener.active = active;
+        function* allActiveComponents() {
+            for (const element of lastActive) {
+                const component = element.component;
+                if (component)
+                    yield component;
+            }
+        }
+        ActiveListener.allActiveComponents = allActiveComponents;
+        function activeComponent() {
+            return lastActive.at(-1)?.component;
+        }
+        ActiveListener.activeComponent = activeComponent;
+        function listen() {
+            document.addEventListener('mousedown', updateActive);
+            document.addEventListener('mouseup', updateActive);
+            function updateActive() {
+                const allActive = document.querySelectorAll(':active');
+                const active = allActive[allActive.length - 1];
+                if (active === lastActive[lastActive.length - 1])
+                    return;
+                const newActive = [...allActive];
+                for (const element of lastActive)
+                    if (element.component && !newActive.includes(element))
+                        element.component.activeTime.asMutable?.setValue(undefined);
+                for (const element of newActive)
+                    if (element.component && !lastActive.includes(element))
+                        element.component.activeTime.asMutable?.setValue(Date.now());
+                lastActive = newActive;
+            }
+        }
+        ActiveListener.listen = listen;
+    })(ActiveListener || (ActiveListener = {}));
+    exports.default = ActiveListener;
+    Object.assign(window, { ActiveListener });
+});
+define("kitsui/utility/Applicator", ["require", "exports", "utility/State"], function (require, exports, State_12) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_12 = __importDefault(State_12);
+    function Applicator(host, defaultValueOrApply, apply) {
+        const defaultValue = !apply ? undefined : defaultValueOrApply;
+        apply ??= defaultValueOrApply;
+        let unbind;
+        const result = makeApplicator(host);
+        return result;
+        function makeApplicator(host) {
+            return {
+                state: (0, State_12.default)(defaultValue),
+                set: value => {
+                    unbind?.();
+                    setInternal(value);
+                    return host;
+                },
+                bind: state => {
+                    unbind?.();
+                    unbind = state?.use(host, setInternal);
+                    if (!state)
+                        setInternal(defaultValue);
+                    return host;
+                },
+                unbind: () => {
+                    unbind?.();
+                    setInternal(defaultValue);
+                    return host;
+                },
+                rehost: makeApplicator,
+            };
+        }
+        function setInternal(value) {
+            if (result.state.value !== value) {
+                result.state.value = value;
+                apply(value);
+            }
+        }
+    }
+    exports.default = Applicator;
+});
+define("kitsui/utility/BrowserListener", ["require", "exports", "utility/State"], function (require, exports, State_13) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_13 = __importDefault(State_13);
+    var BrowserListener;
+    (function (BrowserListener) {
+        BrowserListener.isWebkit = (0, State_13.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
+    })(BrowserListener || (BrowserListener = {}));
+    exports.default = BrowserListener;
+});
+define("kitsui/utility/FontsListener", ["require", "exports", "utility/State"], function (require, exports, State_14) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_14 = __importDefault(State_14);
+    var FontsListener;
+    (function (FontsListener) {
+        FontsListener.loaded = (0, State_14.default)(false);
+        async function listen() {
+            await document.fonts.ready;
+            FontsListener.loaded.asMutable?.setValue(true);
+        }
+        FontsListener.listen = listen;
+    })(FontsListener || (FontsListener = {}));
+    exports.default = FontsListener;
+});
+define("kitsui/utility/HoverListener", ["require", "exports", "utility/Arrays", "utility/Mouse"], function (require, exports, Arrays_5, Mouse_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Arrays_5 = __importDefault(Arrays_5);
+    Mouse_2 = __importDefault(Mouse_2);
+    var HoverListener;
+    (function (HoverListener) {
+        let lastHovered = [];
+        function allHovered() {
+            return lastHovered;
+        }
+        HoverListener.allHovered = allHovered;
+        function hovered() {
+            return lastHovered.at(-1);
+        }
+        HoverListener.hovered = hovered;
+        function* allHoveredComponents() {
+            for (const element of lastHovered) {
+                const component = element.component;
+                if (component)
+                    yield component;
+            }
+        }
+        HoverListener.allHoveredComponents = allHoveredComponents;
+        function hoveredComponent() {
+            return lastHovered.at(-1)?.component;
+        }
+        HoverListener.hoveredComponent = hoveredComponent;
+        function listen() {
+            Mouse_2.default.onMove(() => {
+                const allHovered = [...document.querySelectorAll(':hover')];
+                const hovered = allHovered[allHovered.length - 1];
+                if (hovered.clientWidth === 0 || hovered.clientHeight === 0)
+                    Arrays_5.default.filterInPlace(allHovered, element => element.computedStyleMap().get('display')?.toString() !== 'none');
+                if (hovered === lastHovered[lastHovered.length - 1])
+                    return;
+                const newHovered = allHovered;
+                const noLongerHovering = lastHovered.filter(element => !newHovered.includes(element));
+                for (const element of noLongerHovering)
+                    if (element.component)
+                        element.component.hoveredTime.asMutable?.setValue(undefined);
+                const nowHovering = newHovered.filter(element => !lastHovered.includes(element));
+                for (const element of nowHovering)
+                    if (element.component)
+                        element.component.hoveredTime.asMutable?.setValue(Date.now());
+                lastHovered = newHovered;
+            });
+        }
+        HoverListener.listen = listen;
+    })(HoverListener || (HoverListener = {}));
+    exports.default = HoverListener;
+    Object.assign(window, { HoverListener });
+});
+define("kitsui/utility/PageListener", ["require", "exports", "utility/State"], function (require, exports, State_15) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_15 = __importDefault(State_15);
+    var PageListener;
+    (function (PageListener) {
+        PageListener.visible = (0, State_15.default)(document.visibilityState === 'visible');
+        document.addEventListener('visibilitychange', () => PageListener.visible.asMutable?.setValue(document.visibilityState === 'visible'));
+    })(PageListener || (PageListener = {}));
+    exports.default = PageListener;
+});
+define("kitsui/utility/TypeManipulator", ["require", "exports", "utility/State"], function (require, exports, State_16) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_16 = __importDefault(State_16);
+    const TypeManipulator // Object.assign(
+     = function (host, onAdd, onRemove) {
+        const state = (0, State_16.default)(new Set());
+        return Object.assign(add, {
+            state,
+            remove,
+            toggle(has, ...types) {
+                if (has)
+                    return add(...types);
+                else
+                    return remove(...types);
+            },
+        });
+        function add(...types) {
+            const typesSize = state.value.size;
+            const newTypes = types.filter(type => !state.value.has(type));
+            for (const type of newTypes)
+                state.value.add(type);
+            onAdd(newTypes);
+            if (state.value.size !== typesSize)
+                state.emit();
+            return host;
+        }
+        function remove(...types) {
+            const typesSize = state.value.size;
+            const oldTypes = types.filter(type => state.value.has(type));
+            for (const type of oldTypes)
+                state.value.delete(type);
+            onRemove(oldTypes);
+            if (state.value.size !== typesSize)
+                state.emit();
+            return host;
+        }
+    };
+    // {
+    // 	Style: TypeManipulatorStyle,
+    // }
+    // )
+    // function TypeManipulatorStyle<HOST extends Component, TYPE extends string> (host: HOST, toComponentName: (type: TYPE) => ComponentName): TypeManipulator<HOST, TYPE>
+    // function TypeManipulatorStyle<HOST extends Component, TYPE extends string> (host: HOST, applyTo: [StateOr<ArrayOr<Component>>, (type: TYPE) => ComponentName][]): TypeManipulator<HOST, TYPE>
+    // function TypeManipulatorStyle<HOST extends Component, TYPE extends string> (host: HOST, applyToIn: [StateOr<ArrayOr<Component>>, (type: TYPE) => ComponentName][] | ((type: TYPE) => ComponentName)) {
+    // 	const applyTo = Array.isArray(applyToIn) ? applyToIn : [[host, applyToIn] as const]
+    // 	const currentTypes: TYPE[] = []
+    // 	let unown: UnsubscribeState | undefined
+    // 	return TypeManipulator<HOST, TYPE>(host,
+    // 		types => {
+    // 			currentTypes.push(...types)
+    // 			Arrays.distinctInPlace(currentTypes)
+    // 			unown?.()
+    // 			const owner = State.Owner.create()
+    // 			unown = owner.remove
+    // 			for (const [components, toComponentName] of applyTo) {
+    // 				if (State.is(components)) {
+    // 					components.use(owner, components => {
+    // 						for (const component of Arrays.resolve(components))
+    // 							for (const type of currentTypes)
+    // 								component.style(toComponentName(type))
+    // 					})
+    // 					continue
+    // 				}
+    // 				for (const type of types)
+    // 					for (const component of Arrays.resolve(components))
+    // 						component.style(toComponentName(type))
+    // 			}
+    // 		},
+    // 		types => {
+    // 			Arrays.filterInPlace(currentTypes, type => !types.includes(type))
+    // 			for (const type of types)
+    // 				for (let [components, toComponentName] of applyTo) {
+    // 					if (State.is(components))
+    // 						components = components.value
+    // 					for (const component of Arrays.resolve(components))
+    // 						component.style.remove(toComponentName(type))
+    // 				}
+    // 		},
+    // 	)
+    // }
+    exports.default = TypeManipulator;
+});
