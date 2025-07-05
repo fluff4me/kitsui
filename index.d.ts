@@ -928,9 +928,9 @@ declare module "kitsui" {
     export { default as State } from "kitsui/utility/State";
     export namespace Kit {
         type Label = _Label;
-        const Label: import("Component").default.Builder<[], _Label>;
+        const Label: import("kitsui/Component").default.Builder<[], _Label>;
         type LabelTarget = _LabelTarget;
-        const LabelTarget: import("Component").default.Extension<[], import("Component").default<HTMLElement>>;
+        const LabelTarget: import("kitsui/Component").default.Extension<[], import("kitsui/Component").default<HTMLElement>>;
     }
 }
 declare module "kitsui/utility/ActiveListener" {
