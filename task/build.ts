@@ -8,8 +8,19 @@ export default Task('build', async task => {
 
 	let js = await fs.readFile('out/index.js', 'utf-8')
 	let dts = await fs.readFile('out/index.d.ts', 'utf-8')
-	js = js.replaceAll('define("', 'define("kitsui/').replace('"kitsui/kitsui"', '"kitsui"')
-	dts = dts.replaceAll('declare module "', 'declare module "kitsui/').replace('"kitsui/kitsui"', '"kitsui"')
+
+	js = js
+		.replace(/define\("([^"]*?)", \["require", "exports"(?:,([^\]]*))?\]/g, (_, name: string, imports: string) => {
+			if (name !== 'kitsui') name = `kitsui/${name}`
+			imports = !imports ? '' : `,${(imports
+				.replace(/ "(?!kitsui)/g, ' "kitsui/')
+			)}`
+			return `define("${name}", ["require", "exports"${imports}]`
+		})
+	dts = dts
+		.replace(/declare module "(?!kitsui)/g, 'declare module "kitsui/')
+		.replace(/from "(?!kitsui)/g, 'from "kitsui/')
+
 	await fs.writeFile('out/index.js', js, 'utf-8')
 	await fs.writeFile('out/index.d.ts', dts, 'utf-8')
 
