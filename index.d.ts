@@ -371,7 +371,6 @@ declare module "kitsui/utility/Style" {
     namespace Style {
         const properties: State.JIT<CSSStyleDeclaration>;
         function measure(property: string): State<number>;
-        function reload(path: string): Promise<void>;
     }
     export default Style;
 }

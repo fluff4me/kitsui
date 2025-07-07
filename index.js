@@ -1433,18 +1433,6 @@ define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "k
             });
         }
         Style.measure = measure;
-        async function reload(path) {
-            const oldStyle = document.querySelector(`link[rel=stylesheet][href^="${path}"]`);
-            const style = document.createElement('link');
-            style.rel = 'stylesheet';
-            style.href = `${path}?${Date.now()}`;
-            return new Promise((resolve, reject) => {
-                style.onload = () => resolve();
-                style.onerror = reject;
-                document.head.appendChild(style);
-            }).finally(() => oldStyle?.remove());
-        }
-        Style.reload = reload;
     })(Style || (Style = {}));
     exports.default = Style;
 });
