@@ -1,25 +1,4 @@
 import { Task } from 'task'
-import chiri, { chiriwatch } from './chiri'
-import serve from './serve'
-import _static from './static'
-import { tsWatch } from './ts'
-import vendor from './vendor'
-import weaving, { weavewatch } from './weaving'
+import build from './build'
 
-export default Task('watch', async task => {
-	await task.run(task.parallel(
-		vendor,
-		_static,
-		chiri,
-		weaving,
-	))
-
-	task.watch(['src/platform/*.html', '.env'], _static)
-
-	await Promise.all([
-		task.run(tsWatch),
-		task.run(serve),
-		task.run(chiriwatch),
-		task.run(weavewatch),
-	])
-})
+export default Task('watch', task => task.watch(['src/**/*.ts'], build))
