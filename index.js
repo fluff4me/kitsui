@@ -78,6 +78,14 @@ define("kitsui/utility/Arrays", ["require", "exports"], function (require, expor
             array.length = writeCursor;
             return array;
         };
+        function remove(array, value) {
+            const index = array.indexOf(value);
+            if (index === -1)
+                return array;
+            array.splice(index, 1);
+            return array;
+        }
+        Arrays.remove = remove;
     })(Arrays || (Arrays = {}));
     exports.default = Arrays;
 });
@@ -2411,6 +2419,191 @@ define("kitsui/utility/FocusListener", ["require", "exports", "kitsui/utility/St
     exports.default = FocusListener;
     Object.assign(window, { FocusListener });
 });
+define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/State"], function (require, exports, Arrays_4, State_10) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.style = void 0;
+    Arrays_4 = __importStar(Arrays_4);
+    State_10 = __importDefault(State_10);
+    exports.style = (0, State_10.default)({});
+    function StyleManipulator(component) {
+        const styles = new Set();
+        const currentClasses = [];
+        // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+        const stateUnsubscribers = new WeakMap();
+        const unbindPropertyState = {};
+        const styleState = State_10.default.JIT(() => styles);
+        const combinations = [];
+        // if (Env.isDev)
+        exports.style.subscribe(component, () => updateClasses());
+        const result = Object.assign(((...names) => {
+            for (const name of names)
+                styles.add(name);
+            updateClasses();
+            return component;
+        }), {
+            get: () => [...styles].sort(),
+            has(name) {
+                return styles.has(name);
+            },
+            getState(owner, name) {
+                return styleState.map(owner, styles => styles.has(name));
+            },
+            remove(...names) {
+                for (const name of names)
+                    styles.delete(name);
+                updateClasses();
+                return component;
+            },
+            toggle(enabled, ...names) {
+                if (enabled)
+                    for (const name of names)
+                        styles.add(name);
+                else
+                    for (const name of names)
+                        styles.delete(name);
+                updateClasses();
+                return component;
+            },
+            bind(state, ...names) {
+                if (!State_10.default.is(state))
+                    return result.toggle(state, ...names);
+                result.unbind(state);
+                const unsubscribe = state.use(component, active => {
+                    if (active)
+                        for (const name of names)
+                            styles.add(name);
+                    else
+                        for (const name of names)
+                            styles.delete(name);
+                    updateClasses();
+                });
+                stateUnsubscribers.set(state, [unsubscribe, names]);
+                return component;
+            },
+            bindFrom(state) {
+                result.unbind(state);
+                const currentNames = [];
+                const unsubscribe = state.use(component, (names, oldNames) => {
+                    if (!Array.isArray(names))
+                        names = names ? [names] : [];
+                    if (!Array.isArray(oldNames))
+                        oldNames = oldNames ? [oldNames] : [];
+                    for (const oldName of oldNames ?? [])
+                        styles.delete(oldName);
+                    for (const name of names)
+                        styles.add(name);
+                    currentNames.splice(0, Infinity, ...names);
+                    updateClasses();
+                });
+                stateUnsubscribers.set(state, [unsubscribe, currentNames]);
+                return component;
+            },
+            unbind(state) {
+                const bound = state && stateUnsubscribers.get(state);
+                if (!bound)
+                    return component;
+                const [unsubscribe, names] = bound;
+                unsubscribe?.();
+                stateUnsubscribers.delete(state);
+                result.remove(...names);
+                return component;
+            },
+            combine(combined, requirements) {
+                combinations.push({ combined, requirements });
+                return component;
+            },
+            uncombine(combined) {
+                Arrays_4.default.filterInPlace(combinations, combination => combination.combined !== combined);
+                result.remove(combined);
+                return component;
+            },
+            refresh: () => updateClasses(),
+            hasProperty(property) {
+                return component.element.style.getPropertyValue(property) !== '';
+            },
+            setProperty(property, value) {
+                unbindPropertyState[property]?.();
+                setProperty(property, value);
+                return component;
+            },
+            setProperties(properties) {
+                for (let [property, value] of Object.entries(properties)) {
+                    unbindPropertyState[property]?.();
+                    property = property.replaceAll(/[a-z][A-Z]/g, match => `${match[0]}-${match[1].toLowerCase()}`).toLowerCase();
+                    setProperty(property, value);
+                }
+                return component;
+            },
+            toggleProperty(enabled, property, value) {
+                enabled ??= !result.hasProperty(property);
+                if (enabled === true)
+                    return result.setProperty(property, enabled ? value : undefined);
+                else
+                    return result.removeProperties(property);
+            },
+            setVariable(variable, value) {
+                return result.setProperty(`--${variable}`, value);
+            },
+            bindProperty(property, state) {
+                unbindPropertyState[property]?.();
+                if (State_10.default.is(state))
+                    unbindPropertyState[property] = state.use(component, value => setProperty(property, value));
+                else {
+                    setProperty(property, state);
+                    unbindPropertyState[property] = undefined;
+                }
+                return component;
+            },
+            bindVariable(variable, state) {
+                return result.bindProperty(`--${variable}`, state);
+            },
+            removeProperties(...properties) {
+                for (const property of properties)
+                    component.element.style.removeProperty(property);
+                return component;
+            },
+            removeVariables(...variables) {
+                for (const variable of variables)
+                    component.element.style.removeProperty(`--${variable}`);
+                return component;
+            },
+        });
+        return result;
+        function updateClasses() {
+            const stylesArray = [...styles];
+            for (const combination of combinations) {
+                const hasRequirements = combination.requirements.every(name => styles.has(name));
+                if (hasRequirements) {
+                    styles.add(combination.combined);
+                    stylesArray.push(combination.combined);
+                }
+                else {
+                    styles.delete(combination.combined);
+                    Arrays_4.default.remove(stylesArray, combination.combined);
+                }
+            }
+            if (!component.attributes.has('component'))
+                component.attributes.insertBefore('class', 'component');
+            component.attributes.set('component', stylesArray.join(' '));
+            const toAdd = stylesArray.flatMap(component => exports.style.value[component]).filter(Arrays_4.NonNullish);
+            const toRemove = currentClasses.filter(cls => !toAdd.includes(cls));
+            if (toRemove)
+                component.element.classList.remove(...toRemove);
+            component.element.classList.add(...toAdd);
+            currentClasses.push(...toAdd);
+            styleState.markDirty();
+            return component;
+        }
+        function setProperty(property, value) {
+            if (value === undefined || value === null)
+                component.element.style.removeProperty(property);
+            else
+                component.element.style.setProperty(property, `${value}`);
+        }
+    }
+    exports.default = StyleManipulator;
+});
 define("kitsui/utility/TextManipulator", ["require", "exports", "kitsui/utility/StringApplicator"], function (require, exports, StringApplicator_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -2440,7 +2633,7 @@ define("kitsui/utility/TextManipulator", ["require", "exports", "kitsui/utility/
     }
     exports.default = TextManipulator;
 });
-define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipulator", "kitsui/utility/Arrays", "kitsui/utility/AttributeManipulator", "kitsui/utility/ClassManipulator", "kitsui/utility/EventManipulator", "kitsui/utility/FocusListener", "kitsui/utility/Maps", "kitsui/utility/Objects", "kitsui/utility/State", "kitsui/utility/StringApplicator", "kitsui/utility/Strings", "kitsui/utility/TextManipulator", "kitsui/utility/Viewport"], function (require, exports, AnchorManipulator_1, Arrays_4, AttributeManipulator_1, ClassManipulator_1, EventManipulator_1, FocusListener_1, Maps_2, Objects_2, State_10, StringApplicator_3, Strings_2, TextManipulator_1, Viewport_2) {
+define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipulator", "kitsui/utility/Arrays", "kitsui/utility/AttributeManipulator", "kitsui/utility/ClassManipulator", "kitsui/utility/EventManipulator", "kitsui/utility/FocusListener", "kitsui/utility/Maps", "kitsui/utility/Objects", "kitsui/utility/State", "kitsui/utility/StringApplicator", "kitsui/utility/Strings", "kitsui/utility/StyleManipulator", "kitsui/utility/TextManipulator", "kitsui/utility/Viewport"], function (require, exports, AnchorManipulator_1, Arrays_5, AttributeManipulator_1, ClassManipulator_1, EventManipulator_1, FocusListener_1, Maps_2, Objects_2, State_11, StringApplicator_3, Strings_2, StyleManipulator_1, TextManipulator_1, Viewport_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ComponentInsertionDestination = void 0;
@@ -2450,12 +2643,13 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
     EventManipulator_1 = __importDefault(EventManipulator_1);
     FocusListener_1 = __importDefault(FocusListener_1);
     Maps_2 = __importDefault(Maps_2);
-    State_10 = __importDefault(State_10);
+    State_11 = __importDefault(State_11);
     StringApplicator_3 = __importDefault(StringApplicator_3);
     Strings_2 = __importDefault(Strings_2);
+    StyleManipulator_1 = __importDefault(StyleManipulator_1);
     TextManipulator_1 = __importDefault(TextManipulator_1);
     Viewport_2 = __importDefault(Viewport_2);
-    const selfScript = (0, State_10.default)(undefined);
+    const selfScript = (0, State_11.default)(undefined);
     const SYMBOL_COMPONENT_BRAND = Symbol('COMPONENT_BRAND');
     const ELEMENT_TO_COMPONENT_MAP = new WeakMap();
     (0, Objects_2.DefineMagic)(Element.prototype, 'component', {
@@ -2505,19 +2699,19 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         const jitTweaks = new Map();
         const nojit = {};
         let component = {
-            supers: (0, State_10.default)([]),
+            supers: (0, State_11.default)([]),
             isComponent: true,
             isInsertionDestination: true,
             element: document.createElement(type),
-            removed: (0, State_10.default)(false),
-            rooted: (0, State_10.default)(false),
+            removed: (0, State_11.default)(false),
+            rooted: (0, State_11.default)(false),
             nojit: nojit,
             get tagName() {
                 return component.element.tagName;
             },
             setOwner: newOwner => {
                 unuseOwnerRemove?.();
-                unuseOwnerRemove = State_10.default.Owner.getRemovedState(newOwner)?.use(component, removed => removed && component.remove());
+                unuseOwnerRemove = State_11.default.Owner.getRemovedState(newOwner)?.use(component, removed => removed && component.remove());
                 return component;
             },
             replaceElement: (newElement, keepContent) => {
@@ -2606,9 +2800,9 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 tweaker?.(component, ...params);
                 return component;
             },
-            // get style () {
-            // 	return DefineProperty(component, 'style', StyleManipulator(component))
-            // },
+            get style() {
+                return (0, Objects_2.DefineProperty)(component, 'style', (0, StyleManipulator_1.default)(component));
+            },
             get classes() {
                 return (0, Objects_2.DefineProperty)(component, 'classes', (0, ClassManipulator_1.default)(component));
             },
@@ -2628,51 +2822,51 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return (0, Objects_2.DefineProperty)(component, 'hovered', component.hoveredTime.mapManual(time => !!time));
             },
             get hoveredTime() {
-                return (0, Objects_2.DefineProperty)(component, 'hoveredTime', (0, State_10.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'hoveredTime', (0, State_11.default)(undefined));
             },
             get focused() {
                 return (0, Objects_2.DefineProperty)(component, 'focused', component.focusedTime.mapManual(time => !!time));
             },
             get focusedTime() {
-                return (0, Objects_2.DefineProperty)(component, 'focusedTime', (0, State_10.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'focusedTime', (0, State_11.default)(undefined));
             },
             get hasFocused() {
                 return (0, Objects_2.DefineProperty)(component, 'hasFocused', component.hasFocusedTime.mapManual(time => !!time));
             },
             get hasFocusedTime() {
-                return (0, Objects_2.DefineProperty)(component, 'hasFocusedTime', (0, State_10.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'hasFocusedTime', (0, State_11.default)(undefined));
             },
             get hadFocusedLast() {
-                return (0, Objects_2.DefineProperty)(component, 'hadFocusedLast', (0, State_10.default)(false));
+                return (0, Objects_2.DefineProperty)(component, 'hadFocusedLast', (0, State_11.default)(false));
             },
             get hoveredOrFocused() {
                 return (0, Objects_2.DefineProperty)(component, 'hoveredOrFocused', component.hoveredOrFocusedTime.mapManual(time => !!time));
             },
             get hoveredOrFocusedTime() {
-                return (0, Objects_2.DefineProperty)(component, 'hoveredOrFocusedTime', State_10.default.Generator(() => Math.max(component.hoveredTime.value ?? 0, component.focusedTime.value ?? 0) || undefined)
+                return (0, Objects_2.DefineProperty)(component, 'hoveredOrFocusedTime', State_11.default.Generator(() => Math.max(component.hoveredTime.value ?? 0, component.focusedTime.value ?? 0) || undefined)
                     .observe(component, component.hoveredTime, component.focusedTime));
             },
             get hoveredOrHasFocused() {
                 return (0, Objects_2.DefineProperty)(component, 'hoveredOrHasFocused', component.hoveredOrHasFocusedTime.mapManual(time => !!time));
             },
             get hoveredOrHasFocusedTime() {
-                return (0, Objects_2.DefineProperty)(component, 'hoveredOrHasFocusedTime', State_10.default.Generator(() => Math.max(component.hoveredTime.value ?? 0, component.hasFocusedTime.value ?? 0) || undefined)
+                return (0, Objects_2.DefineProperty)(component, 'hoveredOrHasFocusedTime', State_11.default.Generator(() => Math.max(component.hoveredTime.value ?? 0, component.hasFocusedTime.value ?? 0) || undefined)
                     .observe(component, component.hoveredTime, component.hasFocusedTime));
             },
             get active() {
                 return (0, Objects_2.DefineProperty)(component, 'active', component.activeTime.mapManual(time => !!time));
             },
             get activeTime() {
-                return (0, Objects_2.DefineProperty)(component, 'activeTime', (0, State_10.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'activeTime', (0, State_11.default)(undefined));
             },
             get id() {
-                return (0, Objects_2.DefineProperty)(component, 'id', (0, State_10.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'id', (0, State_11.default)(undefined));
             },
             get name() {
-                return (0, Objects_2.DefineProperty)(component, 'name', (0, State_10.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'name', (0, State_11.default)(undefined));
             },
             get rect() {
-                const rectState = State_10.default.JIT(() => component.element.getBoundingClientRect());
+                const rectState = State_11.default.JIT(() => component.element.getBoundingClientRect());
                 const oldMarkDirty = rectState.markDirty;
                 rectState.markDirty = () => {
                     oldMarkDirty();
@@ -2785,7 +2979,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
             },
             append(...contents) {
-                const elements = contents.filter(Arrays_4.Truthy).map(Component.element);
+                const elements = contents.filter(Arrays_5.Truthy).map(Component.element);
                 component.element.append(...elements);
                 for (const element of elements)
                     element.component?.emitInsert();
@@ -2794,7 +2988,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
             },
             prepend(...contents) {
-                const elements = contents.filter(Arrays_4.Truthy).map(Component.element);
+                const elements = contents.filter(Arrays_5.Truthy).map(Component.element);
                 component.element.prepend(...elements);
                 for (const element of elements)
                     element.component?.emitInsert();
@@ -2804,7 +2998,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             },
             insert(direction, sibling, ...contents) {
                 const siblingElement = sibling ? Component.element(sibling) : null;
-                const elements = contents.filter(Arrays_4.Truthy).map(Component.element);
+                const elements = contents.filter(Arrays_5.Truthy).map(Component.element);
                 if (direction === 'before')
                     for (let i = elements.length - 1; i >= 0; i--)
                         component.element.insertBefore(elements[i], siblingElement);
@@ -2825,7 +3019,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return Component.closest(builder, component);
             },
             getStateForClosest(builders) {
-                const state = State_10.default.JIT(() => component.closest(builders));
+                const state = State_11.default.JIT(() => component.closest(builders));
                 component.receiveAncestorInsertEvents();
                 component.onRooted(() => {
                     state.markDirty();
@@ -2972,7 +3166,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 unuseAriaLabelledByIdState?.();
                 unuseAriaLabelledByIdState = undefined;
                 if (labelledBy) {
-                    const state = State_10.default.Generator(() => labelledBy.id.value ?? labelledBy.attributes.get('for'))
+                    const state = State_11.default.Generator(() => labelledBy.id.value ?? labelledBy.attributes.get('for'))
                         .observe(component, labelledBy.id, labelledBy.cast()?.for);
                     unuseAriaLabelledByIdState = state.use(component, id => component.attributes.set('aria-labelledby', id));
                 }
@@ -3160,7 +3354,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
             }
             async function ensureOriginalComponentNotSubscriptionOwner(original) {
-                if (!original || !State_10.default.OwnerMetadata.hasSubscriptions(original))
+                if (!original || !State_11.default.OwnerMetadata.hasSubscriptions(original))
                     return;
                 const originalRef = new WeakRef(original);
                 original = undefined;
@@ -3268,13 +3462,13 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
     })(Component || (Component = {}));
     exports.default = Component;
 });
-define("kitsui", ["require", "exports", "kitsui/component/Label", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Label_1, Component_2, State_11) {
+define("kitsui", ["require", "exports", "kitsui/component/Label", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Label_1, Component_2, State_12) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Kit = exports.State = exports.Component = void 0;
     Label_1 = __importStar(Label_1);
     Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_2).default; } });
-    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_11).default; } });
+    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_12).default; } });
     var Kit;
     (function (Kit) {
         Kit.Label = Label_1.default;
@@ -3330,10 +3524,10 @@ define("kitsui/utility/ActiveListener", ["require", "exports"], function (requir
     exports.default = ActiveListener;
     Object.assign(window, { ActiveListener });
 });
-define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_12) {
+define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_13) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_12 = __importDefault(State_12);
+    State_13 = __importDefault(State_13);
     function Applicator(host, defaultValueOrApply, apply) {
         const defaultValue = !apply ? undefined : defaultValueOrApply;
         apply ??= defaultValueOrApply;
@@ -3342,7 +3536,7 @@ define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State
         return result;
         function makeApplicator(host) {
             return {
-                state: (0, State_12.default)(defaultValue),
+                state: (0, State_13.default)(defaultValue),
                 set: value => {
                     unbind?.();
                     setInternal(value);
@@ -3372,23 +3566,23 @@ define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State
     }
     exports.default = Applicator;
 });
-define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_13) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    State_13 = __importDefault(State_13);
-    var BrowserListener;
-    (function (BrowserListener) {
-        BrowserListener.isWebkit = (0, State_13.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
-    })(BrowserListener || (BrowserListener = {}));
-    exports.default = BrowserListener;
-});
-define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_14) {
+define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_14) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_14 = __importDefault(State_14);
+    var BrowserListener;
+    (function (BrowserListener) {
+        BrowserListener.isWebkit = (0, State_14.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
+    })(BrowserListener || (BrowserListener = {}));
+    exports.default = BrowserListener;
+});
+define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_15) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_15 = __importDefault(State_15);
     var FontsListener;
     (function (FontsListener) {
-        FontsListener.loaded = (0, State_14.default)(false);
+        FontsListener.loaded = (0, State_15.default)(false);
         async function listen() {
             await document.fonts.ready;
             FontsListener.loaded.asMutable?.setValue(true);
@@ -3397,10 +3591,10 @@ define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/St
     })(FontsListener || (FontsListener = {}));
     exports.default = FontsListener;
 });
-define("kitsui/utility/HoverListener", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/Mouse"], function (require, exports, Arrays_5, Mouse_2) {
+define("kitsui/utility/HoverListener", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/Mouse"], function (require, exports, Arrays_6, Mouse_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Arrays_5 = __importDefault(Arrays_5);
+    Arrays_6 = __importDefault(Arrays_6);
     Mouse_2 = __importDefault(Mouse_2);
     var HoverListener;
     (function (HoverListener) {
@@ -3430,7 +3624,7 @@ define("kitsui/utility/HoverListener", ["require", "exports", "kitsui/utility/Ar
                 const allHovered = [...document.querySelectorAll(':hover')];
                 const hovered = allHovered[allHovered.length - 1];
                 if (hovered.clientWidth === 0 || hovered.clientHeight === 0)
-                    Arrays_5.default.filterInPlace(allHovered, element => element.computedStyleMap().get('display')?.toString() !== 'none');
+                    Arrays_6.default.filterInPlace(allHovered, element => element.computedStyleMap().get('display')?.toString() !== 'none');
                 if (hovered === lastHovered[lastHovered.length - 1])
                     return;
                 const newHovered = allHovered;
@@ -3450,24 +3644,24 @@ define("kitsui/utility/HoverListener", ["require", "exports", "kitsui/utility/Ar
     exports.default = HoverListener;
     Object.assign(window, { HoverListener });
 });
-define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_15) {
+define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_16) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_15 = __importDefault(State_15);
+    State_16 = __importDefault(State_16);
     var PageListener;
     (function (PageListener) {
-        PageListener.visible = (0, State_15.default)(document.visibilityState === 'visible');
+        PageListener.visible = (0, State_16.default)(document.visibilityState === 'visible');
         document.addEventListener('visibilitychange', () => PageListener.visible.asMutable?.setValue(document.visibilityState === 'visible'));
     })(PageListener || (PageListener = {}));
     exports.default = PageListener;
 });
-define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_16) {
+define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_17) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_16 = __importDefault(State_16);
+    State_17 = __importDefault(State_17);
     const TypeManipulator // Object.assign(
      = function (host, onAdd, onRemove) {
-        const state = (0, State_16.default)(new Set());
+        const state = (0, State_17.default)(new Set());
         return Object.assign(add, {
             state,
             remove,

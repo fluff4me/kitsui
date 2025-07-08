@@ -11,6 +11,7 @@ declare module "kitsui/utility/Arrays" {
         function resolve<T>(value: Or<T>): T[];
         const filterInPlace: <T>(array: T[], predicate: (value: T, index: number, array: T[]) => boolean) => T[];
         const distinctInPlace: <T>(array: T[], mapper?: (value: T) => unknown) => T[];
+        function remove<T>(array: T[], value: T): T[];
     }
     export default Arrays;
 }
@@ -647,6 +648,49 @@ declare module "kitsui/utility/FocusListener" {
     }
     export default FocusListener;
 }
+declare module "kitsui/utility/StyleManipulator" {
+    import type Component from "kitsui/Component";
+    import type { PartialRecord } from "kitsui/utility/Objects";
+    import State from "kitsui/utility/State";
+    export interface Styles {
+    }
+    export const style: State.Mutable<Styles>;
+    export type ComponentName = keyof typeof style.value;
+    export type ComponentNameType<PREFIX extends string> = keyof {
+        [KEY in ComponentName as KEY extends `${PREFIX}-${infer TYPE}--${string}` ? TYPE : KEY extends `${PREFIX}-${infer TYPE}` ? TYPE : never]: string[];
+    };
+    interface StyleManipulatorFunctions<HOST> {
+        get(): ComponentName[];
+        has(name: ComponentName): boolean;
+        getState(owner: State.Owner, name: ComponentName): State<boolean> | undefined;
+        remove(...names: ComponentName[]): HOST;
+        toggle(...names: ComponentName[]): HOST;
+        toggle(enabled: boolean, ...names: ComponentName[]): HOST;
+        bind(state: State.Or<boolean>, ...names: ComponentName[]): HOST;
+        bindFrom(state: State<ComponentName[] | ComponentName | undefined>): HOST;
+        unbind(state?: State<boolean> | State<ComponentName[] | ComponentName | undefined>): HOST;
+        /** Add a combined style when multiple requirement styles are present */
+        combine(combined: ComponentName, requirements: ComponentName[]): HOST;
+        uncombine(combined: ComponentName): HOST;
+        refresh(): HOST;
+        hasProperty(property: string): boolean;
+        setProperty(property: string, value?: string | number | null): HOST;
+        setProperties(properties: PartialRecord<Extract<keyof CSSStyleDeclaration, string>, string | number | null>): HOST;
+        toggleProperty(enabled: boolean | undefined, property: string, value?: string | number | null): HOST;
+        setVariable(variable: string, value?: string | number | null): HOST;
+        bindProperty(property: string, state: State.Or<string | number | undefined | null>): HOST;
+        bindVariable(variable: string, state: State.Or<string | number | undefined | null>): HOST;
+        removeProperties(...properties: string[]): HOST;
+        removeVariables(...variables: string[]): HOST;
+    }
+    interface StyleManipulatorFunction<HOST> {
+        (...names: ComponentName[]): HOST;
+    }
+    interface StyleManipulator<HOST> extends StyleManipulatorFunction<HOST>, StyleManipulatorFunctions<HOST> {
+    }
+    function StyleManipulator(component: Component): StyleManipulator<Component>;
+    export default StyleManipulator;
+}
 declare module "kitsui/utility/TextManipulator" {
     import type Component from "kitsui/Component";
     import StringApplicator from "kitsui/utility/StringApplicator";
@@ -667,6 +711,7 @@ declare module "kitsui/Component" {
     import type { Mutable } from "kitsui/utility/Objects";
     import State from "kitsui/utility/State";
     import StringApplicator from "kitsui/utility/StringApplicator";
+    import StyleManipulator from "kitsui/utility/StyleManipulator";
     import TextManipulator from "kitsui/utility/TextManipulator";
     import type { Falsy } from "kitsui/utility/Type";
     const SYMBOL_COMPONENT_BRAND: unique symbol;
@@ -708,6 +753,7 @@ declare module "kitsui/Component" {
         readonly attributes: AttributeManipulator<this>;
         readonly event: EventManipulator<this, ComponentEvents>;
         readonly text: TextManipulator<this>;
+        readonly style: StyleManipulator<this>;
         readonly anchor: AnchorManipulator<this>;
         readonly nojit: Partial<this>;
         readonly hovered: State<boolean>;
