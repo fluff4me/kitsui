@@ -43,6 +43,15 @@ namespace Arrays {
 		return array
 	}
 
+	export function remove<T> (array: T[], value: T): T[] {
+		const index = array.indexOf(value)
+		if (index === -1)
+			return array
+
+		array.splice(index, 1)
+		return array
+	}
+
 }
 
 export default Arrays

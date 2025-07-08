@@ -13,6 +13,7 @@ import { DefineMagic, DefineProperty, mutable } from 'utility/Objects'
 import State from 'utility/State'
 import StringApplicator from 'utility/StringApplicator'
 import Strings from 'utility/Strings'
+import StyleManipulator from 'utility/StyleManipulator'
 import TextManipulator from 'utility/TextManipulator'
 import type { Falsy } from 'utility/Type'
 import Viewport from 'utility/Viewport'
@@ -96,7 +97,7 @@ interface BaseComponent<ELEMENT extends HTMLElement = HTMLElement> extends Compo
 	readonly attributes: AttributeManipulator<this>
 	readonly event: EventManipulator<this, ComponentEvents>
 	readonly text: TextManipulator<this>
-	// readonly style: StyleManipulator<this>
+	readonly style: StyleManipulator<this>
 	readonly anchor: AnchorManipulator<this>
 	readonly nojit: Partial<this>
 
@@ -400,9 +401,9 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			return component
 		},
 
-		// get style () {
-		// 	return DefineProperty(component, 'style', StyleManipulator(component))
-		// },
+		get style () {
+			return DefineProperty(component, 'style', StyleManipulator(component))
+		},
 		get classes () {
 			return DefineProperty(component, 'classes', ClassManipulator(component))
 		},
