@@ -533,7 +533,7 @@ namespace State {
 	export type AsyncState<T, D = never> = AsyncStatePending<T, D> | AsyncStateResolved<T> | AsyncStateRejected<T>
 
 	export interface AsyncProgress<D> {
-		readonly progress: number
+		readonly progress: number | null
 		readonly details?: D
 	}
 
