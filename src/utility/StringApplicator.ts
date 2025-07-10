@@ -1,5 +1,4 @@
 import { NonNullish } from 'utility/Arrays'
-import type { SupplierOr } from 'utility/Functions'
 import State from 'utility/State'
 
 export interface StringApplicatorSources {
@@ -15,7 +14,7 @@ export interface StringApplicatorSourceDefinition<SOURCE extends keyof StringApp
 
 let cumulativeSourceRequiredState: State<unknown> | undefined
 
-export type StringApplicatorSource = SupplierOr<StringApplicatorSources[keyof StringApplicatorSources]>
+export type StringApplicatorSource = StringApplicatorSources[keyof StringApplicatorSources]
 export namespace StringApplicatorSource {
 
 	export const REGISTRY: Partial<Record<keyof StringApplicatorSources, StringApplicatorSourceDefinition>> = {}
@@ -26,8 +25,8 @@ export namespace StringApplicatorSource {
 	}
 
 	export function toString (source: StringApplicatorSource): string {
-		if (typeof source === 'function')
-			source = source()
+		// if (typeof source === 'function')
+		// 	source = source()
 
 		if (typeof source === 'string')
 			return source
@@ -40,8 +39,8 @@ export namespace StringApplicatorSource {
 	}
 
 	export function toNodes (source: StringApplicatorSource): Node[] {
-		if (typeof source === 'function')
-			source = source()
+		// if (typeof source === 'function')
+		// 	source = source()
 
 		if (typeof source === 'string')
 			return [document.createTextNode(source)]
@@ -60,14 +59,13 @@ export namespace StringApplicatorSource {
 			return
 		}
 
-		const sourceFunction = source
 		if (!cumulativeSourceRequiredState) {
-			applicator(sourceFunction())
+			applicator(source)
 			return
 		}
 
 		const subOwner = State.Owner.create()
-		cumulativeSourceRequiredState?.use(subOwner, () => applicator(sourceFunction()))
+		cumulativeSourceRequiredState?.use(subOwner, () => applicator(source))
 		return subOwner.remove
 	}
 }
