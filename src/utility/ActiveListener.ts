@@ -1,13 +1,13 @@
 import type Component from 'Component'
 
 namespace ActiveListener {
-	let lastActive: Element[] = []
+	let lastActive: HTMLElement[] = []
 
-	export function allActive (): readonly Element[] {
+	export function allActive (): readonly HTMLElement[] {
 		return lastActive
 	}
 
-	export function active (): Element | undefined {
+	export function active (): HTMLElement | undefined {
 		return lastActive.at(-1)
 	}
 
@@ -27,8 +27,11 @@ namespace ActiveListener {
 		document.addEventListener('mousedown', updateActive)
 		document.addEventListener('mouseup', updateActive)
 
-		function updateActive () {
-			const allActive = document.querySelectorAll(':active')
+		function updateActive (event: MouseEvent) {
+			if (event.button !== 0)
+				return // Only consider left mouse button
+
+			const allActive = event.type === 'mousedown' ? getActive(event) : []
 			const active = allActive[allActive.length - 1]
 			if (active === lastActive[lastActive.length - 1])
 				return
@@ -43,6 +46,17 @@ namespace ActiveListener {
 					element.component.activeTime.asMutable?.setValue(Date.now())
 
 			lastActive = newActive
+		}
+
+		function getActive (event: MouseEvent) {
+			const hovered: HTMLElement[] = []
+			let cursor = event.target as HTMLElement | null
+			while (cursor) {
+				hovered.push(cursor)
+				cursor = cursor.parentElement
+			}
+
+			return hovered
 		}
 	}
 

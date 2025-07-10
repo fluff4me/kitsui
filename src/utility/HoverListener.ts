@@ -3,13 +3,13 @@ import Arrays from 'utility/Arrays'
 import Mouse from 'utility/Mouse'
 
 namespace HoverListener {
-	let lastHovered: Element[] = []
+	let lastHovered: HTMLElement[] = []
 
-	export function allHovered (): readonly Element[] {
+	export function allHovered (): readonly HTMLElement[] {
 		return lastHovered
 	}
 
-	export function hovered (): Element | undefined {
+	export function hovered (): HTMLElement | undefined {
 		return lastHovered.at(-1)
 	}
 
@@ -26,14 +26,13 @@ namespace HoverListener {
 	}
 
 	export function listen () {
-		Mouse.onMove(() => {
-			const allHovered = [...document.querySelectorAll(':hover')]
-			const hovered = allHovered[allHovered.length - 1]
+		Mouse.onMove((event, allHovered) => {
+			const hovered = allHovered.at(-1)
 
-			if (hovered.clientWidth === 0 || hovered.clientHeight === 0)
+			if (hovered && (hovered.clientWidth === 0 || hovered.clientHeight === 0))
 				Arrays.filterInPlace(allHovered, element => element.computedStyleMap().get('display')?.toString() !== 'none')
 
-			if (hovered === lastHovered[lastHovered.length - 1])
+			if (hovered === lastHovered.at(-1))
 				return
 
 			const newHovered = allHovered
