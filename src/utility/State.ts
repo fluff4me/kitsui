@@ -547,6 +547,7 @@ namespace State {
 
 	export interface Async<T, D = never> extends AsyncBase<T, D> {
 		readonly promise: Promise<T>
+		refresh (): void
 	}
 
 	export type AsyncMapGenerator<FROM, T, D = never> = (value: FROM, signal: AbortSignal, setProgress: (progress: number | null, details?: D) => void) => Promise<T>
@@ -615,6 +616,9 @@ namespace State {
 				error,
 				state,
 				progress,
+				refresh () {
+					from.emit()
+				},
 			}
 		)
 
