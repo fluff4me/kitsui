@@ -151,7 +151,7 @@ declare module "kitsui/utility/State" {
         }
         export type AsyncState<T, D = never> = AsyncStatePending<T, D> | AsyncStateResolved<T> | AsyncStateRejected<T>;
         export interface AsyncProgress<D> {
-            readonly progress: number;
+            readonly progress: number | null;
             readonly details?: D;
         }
         interface AsyncBase<T, D = never> extends State<T | undefined> {
@@ -161,11 +161,14 @@ declare module "kitsui/utility/State" {
             readonly state: State<AsyncState<T, D>>;
             readonly progress: State<AsyncProgress<D> | undefined>;
         }
-        export interface Async<T> extends AsyncBase<T> {
+        export interface Async<T, D = never> extends AsyncBase<T, D> {
             readonly promise: Promise<T>;
+            refresh(): void;
         }
-        export type AsyncGenerator<FROM, T, D = never> = (value: FROM, signal: AbortSignal, setProgress: (progress: number, details?: D) => void) => Promise<T>;
-        export function Async<FROM, T, D = never>(owner: State.Owner, from: State<FROM>, generator: AsyncGenerator<FROM, T, D>): Async<T>;
+        export type AsyncMapGenerator<FROM, T, D = never> = (value: FROM, signal: AbortSignal, setProgress: (progress: number | null, details?: D) => void) => Promise<T>;
+        export type AsyncGenerator<T, D = never> = (signal: AbortSignal, setProgress: (progress: number | null, details?: D) => void) => Promise<T>;
+        export function Async<FROM, T, D = never>(owner: State.Owner, from: State<FROM>, generator: AsyncMapGenerator<FROM, T, D>): Async<T>;
+        export function Async<T, D = never>(owner: State.Owner, generator: AsyncGenerator<T, D>): Async<T>;
         export interface EndpointResult<T> extends Async<T> {
             refresh(): void;
         }
@@ -295,7 +298,7 @@ declare module "kitsui/utility/Mouse" {
     import type Vector2 from "kitsui/utility/Vector2";
     namespace Mouse {
         const state: State<Vector2>;
-        type MouseMoveHandler = (mouse: Vector2) => unknown;
+        type MouseMoveHandler = (mouse: Vector2, hovered: HTMLElement[]) => unknown;
         function onMove(handler: MouseMoveHandler): void;
         function offMove(handler: MouseMoveHandler): void;
         function listen(): void;
@@ -488,7 +491,6 @@ declare module "kitsui/utility/Maps" {
     export default Maps;
 }
 declare module "kitsui/utility/StringApplicator" {
-    import type { SupplierOr } from "kitsui/utility/Functions";
     import State from "kitsui/utility/State";
     export interface StringApplicatorSources {
         string: string;
@@ -499,7 +501,7 @@ declare module "kitsui/utility/StringApplicator" {
         toString(value: StringApplicatorSources[SOURCE]): string;
         toNodes(value: StringApplicatorSources[SOURCE]): Node[];
     }
-    export type StringApplicatorSource = SupplierOr<StringApplicatorSources[keyof StringApplicatorSources]>;
+    export type StringApplicatorSource = StringApplicatorSources[keyof StringApplicatorSources];
     export namespace StringApplicatorSource {
         const REGISTRY: Partial<Record<keyof StringApplicatorSources, StringApplicatorSourceDefinition>>;
         function register<SOURCE extends keyof StringApplicatorSources>(source: SOURCE, value: StringApplicatorSourceDefinition): void;
@@ -981,8 +983,8 @@ declare module "kitsui" {
 declare module "kitsui/utility/ActiveListener" {
     import type Component from "kitsui/Component";
     namespace ActiveListener {
-        function allActive(): readonly Element[];
-        function active(): Element | undefined;
+        function allActive(): readonly HTMLElement[];
+        function active(): HTMLElement | undefined;
         function allActiveComponents(): Generator<Component>;
         function activeComponent(): Component | undefined;
         function listen(): void;
@@ -1028,8 +1030,8 @@ declare module "kitsui/utility/FontsListener" {
 declare module "kitsui/utility/HoverListener" {
     import type Component from "kitsui/Component";
     namespace HoverListener {
-        function allHovered(): readonly Element[];
-        function hovered(): Element | undefined;
+        function allHovered(): readonly HTMLElement[];
+        function hovered(): HTMLElement | undefined;
         function allHoveredComponents(): Generator<Component>;
         function hoveredComponent(): Component | undefined;
         function listen(): void;

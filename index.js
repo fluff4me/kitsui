@@ -516,7 +516,9 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
             return result;
         }
         State.JIT = JIT;
-        function Async(owner, from, generator) {
+        function Async(owner, _from, _generator) {
+            const from = State.is(_from) ? _from : State(null);
+            const generator = State.is(_from) ? _generator : (_, signal, setProgress) => _from(signal, setProgress);
             const state = State({
                 settled: false,
                 value: undefined,
@@ -563,6 +565,9 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                 error,
                 state,
                 progress,
+                refresh() {
+                    from.emit();
+                },
             });
             Object.defineProperty(result, 'promise', {
                 get: () => promise,
@@ -1088,8 +1093,15 @@ define("kitsui/utility/Mouse", ["require", "exports", "kitsui/utility/State"], f
                 pos.x = event.clientX;
                 pos.y = event.clientY;
                 Mouse.state.emit();
+                const hovered = [];
+                let cursor = event.target;
+                while (cursor) {
+                    hovered.push(cursor);
+                    cursor = cursor.parentElement;
+                }
+                hovered.reverse();
                 for (const handler of handlers)
-                    handler(pos);
+                    handler(pos, hovered);
             });
         }
         Mouse.listen = listen;
@@ -1786,8 +1798,8 @@ define("kitsui/utility/StringApplicator", ["require", "exports", "kitsui/utility
         }
         StringApplicatorSource.register = register;
         function toString(source) {
-            if (typeof source === 'function')
-                source = source();
+            // if (typeof source === 'function')
+            // 	source = source()
             if (typeof source === 'string')
                 return source;
             for (const def of Object.values(StringApplicatorSource.REGISTRY))
@@ -1797,8 +1809,8 @@ define("kitsui/utility/StringApplicator", ["require", "exports", "kitsui/utility
         }
         StringApplicatorSource.toString = toString;
         function toNodes(source) {
-            if (typeof source === 'function')
-                source = source();
+            // if (typeof source === 'function')
+            // 	source = source()
             if (typeof source === 'string')
                 return [document.createTextNode(source)];
             for (const def of Object.values(StringApplicatorSource.REGISTRY))
@@ -1813,13 +1825,12 @@ define("kitsui/utility/StringApplicator", ["require", "exports", "kitsui/utility
                 applicator(source);
                 return;
             }
-            const sourceFunction = source;
             if (!cumulativeSourceRequiredState) {
-                applicator(sourceFunction());
+                applicator(source);
                 return;
             }
             const subOwner = State_6.default.Owner.create();
-            cumulativeSourceRequiredState?.use(subOwner, () => applicator(sourceFunction()));
+            cumulativeSourceRequiredState?.use(subOwner, () => applicator(source));
             return subOwner.remove;
         }
         StringApplicatorSource.apply = apply;
@@ -3504,8 +3515,10 @@ define("kitsui/utility/ActiveListener", ["require", "exports"], function (requir
         function listen() {
             document.addEventListener('mousedown', updateActive);
             document.addEventListener('mouseup', updateActive);
-            function updateActive() {
-                const allActive = document.querySelectorAll(':active');
+            function updateActive(event) {
+                if (event.button !== 0)
+                    return; // Only consider left mouse button
+                const allActive = event.type === 'mousedown' ? getActive(event) : [];
                 const active = allActive[allActive.length - 1];
                 if (active === lastActive[lastActive.length - 1])
                     return;
@@ -3517,6 +3530,15 @@ define("kitsui/utility/ActiveListener", ["require", "exports"], function (requir
                     if (element.component && !lastActive.includes(element))
                         element.component.activeTime.asMutable?.setValue(Date.now());
                 lastActive = newActive;
+            }
+            function getActive(event) {
+                const hovered = [];
+                let cursor = event.target;
+                while (cursor) {
+                    hovered.push(cursor);
+                    cursor = cursor.parentElement;
+                }
+                return hovered;
             }
         }
         ActiveListener.listen = listen;
@@ -3620,12 +3642,11 @@ define("kitsui/utility/HoverListener", ["require", "exports", "kitsui/utility/Ar
         }
         HoverListener.hoveredComponent = hoveredComponent;
         function listen() {
-            Mouse_2.default.onMove(() => {
-                const allHovered = [...document.querySelectorAll(':hover')];
-                const hovered = allHovered[allHovered.length - 1];
-                if (hovered.clientWidth === 0 || hovered.clientHeight === 0)
+            Mouse_2.default.onMove((event, allHovered) => {
+                const hovered = allHovered.at(-1);
+                if (hovered && (hovered.clientWidth === 0 || hovered.clientHeight === 0))
                     Arrays_6.default.filterInPlace(allHovered, element => element.computedStyleMap().get('display')?.toString() !== 'none');
-                if (hovered === lastHovered[lastHovered.length - 1])
+                if (hovered === lastHovered.at(-1))
                     return;
                 const newHovered = allHovered;
                 const noLongerHovering = lastHovered.filter(element => !newHovered.includes(element));
