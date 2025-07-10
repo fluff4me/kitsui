@@ -545,13 +545,19 @@ namespace State {
 		readonly progress: State<AsyncProgress<D> | undefined>
 	}
 
-	export interface Async<T> extends AsyncBase<T> {
+	export interface Async<T, D = never> extends AsyncBase<T, D> {
 		readonly promise: Promise<T>
 	}
 
-	export type AsyncGenerator<FROM, T, D = never> = (value: FROM, signal: AbortSignal, setProgress: (progress: number, details?: D) => void) => Promise<T>
+	export type AsyncMapGenerator<FROM, T, D = never> = (value: FROM, signal: AbortSignal, setProgress: (progress: number | null, details?: D) => void) => Promise<T>
+	export type AsyncGenerator<T, D = never> = (signal: AbortSignal, setProgress: (progress: number | null, details?: D) => void) => Promise<T>
 
-	export function Async<FROM, T, D = never> (owner: State.Owner, from: State<FROM>, generator: AsyncGenerator<FROM, T, D>): Async<T> {
+	export function Async<FROM, T, D = never> (owner: State.Owner, from: State<FROM>, generator: AsyncMapGenerator<FROM, T, D>): Async<T>
+	export function Async<T, D = never> (owner: State.Owner, generator: AsyncGenerator<T, D>): Async<T>
+	export function Async<FROM, T, D = never> (owner: State.Owner, _from: State<FROM> | AsyncGenerator<T, D>, _generator?: AsyncMapGenerator<FROM, T, D>): Async<T> {
+		const from = State.is(_from) ? _from : State(null as FROM)
+		const generator: AsyncMapGenerator<FROM, T, D> = State.is(_from) ? _generator! : (_, signal, setProgress) => _from(signal, setProgress)
+
 		const state = State<AsyncState<T, D>>({
 			settled: false,
 			value: undefined,
