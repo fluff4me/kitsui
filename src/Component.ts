@@ -142,6 +142,7 @@ interface BaseComponent<ELEMENT extends HTMLElement = HTMLElement> extends Compo
 	/**
 	 * **Warning:** Replacing an element will leave any subscribed events on the original element, and not re-subscribe them on the new element.
 	 */
+	replaceElement<TAG extends keyof HTMLElementTagNameMap> (elementOrType: TAG, keepContent?: true): Component<HTMLElement> extends this ? Component<HTMLElementTagNameMap[TAG]> : this
 	replaceElement (elementOrType: HTMLElement | keyof HTMLElementTagNameMap, keepContent?: true): this
 
 	and<PARAMS extends any[], COMPONENT extends Component> (builder: Component.BuilderAsync<PARAMS, COMPONENT>, ...params: NoInfer<PARAMS>): Promise<this & COMPONENT>
@@ -301,7 +302,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			return component
 		},
 
-		replaceElement: (newElement, keepContent) => {
+		replaceElement: (newElement: HTMLElement | keyof HTMLElementTagNameMap, keepContent?: boolean) => {
 			if (typeof newElement === 'string' && newElement.toUpperCase() === component.element.tagName.toUpperCase())
 				return component // already correct tag type
 
