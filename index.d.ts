@@ -795,6 +795,7 @@ declare module "kitsui/Component" {
         /**
          * **Warning:** Replacing an element will leave any subscribed events on the original element, and not re-subscribe them on the new element.
          */
+        replaceElement<TAG extends keyof HTMLElementTagNameMap>(elementOrType: TAG, keepContent?: true): Component<HTMLElement> extends this ? Component<HTMLElementTagNameMap[TAG]> : this;
         replaceElement(elementOrType: HTMLElement | keyof HTMLElementTagNameMap, keepContent?: true): this;
         and<PARAMS extends any[], COMPONENT extends Component>(builder: Component.BuilderAsync<PARAMS, COMPONENT>, ...params: NoInfer<PARAMS>): Promise<this & COMPONENT>;
         and<PARAMS extends any[], COMPONENT extends Component>(builder: Component.ExtensionAsync<PARAMS, COMPONENT>, ...params: NoInfer<PARAMS>): Promise<this & COMPONENT>;
