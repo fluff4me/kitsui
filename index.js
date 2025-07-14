@@ -841,12 +841,17 @@ define("kitsui/component/Label", ["require", "exports", "kitsui/Component", "kit
     exports.LabelTarget = void 0;
     Component_1 = __importDefault(Component_1);
     State_1 = __importDefault(State_1);
+    var LabelStyleTargets;
+    (function (LabelStyleTargets) {
+        LabelStyleTargets[LabelStyleTargets["Label"] = 0] = "Label";
+    })(LabelStyleTargets || (LabelStyleTargets = {}));
     const Label = (0, Component_1.default)('label', (label) => {
         const textWrapper = (0, Component_1.default)()
             .appendTo(label);
         let requiredOwner;
         let unuseTarget;
         return label
+            .setStyleTargets(LabelStyleTargets)
             .extend(label => ({
             textWrapper,
             for: (0, State_1.default)(undefined),
@@ -2447,9 +2452,14 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
         const combinations = [];
         // if (Env.isDev)
         exports.style.subscribe(component, () => updateClasses());
-        const result = Object.assign(((...names) => {
+        const result = Object.assign(
+        // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+        ((...names) => {
             for (const name of names)
-                styles.add(name);
+                if (typeof name === 'string')
+                    styles.add(name);
+                else
+                    result.bindFrom(name);
             updateClasses();
             return component;
         }), {
@@ -2476,7 +2486,26 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
                 updateClasses();
                 return component;
             },
-            bind(state, ...names) {
+            bind(state, ...toAdd) {
+                if (State_10.default.is(toAdd[0])) {
+                    const bstate = state;
+                    result.unbind(bstate);
+                    const owner = State_10.default.Owner.create();
+                    const currentNames = [];
+                    State_10.default.Use(owner, { state: bstate, names: toAdd[0] }).use(owner, ({ state, names }, { state: oldState, names: oldNames } = { state: false, names: undefined }) => {
+                        oldNames = oldNames && oldState ? Array.isArray(oldNames) ? oldNames : [oldNames] : [];
+                        names = names && state ? Array.isArray(names) ? names : [names] : [];
+                        for (const oldName of oldNames ?? [])
+                            styles.delete(oldName);
+                        for (const name of names)
+                            styles.add(name);
+                        currentNames.splice(0, Infinity, ...names);
+                        updateClasses();
+                    });
+                    stateUnsubscribers.set(bstate, [owner.remove, currentNames]);
+                    return component;
+                }
+                const names = toAdd;
                 if (!State_10.default.is(state))
                     return result.toggle(state, ...names);
                 result.unbind(state);
@@ -2810,6 +2839,21 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
                 tweaker?.(component, ...params);
                 return component;
+            },
+            setStyleTargets(styleEnum) {
+                const keys = Object.keys(styleEnum).filter(key => isNaN(+key));
+                for (const key of keys)
+                    component.styleTargets[key] = (0, State_11.default)(undefined);
+                return component;
+            },
+            ...{
+                // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+                styleTargets(style) {
+                    for (const [key, name] of Object.entries(style))
+                        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/no-redundant-type-constituents
+                        component.styleTargets[key].asMutable?.setValue(name ?? undefined);
+                    return component;
+                },
             },
             get style() {
                 return (0, Objects_2.DefineProperty)(component, 'style', (0, StyleManipulator_1.default)(component));
@@ -3343,6 +3387,13 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     extensions.push(extensionProvider);
                     return resultBuilder;
                 },
+                // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+                styleTargets(style) {
+                    extensions.push(component => {
+                        component.styleTargets(style);
+                    });
+                    return resultBuilder;
+                },
             });
             return resultBuilder;
             function completeComponent(component) {
@@ -3473,17 +3524,452 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
     })(Component || (Component = {}));
     exports.default = Component;
 });
-define("kitsui", ["require", "exports", "kitsui/component/Label", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Label_1, Component_2, State_12) {
+define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_2, State_12) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Component_2 = __importDefault(Component_2);
+    State_12 = __importDefault(State_12);
+    var LoadingStyleTargets;
+    (function (LoadingStyleTargets) {
+        LoadingStyleTargets[LoadingStyleTargets["Loading"] = 0] = "Loading";
+        LoadingStyleTargets[LoadingStyleTargets["LoadingLoaded"] = 1] = "LoadingLoaded";
+        LoadingStyleTargets[LoadingStyleTargets["Spinner"] = 2] = "Spinner";
+        LoadingStyleTargets[LoadingStyleTargets["ProgressBar"] = 3] = "ProgressBar";
+        LoadingStyleTargets[LoadingStyleTargets["ProgressBarProgressUnknown"] = 4] = "ProgressBarProgressUnknown";
+        LoadingStyleTargets[LoadingStyleTargets["MessageText"] = 5] = "MessageText";
+        LoadingStyleTargets[LoadingStyleTargets["ErrorIcon"] = 6] = "ErrorIcon";
+        LoadingStyleTargets[LoadingStyleTargets["ErrorText"] = 7] = "ErrorText";
+    })(LoadingStyleTargets || (LoadingStyleTargets = {}));
+    const Loading = (0, Component_2.default)((component) => {
+        const loading = component.setStyleTargets(LoadingStyleTargets);
+        const style = loading.styleTargets;
+        const storage = (0, Component_2.default)().setOwner(component);
+        const spinner = (0, Component_2.default)().style(style.Spinner);
+        const progressBar = (0, Component_2.default)().style(style.ProgressBar);
+        const messageText = (0, Component_2.default)().style(style.MessageText);
+        const errorIcon = (0, Component_2.default)().style(style.ErrorIcon);
+        const errorText = (0, Component_2.default)().style(style.ErrorText);
+        let owner;
+        let refresh;
+        const onSetHandlers = [];
+        return loading.style(style.Loading)
+            .extend(loading => ({
+            spinner,
+            progressBar,
+            messageText,
+            errorIcon,
+            errorText,
+            refresh() {
+                refresh?.();
+                return this;
+            },
+            set(state, initialiser) {
+                owner?.remove();
+                owner = State_12.default.Owner.create();
+                if (typeof state === 'function')
+                    state = State_12.default.Async(owner, state);
+                refresh = state.refresh;
+                loading.style.bind(state.settled, style.LoadingLoaded);
+                progressBar
+                    .style.bind(state.progress.map(owner, progress => progress?.progress === null), style.ProgressBarProgressUnknown)
+                    .style.bindVariable('progress', state.progress.map(owner, progress => progress?.progress ?? 1));
+                messageText.text.bind(state.progress.map(owner, progress => progress?.details));
+                state.state.use(owner, state => {
+                    storage.append(spinner, progressBar, messageText, errorIcon, errorText);
+                    loading.removeContents();
+                    if (!state.settled) {
+                        loading.append(spinner, progressBar, messageText);
+                        return;
+                    }
+                    if (state.error) {
+                        loading.append(errorIcon, errorText);
+                        return;
+                    }
+                    initialiser(loading, state.value);
+                });
+                for (const handler of onSetHandlers)
+                    handler(loading, owner, state);
+                return loading;
+            },
+            onSet(handler) {
+                onSetHandlers.push(handler);
+                return loading;
+            },
+        }))
+            .onRemoveManual(() => {
+            owner?.remove();
+            owner = undefined;
+            refresh = undefined;
+        });
+    });
+    exports.default = Loading;
+});
+define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_13) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_13 = __importDefault(State_13);
+    function ComponentInsertionTransaction(component, onEnd) {
+        let unuseComponentRemove = component?.removed.useManual(removed => removed && onComponentRemove());
+        const closed = (0, State_13.default)(false);
+        let removed = false;
+        const result = {
+            isInsertionDestination: true,
+            closed,
+            get size() {
+                return component?.element.children.length ?? 0;
+            },
+            append(...contents) {
+                if (closed.value)
+                    return result;
+                component?.append(...contents);
+                return result;
+            },
+            prepend(...contents) {
+                if (closed.value)
+                    return result;
+                component?.prepend(...contents);
+                return result;
+            },
+            insert(direction, sibling, ...contents) {
+                if (closed.value)
+                    return result;
+                component?.insert(direction, sibling, ...contents);
+                return result;
+            },
+            abort() {
+                if (closed.value)
+                    return;
+                close();
+            },
+            close() {
+                if (closed.value)
+                    return;
+                if (!removed)
+                    onEnd?.(result);
+                close();
+            },
+        };
+        return result;
+        function close() {
+            closed.value = true;
+            unuseComponentRemove?.();
+            unuseComponentRemove = undefined;
+            component = undefined;
+        }
+        function onComponentRemove() {
+            unuseComponentRemove?.();
+            unuseComponentRemove = undefined;
+            removed = true;
+            result.close();
+        }
+    }
+    exports.default = ComponentInsertionTransaction;
+});
+define("kitsui/utility/AbortablePromise", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    class AbortablePromise extends Promise {
+        #controller;
+        /**
+         * Note that `signal` is not handled for you.
+         * If you need to resolve or reject on abort, you will need to add an abort listener.
+         */
+        constructor(executor) {
+            const controller = new AbortController();
+            super((resolve, reject) => executor(resolve, reject, controller.signal));
+            this.#controller = controller;
+            this.abort = this.abort.bind(this);
+        }
+        /**
+         * Sends an abort signal to the promise handler
+         */
+        abort() {
+            if (this.#controller?.signal.aborted)
+                return;
+            this.#controller?.abort();
+        }
+    }
+    (function (AbortablePromise) {
+        function asyncFunction(asyncFunction) {
+            return (...args) => new AbortablePromise((resolve, reject, signal) => void asyncFunction(signal, ...args).then(resolve, reject));
+        }
+        AbortablePromise.asyncFunction = asyncFunction;
+    })(AbortablePromise || (AbortablePromise = {}));
+    exports.default = AbortablePromise;
+});
+define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kitsui/ext/ComponentInsertionTransaction", "kitsui/utility/AbortablePromise", "kitsui/utility/State"], function (require, exports, Component_3, ComponentInsertionTransaction_1, AbortablePromise_1, State_14) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Component_3 = __importStar(Component_3);
+    ComponentInsertionTransaction_1 = __importDefault(ComponentInsertionTransaction_1);
+    AbortablePromise_1 = __importDefault(AbortablePromise_1);
+    State_14 = __importDefault(State_14);
+    Component_3.default.extend(component => {
+        component.extend(component => ({
+            hasContent() {
+                const walker = document.createTreeWalker(component.element, NodeFilter.SHOW_TEXT);
+                while (walker.nextNode())
+                    if (walker.currentNode.textContent?.trim())
+                        return true;
+                for (const child of component.getDescendants())
+                    if (!child.is(Slot))
+                        return true;
+                return false;
+            },
+            appendWhen(state, ...contents) {
+                let temporaryHolder = (0, Component_3.default)().append(...contents);
+                Slot().appendTo(component).preserveContents().if(state, slot => {
+                    slot.append(...contents);
+                    temporaryHolder?.remove();
+                    temporaryHolder = undefined;
+                });
+                return component;
+            },
+            prependWhen(state, ...contents) {
+                let temporaryHolder = (0, Component_3.default)().append(...contents);
+                Slot().prependTo(component).preserveContents().if(state, slot => {
+                    slot.append(...contents);
+                    temporaryHolder?.remove();
+                    temporaryHolder = undefined;
+                });
+                return component;
+            },
+            insertWhen(state, direction, sibling, ...contents) {
+                let temporaryHolder = (0, Component_3.default)().append(...contents);
+                Slot().insertTo(component, direction, sibling).preserveContents().if(state, slot => {
+                    slot.append(...contents);
+                    temporaryHolder?.remove();
+                    temporaryHolder = undefined;
+                });
+                return component;
+            },
+            appendToWhen(state, destination) {
+                let temporaryHolder;
+                if (component.parent) {
+                    temporaryHolder = (0, Component_3.default)();
+                    component.appendTo(temporaryHolder);
+                }
+                Slot().appendTo(destination).preserveContents().if(state, slot => {
+                    slot.append(component);
+                    temporaryHolder?.remove();
+                    temporaryHolder = undefined;
+                });
+                return component;
+            },
+            prependToWhen(state, destination) {
+                let temporaryHolder;
+                if (component.parent) {
+                    temporaryHolder = (0, Component_3.default)();
+                    component.appendTo(temporaryHolder);
+                }
+                Slot().prependTo(destination).preserveContents().if(state, slot => {
+                    slot.append(component);
+                    temporaryHolder?.remove();
+                    temporaryHolder = undefined;
+                });
+                return component;
+            },
+            insertToWhen(state, destination, direction, sibling) {
+                let temporaryHolder;
+                if (component.parent) {
+                    temporaryHolder = (0, Component_3.default)();
+                    component.appendTo(temporaryHolder);
+                }
+                Slot().insertTo(destination, direction, sibling).preserveContents().if(state, slot => {
+                    slot.append(component);
+                    temporaryHolder?.remove();
+                    temporaryHolder = undefined;
+                });
+                return component;
+            },
+        }));
+    });
+    const Slot = Object.assign(Component_3.default.Builder((slot) => {
+        let unuse;
+        let cleanup;
+        let abort;
+        let abortTransaction;
+        const elses = (0, State_14.default)({ elseIfs: [] });
+        let unuseElses;
+        let unuseOwner;
+        let preserveContents = false;
+        let inserted = false;
+        const hidden = (0, State_14.default)(false);
+        return slot
+            .style.bindProperty('display', hidden.mapManual(hidden => hidden ? 'none' : 'contents'))
+            .extend(slot => ({
+            preserveContents() {
+                if (elses.value.elseIfs.length || elses.value.else)
+                    throw new Error('Cannot preserve contents when using elses');
+                preserveContents = true;
+                return slot;
+            },
+            use: (state, initialiser) => {
+                if (preserveContents)
+                    throw new Error('Cannot "use" when preserving contents');
+                unuse?.();
+                unuse = undefined;
+                abort?.();
+                abort = undefined;
+                abortTransaction?.();
+                abortTransaction = undefined;
+                unuseOwner?.();
+                unuseOwner = undefined;
+                unuseElses?.();
+                unuseElses = undefined;
+                const wasArrayState = Array.isArray(state);
+                if (!wasArrayState)
+                    state = State_14.default.get(state);
+                else {
+                    const owner = State_14.default.Owner.create();
+                    unuseOwner = owner.remove;
+                    state = State_14.default.Map(owner, state, (...outputs) => outputs);
+                }
+                unuse = state.use(slot, value => {
+                    abort?.();
+                    abort = undefined;
+                    cleanup?.();
+                    cleanup = undefined;
+                    abortTransaction?.();
+                    abortTransaction = undefined;
+                    const component = (0, Component_3.default)();
+                    const transaction = (0, ComponentInsertionTransaction_1.default)(component, () => {
+                        slot.removeContents();
+                        slot.append(...component.element.children);
+                        inserted = true;
+                    });
+                    Object.assign(transaction, { closed: component.removed });
+                    abortTransaction = transaction.abort;
+                    handleSlotInitialiserReturn(transaction, wasArrayState
+                        ? initialiser(transaction, ...value)
+                        : initialiser(transaction, value));
+                });
+                return slot;
+            },
+            if: (state, initialiser) => {
+                unuse?.();
+                unuse = undefined;
+                abort?.();
+                abort = undefined;
+                abortTransaction?.();
+                abortTransaction = undefined;
+                unuseOwner?.();
+                unuseOwner = undefined;
+                unuseElses?.();
+                unuseElses = undefined;
+                state.use(slot, value => {
+                    abort?.();
+                    abort = undefined;
+                    cleanup?.();
+                    cleanup = undefined;
+                    abortTransaction?.();
+                    abortTransaction = undefined;
+                    unuseOwner?.();
+                    unuseOwner = undefined;
+                    unuseElses?.();
+                    unuseElses = undefined;
+                    if (!value) {
+                        if (preserveContents) {
+                            hidden.value = true;
+                            return;
+                        }
+                        let unuseElsesList;
+                        const unuseElsesContainer = elses.useManual(elses => {
+                            unuseElsesList = State_14.default.MapManual(elses.elseIfs.map(({ state }) => state), (...elses) => elses.indexOf(true))
+                                .useManual(elseToUse => {
+                                const initialiser = elseToUse === -1 ? elses.else : elses.elseIfs[elseToUse].initialiser;
+                                if (!initialiser) {
+                                    slot.removeContents();
+                                    return;
+                                }
+                                handleSlotInitialiser(initialiser);
+                            });
+                        });
+                        unuseElses = () => {
+                            unuseElsesList?.();
+                            unuseElsesContainer();
+                        };
+                        return;
+                    }
+                    hidden.value = false;
+                    if (preserveContents && inserted)
+                        return;
+                    handleSlotInitialiser(initialiser);
+                });
+                return slot;
+            },
+            elseIf(state, initialiser) {
+                if (preserveContents)
+                    throw new Error('Cannot use else when preserving contents');
+                elses.value.elseIfs.push({ state, initialiser });
+                elses.emit();
+                return slot;
+            },
+            else(initialiser) {
+                if (preserveContents)
+                    throw new Error('Cannot use else when preserving contents');
+                elses.value.else = initialiser;
+                elses.emit();
+                return slot;
+            },
+        }))
+            .tweak(slot => slot.removed.matchManual(true, () => cleanup?.()));
+        function handleSlotInitialiser(initialiser) {
+            const component = (0, Component_3.default)();
+            const transaction = (0, ComponentInsertionTransaction_1.default)(component, () => {
+                slot.removeContents();
+                slot.append(...component.element.children);
+                inserted = true;
+            });
+            Object.assign(transaction, { closed: component.removed });
+            abortTransaction = transaction.abort;
+            handleSlotInitialiserReturn(transaction, initialiser(transaction));
+        }
+        function handleSlotInitialiserReturn(transaction, result) {
+            if (!(result instanceof AbortablePromise_1.default))
+                return handleSlotInitialiserReturnNonPromise(transaction, result || undefined);
+            abort = result.abort;
+            result.then(result => handleSlotInitialiserReturnNonPromise(transaction, result || undefined))
+                .catch(err => console.error('Slot initialiser promise rejection:', err));
+        }
+        function handleSlotInitialiserReturnNonPromise(transaction, result) {
+            result ||= undefined;
+            if (result === slot)
+                result = undefined;
+            transaction.close();
+            abortTransaction = undefined;
+            if (Component_3.default.is(result)) {
+                result.appendTo(slot);
+                inserted = true;
+                cleanup = undefined;
+                return;
+            }
+            if (Component_3.ComponentInsertionDestination.is(result)) {
+                cleanup = undefined;
+                return;
+            }
+            cleanup = result;
+        }
+    }), {
+        using: (value, initialiser) => Slot().use(State_14.default.get(value), initialiser),
+    });
+    exports.default = Slot;
+});
+define("kitsui", ["require", "exports", "kitsui/component/Label", "kitsui/component/Loading", "kitsui/component/Slot", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Label_1, Loading_1, Slot_1, Component_4, State_15) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Kit = exports.State = exports.Component = void 0;
     Label_1 = __importStar(Label_1);
-    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_2).default; } });
-    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_12).default; } });
+    Loading_1 = __importDefault(Loading_1);
+    Slot_1 = __importDefault(Slot_1);
+    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_4).default; } });
+    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_15).default; } });
     var Kit;
     (function (Kit) {
         Kit.Label = Label_1.default;
         Kit.LabelTarget = Label_1.LabelTarget;
+        Kit.Slot = Slot_1.default;
+        Kit.Loading = Loading_1.default;
     })(Kit || (exports.Kit = Kit = {}));
 });
 define("kitsui/utility/ActiveListener", ["require", "exports"], function (require, exports) {
@@ -3546,10 +4032,10 @@ define("kitsui/utility/ActiveListener", ["require", "exports"], function (requir
     exports.default = ActiveListener;
     Object.assign(window, { ActiveListener });
 });
-define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_13) {
+define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_16) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_13 = __importDefault(State_13);
+    State_16 = __importDefault(State_16);
     function Applicator(host, defaultValueOrApply, apply) {
         const defaultValue = !apply ? undefined : defaultValueOrApply;
         apply ??= defaultValueOrApply;
@@ -3558,7 +4044,7 @@ define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State
         return result;
         function makeApplicator(host) {
             return {
-                state: (0, State_13.default)(defaultValue),
+                state: (0, State_16.default)(defaultValue),
                 set: value => {
                     unbind?.();
                     setInternal(value);
@@ -3588,23 +4074,23 @@ define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State
     }
     exports.default = Applicator;
 });
-define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_14) {
+define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_17) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_14 = __importDefault(State_14);
+    State_17 = __importDefault(State_17);
     var BrowserListener;
     (function (BrowserListener) {
-        BrowserListener.isWebkit = (0, State_14.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
+        BrowserListener.isWebkit = (0, State_17.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
     })(BrowserListener || (BrowserListener = {}));
     exports.default = BrowserListener;
 });
-define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_15) {
+define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_18) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_15 = __importDefault(State_15);
+    State_18 = __importDefault(State_18);
     var FontsListener;
     (function (FontsListener) {
-        FontsListener.loaded = (0, State_15.default)(false);
+        FontsListener.loaded = (0, State_18.default)(false);
         async function listen() {
             await document.fonts.ready;
             FontsListener.loaded.asMutable?.setValue(true);
@@ -3665,24 +4151,24 @@ define("kitsui/utility/HoverListener", ["require", "exports", "kitsui/utility/Ar
     exports.default = HoverListener;
     Object.assign(window, { HoverListener });
 });
-define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_16) {
+define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_19) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_16 = __importDefault(State_16);
+    State_19 = __importDefault(State_19);
     var PageListener;
     (function (PageListener) {
-        PageListener.visible = (0, State_16.default)(document.visibilityState === 'visible');
+        PageListener.visible = (0, State_19.default)(document.visibilityState === 'visible');
         document.addEventListener('visibilitychange', () => PageListener.visible.asMutable?.setValue(document.visibilityState === 'visible'));
     })(PageListener || (PageListener = {}));
     exports.default = PageListener;
 });
-define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_17) {
+define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_20) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_17 = __importDefault(State_17);
+    State_20 = __importDefault(State_20);
     const TypeManipulator // Object.assign(
      = function (host, onAdd, onRemove) {
-        const state = (0, State_17.default)(new Set());
+        const state = (0, State_20.default)(new Set());
         return Object.assign(add, {
             state,
             remove,

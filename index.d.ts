@@ -232,7 +232,10 @@ declare module "kitsui/component/Label" {
         setFor(targetName?: string): this;
         setRequired(required?: boolean | State<boolean>): this;
     }
-    interface Label extends Component, LabelExtensions {
+    enum LabelStyleTargets {
+        Label = 0
+    }
+    interface Label extends Component, LabelExtensions, Component.StyleHost<typeof LabelStyleTargets> {
     }
     const Label: Component.Builder<[], Label>;
     export default Label;
@@ -669,6 +672,7 @@ declare module "kitsui/utility/StyleManipulator" {
         toggle(...names: ComponentName[]): HOST;
         toggle(enabled: boolean, ...names: ComponentName[]): HOST;
         bind(state: State.Or<boolean>, ...names: ComponentName[]): HOST;
+        bind(state: State<boolean>, names: State<ComponentName[] | ComponentName | undefined>): HOST;
         bindFrom(state: State<ComponentName[] | ComponentName | undefined>): HOST;
         unbind(state?: State<boolean> | State<ComponentName[] | ComponentName | undefined>): HOST;
         /** Add a combined style when multiple requirement styles are present */
@@ -687,6 +691,7 @@ declare module "kitsui/utility/StyleManipulator" {
     }
     interface StyleManipulatorFunction<HOST> {
         (...names: ComponentName[]): HOST;
+        (...names: State<ComponentName | undefined>[]): HOST;
     }
     interface StyleManipulator<HOST> extends StyleManipulatorFunction<HOST>, StyleManipulatorFunctions<HOST> {
     }
@@ -713,6 +718,7 @@ declare module "kitsui/Component" {
     import type { Mutable } from "kitsui/utility/Objects";
     import State from "kitsui/utility/State";
     import StringApplicator from "kitsui/utility/StringApplicator";
+    import type { ComponentName } from "kitsui/utility/StyleManipulator";
     import StyleManipulator from "kitsui/utility/StyleManipulator";
     import TextManipulator from "kitsui/utility/TextManipulator";
     import type { Falsy } from "kitsui/utility/Type";
@@ -809,6 +815,7 @@ declare module "kitsui/Component" {
         extendJIT<K extends Exclude<keyof this, symbol>, O extends this = this>(property: K, supplier: (component: this) => O[K]): this;
         override<K extends keyof this>(property: K, provider: (component: this, original: this[K]) => this[K]): this;
         tweakJIT<PARAMS extends any[], K extends Exclude<keyof this, symbol>, O extends this = this>(property: K, tweaker: (value: O[K], component: this) => unknown): this;
+        setStyleTargets<STYLE_TARGETS_ENUM>(styleTargetsEnum: STYLE_TARGETS_ENUM): this & Component.StyleHost<STYLE_TARGETS_ENUM>;
         tweak<PARAMS extends any[]>(tweaker?: (component: this, ...params: PARAMS) => unknown, ...params: PARAMS): this;
         disableInsertion(): Omit<this, keyof ComponentInsertionDestination>;
         appendTo(destination: ComponentInsertionDestination | Element): this;
@@ -899,6 +906,16 @@ declare module "kitsui/Component" {
     function Component<PARAMS extends any[], COMPONENT extends Component | undefined>(initial: keyof HTMLElementTagNameMap | (() => Component), builder: (component: Component, ...params: PARAMS) => COMPONENT): Component.Builder<PARAMS, COMPONENT>;
     function Component<PARAMS extends any[], COMPONENT extends Component | undefined>(initial: keyof HTMLElementTagNameMap | (() => Component), builder: (component: Component, ...params: PARAMS) => Promise<COMPONENT>): Component.BuilderAsync<PARAMS, COMPONENT>;
     namespace Component {
+        export interface StyleHost<STYLE> {
+            styleTargets: StyleTargets<this, STYLE> & {
+                [KEY in keyof STYLE]: State<ComponentName | undefined>;
+            };
+        }
+        export interface StyleTargets<HOST, STYLE> {
+            (style: {
+                [KEY in keyof STYLE]: ComponentName | null;
+            }): HOST;
+        }
         export const getBody: () => Component<HTMLElement>;
         export const getDocument: () => Component<HTMLElement>;
         export const getWindow: () => Component<HTMLElement>;
@@ -939,6 +956,9 @@ declare module "kitsui/Component" {
             from<COMPONENT extends Component>(component?: COMPONENT, ...params: PARAMS): COMPONENT & EXT_COMPONENT;
             setName(name: string): this;
             extend<T>(extensionProvider: (component: EXT_COMPONENT & T) => Omit<T, typeof SYMBOL_COMPONENT_BRAND>): EXT_COMPONENT & T;
+            styleTargets(style: EXT_COMPONENT extends StyleHost<infer STYLE> ? {
+                [KEY in keyof STYLE]: ComponentName | null;
+            } : never): this;
         }
         export interface ExtensionAsync<PARAMS extends any[], EXT_COMPONENT extends Component> {
             readonly builderType: 'extension';
@@ -947,6 +967,9 @@ declare module "kitsui/Component" {
             from<COMPONENT extends Component>(component?: COMPONENT, ...params: PARAMS): Promise<COMPONENT & EXT_COMPONENT>;
             setName(name: string): this;
             extend<T>(extensionProvider: (component: EXT_COMPONENT & T) => Omit<T, typeof SYMBOL_COMPONENT_BRAND>): EXT_COMPONENT & T;
+            styleTargets(style: EXT_COMPONENT extends StyleHost<infer STYLE> ? {
+                [KEY in keyof STYLE]: ComponentName | null;
+            } : never): this;
         }
         export function Extension<PARAMS extends any[], COMPONENT extends Component>(builder: (component: Component, ...params: PARAMS) => COMPONENT): Extension<PARAMS, COMPONENT>;
         export function Extension<PARAMS extends any[], COMPONENT extends Component>(builder: (component: Component, ...params: PARAMS) => Promise<COMPONENT>): ExtensionAsync<PARAMS, COMPONENT>;
@@ -970,8 +993,122 @@ declare module "kitsui/Component" {
     }
     export default Component;
 }
+declare module "kitsui/component/Loading" {
+    import Component from "kitsui/Component";
+    import State from "kitsui/utility/State";
+    import type { StringApplicatorSource } from "kitsui/utility/StringApplicator";
+    enum LoadingStyleTargets {
+        Loading = 0,
+        LoadingLoaded = 1,
+        Spinner = 2,
+        ProgressBar = 3,
+        ProgressBarProgressUnknown = 4,
+        MessageText = 5,
+        ErrorIcon = 6,
+        ErrorText = 7
+    }
+    type OnSetHandler<HOST> = (loading: HOST, owner: State.Owner, state: State.Async<unknown, StringApplicatorSource>) => unknown;
+    interface LoadingExtensions extends Loading.LoadedSlotExtensions {
+        readonly spinner: Component;
+        readonly progressBar: Component;
+        readonly messageText: Component;
+        readonly errorIcon: Component;
+        readonly errorText: Component;
+        set<T>(state: State.Async<T, StringApplicatorSource>, initialiser: (slot: Loading.LoadedSlot, value: T) => unknown): this;
+        set<T>(load: (signal: AbortSignal, setProgress: (progress: number | null, details?: StringApplicatorSource) => void) => Promise<T>, initialiser: (slot: Loading.LoadedSlot, value: T) => unknown): this;
+        onSet(handler: OnSetHandler<this>): this;
+    }
+    interface Loading extends Component, LoadingExtensions, Component.StyleHost<typeof LoadingStyleTargets> {
+    }
+    namespace Loading {
+        interface LoadedSlotExtensions {
+            refresh(): this;
+        }
+        interface LoadedSlot extends Component, LoadedSlotExtensions {
+        }
+    }
+    const Loading: Component.Builder<[], Loading>;
+    export default Loading;
+}
+declare module "kitsui/ext/ComponentInsertionTransaction" {
+    import type Component from "kitsui/Component";
+    import type { ComponentInsertionDestination } from "kitsui/Component";
+    import State from "kitsui/utility/State";
+    interface ComponentInsertionTransaction extends ComponentInsertionDestination {
+        readonly closed: State<boolean>;
+        readonly size: number;
+        abort(): void;
+        close(): void;
+    }
+    function ComponentInsertionTransaction(component?: Component, onEnd?: (transaction: ComponentInsertionTransaction) => unknown): ComponentInsertionTransaction;
+    export default ComponentInsertionTransaction;
+}
+declare module "kitsui/utility/AbortablePromise" {
+    export type AbortablePromiseOr<T> = T | AbortablePromise<T>;
+    class AbortablePromise<T> extends Promise<T> {
+        #private;
+        /**
+         * Note that `signal` is not handled for you.
+         * If you need to resolve or reject on abort, you will need to add an abort listener.
+         */
+        constructor(executor: (resolve: (value: T | PromiseLike<T>) => void, reject: (reason?: any) => void, signal: AbortSignal) => void);
+        /**
+         * Sends an abort signal to the promise handler
+         */
+        abort(): void;
+    }
+    namespace AbortablePromise {
+        function asyncFunction<A extends any[], R>(asyncFunction: (signal: AbortSignal, ...args: A) => Promise<R>): (...args: A) => AbortablePromise<R>;
+    }
+    export default AbortablePromise;
+}
+declare module "kitsui/component/Slot" {
+    import Component, { ComponentInsertionDestination } from "kitsui/Component";
+    import ComponentInsertionTransaction from "kitsui/ext/ComponentInsertionTransaction";
+    import type { AbortablePromiseOr } from "kitsui/utility/AbortablePromise";
+    import State from "kitsui/utility/State";
+    import type { Falsy } from "kitsui/utility/Type";
+    interface SlotComponentExtensions {
+        hasContent(): boolean;
+        appendWhen(state: State<boolean>, ...contents: (Component | Node | Falsy)[]): this;
+        prependWhen(state: State<boolean>, ...contents: (Component | Node | Falsy)[]): this;
+        insertWhen(state: State<boolean>, direction: 'before' | 'after', sibling: Component | Element | undefined, ...contents: (Component | Node | Falsy)[]): this;
+        appendToWhen(state: State<boolean>, destination: ComponentInsertionDestination | Element): this;
+        prependToWhen(state: State<boolean>, destination: ComponentInsertionDestination | Element): this;
+        insertToWhen(state: State<boolean>, destination: ComponentInsertionDestination | Element, direction: 'before' | 'after', sibling?: Component | Element): this;
+    }
+    module "kitsui/Component" {
+        interface ComponentExtensions extends SlotComponentExtensions {
+        }
+    }
+    interface SlotIfElseExtensions {
+        elseIf(state: State<boolean>, initialiser: Slot.Initialiser): this;
+        else(initialiser: Slot.Initialiser): this;
+    }
+    interface SlotExtensions {
+        use<const STATES extends State<any>[]>(states: STATES, initialiser: (slot: ComponentInsertionTransaction, ...values: {
+            [INDEX in keyof STATES]: STATES[INDEX] extends State<infer T> ? T : never;
+        }) => Slot.InitialiserReturn): this;
+        use<T>(state: T | State<T>, initialiser: (slot: ComponentInsertionTransaction, value: T) => Slot.InitialiserReturn): this;
+        if(state: State<boolean>, initialiser: Slot.Initialiser): this & SlotIfElseExtensions;
+        preserveContents(): this;
+    }
+    interface Slot extends Component, SlotExtensions {
+    }
+    namespace Slot {
+        type Cleanup = () => unknown;
+        type Initialiser = (slot: ComponentInsertionTransaction) => Slot.InitialiserReturn;
+        type InitialiserReturn = AbortablePromiseOr<Slot.Cleanup | Component | ComponentInsertionTransaction | undefined | null | false | 0 | '' | void>;
+    }
+    const Slot: Component.Builder<[], Slot> & {
+        using: <T>(value: T | State<T>, initialiser: (transaction: ComponentInsertionTransaction, value: T) => Slot.InitialiserReturn) => Slot;
+    };
+    export default Slot;
+}
 declare module "kitsui" {
     import _Label, { LabelTarget as _LabelTarget } from "kitsui/component/Label";
+    import _Loading from "kitsui/component/Loading";
+    import _Slot from "kitsui/component/Slot";
     export { default as Component } from "kitsui/Component";
     export { default as State } from "kitsui/utility/State";
     export namespace Kit {
@@ -979,6 +1116,12 @@ declare module "kitsui" {
         const Label: import("kitsui/Component").default.Builder<[], _Label>;
         type LabelTarget = _LabelTarget;
         const LabelTarget: import("kitsui/Component").default.Extension<[], import("kitsui/Component").default<HTMLElement>>;
+        type Slot = _Slot;
+        const Slot: import("kitsui/Component").default.Builder<[], _Slot> & {
+            using: <T>(value: T | import("kitsui/utility/State").default<T>, initialiser: (transaction: import("kitsui/ext/ComponentInsertionTransaction").default, value: T) => _Slot.InitialiserReturn) => _Slot;
+        };
+        type Loading = _Loading;
+        const Loading: import("kitsui/Component").default.Builder<[], _Loading>;
     }
 }
 declare module "kitsui/utility/ActiveListener" {
