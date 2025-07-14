@@ -13,6 +13,7 @@ import { DefineMagic, DefineProperty, mutable } from 'utility/Objects'
 import State from 'utility/State'
 import StringApplicator from 'utility/StringApplicator'
 import Strings from 'utility/Strings'
+import type { ComponentName } from 'utility/StyleManipulator'
 import StyleManipulator from 'utility/StyleManipulator'
 import TextManipulator from 'utility/TextManipulator'
 import type { Falsy } from 'utility/Type'
@@ -154,6 +155,7 @@ interface BaseComponent<ELEMENT extends HTMLElement = HTMLElement> extends Compo
 	extendJIT<K extends Exclude<keyof this, symbol>, O extends this = this> (property: K, supplier: (component: this) => O[K]): this
 	override<K extends keyof this> (property: K, provider: (component: this, original: this[K]) => this[K]): this
 	tweakJIT<PARAMS extends any[], K extends Exclude<keyof this, symbol>, O extends this = this> (property: K, tweaker: (value: O[K], component: this) => unknown): this
+	setStyleTargets<STYLE_TARGETS_ENUM> (styleTargetsEnum: STYLE_TARGETS_ENUM): this & Component.StyleHost<STYLE_TARGETS_ENUM>
 
 	tweak<PARAMS extends any[]> (tweaker?: (component: this, ...params: PARAMS) => unknown, ...params: PARAMS): this
 
@@ -400,6 +402,22 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
 			tweaker?.(component, ...params)
 			return component
+		},
+
+		setStyleTargets (styleEnum) {
+			const keys = Object.keys(styleEnum as never).filter(key => isNaN(+key))
+			for (const key of keys)
+				(component as Component & Component.StyleHost<Record<string, true>>).styleTargets[key] = State(undefined)
+			return component as never
+		},
+		...{
+			// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+			styleTargets (style: Record<string, ComponentName | null>) {
+				for (const [key, name] of Object.entries(style))
+					// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/no-redundant-type-constituents
+					(component as Component & Component.StyleHost<Record<string, true>>).styleTargets[key].asMutable?.setValue(name as ComponentName | null ?? undefined)
+				return component
+			},
 		},
 
 		get style () {
@@ -903,6 +921,16 @@ function emitRemove (component: Component | undefined) {
 let canBuildComponents = false
 namespace Component {
 
+	export interface StyleHost<STYLE> {
+		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+		styleTargets: StyleTargets<this, STYLE> & { [KEY in keyof STYLE]: State<ComponentName | undefined> }
+	}
+
+	export interface StyleTargets<HOST, STYLE> {
+		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+		(style: { [KEY in keyof STYLE]: ComponentName | null }): HOST
+	}
+
 	let bodyComponent: Component | undefined, documentComponent: Component | undefined, windowComponent: Component | undefined
 	export const getBody = () => bodyComponent ??= wrap(document.body)
 	export const getDocument = () => documentComponent ??= wrap(document.documentElement)
@@ -1014,6 +1042,13 @@ namespace Component {
 				extensions.push(extensionProvider)
 				return resultBuilder
 			},
+			// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+			styleTargets (style: Record<string, ComponentName | null>) {
+				extensions.push(component => {
+					(component as Component & StyleHost<Record<string, true>>).styleTargets(style)
+				})
+				return resultBuilder
+			},
 		})
 		return resultBuilder
 
@@ -1063,6 +1098,8 @@ namespace Component {
 		from<COMPONENT extends Component> (component?: COMPONENT, ...params: PARAMS): COMPONENT & EXT_COMPONENT
 		setName (name: string): this
 		extend<T> (extensionProvider: (component: EXT_COMPONENT & T) => Omit<T, typeof SYMBOL_COMPONENT_BRAND>): EXT_COMPONENT & T
+		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+		styleTargets (style: EXT_COMPONENT extends StyleHost<infer STYLE> ? { [KEY in keyof STYLE]: ComponentName | null } : never): this
 	}
 
 	export interface ExtensionAsync<PARAMS extends any[], EXT_COMPONENT extends Component> {
@@ -1072,6 +1109,8 @@ namespace Component {
 		from<COMPONENT extends Component> (component?: COMPONENT, ...params: PARAMS): Promise<COMPONENT & EXT_COMPONENT>
 		setName (name: string): this
 		extend<T> (extensionProvider: (component: EXT_COMPONENT & T) => Omit<T, typeof SYMBOL_COMPONENT_BRAND>): EXT_COMPONENT & T
+		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+		styleTargets (style: EXT_COMPONENT extends StyleHost<infer STYLE> ? { [KEY in keyof STYLE]: ComponentName | null } : never): this
 	}
 
 	export function Extension<PARAMS extends any[], COMPONENT extends Component> (builder: (component: Component, ...params: PARAMS) => COMPONENT): Extension<PARAMS, COMPONENT>

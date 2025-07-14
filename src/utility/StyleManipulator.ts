@@ -22,6 +22,8 @@ interface StyleManipulatorFunctions<HOST> {
 	toggle (enabled: boolean, ...names: ComponentName[]): HOST
 	bind (state: State.Or<boolean>, ...names: ComponentName[]): HOST
 	// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+	bind (state: State<boolean>, names: State<ComponentName[] | ComponentName | undefined>): HOST
+	// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 	bindFrom (state: State<ComponentName[] | ComponentName | undefined>): HOST
 	// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 	unbind (state?: State<boolean> | State<ComponentName[] | ComponentName | undefined>): HOST
@@ -43,6 +45,7 @@ interface StyleManipulatorFunctions<HOST> {
 
 interface StyleManipulatorFunction<HOST> {
 	(...names: ComponentName[]): HOST
+	(...names: State<ComponentName | undefined>[]): HOST
 }
 
 interface StyleManipulator<HOST> extends StyleManipulatorFunction<HOST>, StyleManipulatorFunctions<HOST> {
@@ -67,9 +70,13 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 	style.subscribe(component, () => updateClasses())
 
 	const result: StyleManipulator<Component> = Object.assign(
-		((...names) => {
+		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+		((...names: string[] | State<ComponentName | undefined>[]) => {
 			for (const name of names)
-				styles.add(name)
+				if (typeof name === 'string')
+					styles.add(name as ComponentName)
+				else
+					result.bindFrom(name)
 			updateClasses()
 			return component
 		}) as StyleManipulatorFunction<Component>,
@@ -100,7 +107,33 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 				updateClasses()
 				return component
 			},
-			bind (state, ...names) {
+			bind (state, ...toAdd) {
+				if (State.is(toAdd[0])) {
+					const bstate = state as State<boolean>
+					result.unbind(bstate)
+
+					const owner = State.Owner.create()
+					const currentNames: ComponentName[] = []
+					State.Use(owner, { state: bstate, names: toAdd[0] }).use(owner, ({ state, names }, { state: oldState, names: oldNames } = { state: false, names: undefined }) => {
+						oldNames = oldNames && oldState ? Array.isArray(oldNames) ? oldNames : [oldNames] : []
+						names = names && state ? Array.isArray(names) ? names : [names] : []
+
+						for (const oldName of oldNames ?? [])
+							styles.delete(oldName)
+
+						for (const name of names)
+							styles.add(name)
+
+						currentNames.splice(0, Infinity, ...names)
+						updateClasses()
+					})
+
+					stateUnsubscribers.set(bstate, [owner.remove, currentNames])
+					return component
+				}
+
+				const names = toAdd as ComponentName[]
+
 				if (!State.is(state))
 					return result.toggle(state, ...names)
 

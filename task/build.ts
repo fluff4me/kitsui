@@ -18,7 +18,7 @@ export default Task('build', async task => {
 			return `define("${name}", ["require", "exports"${imports}]`
 		})
 	dts = dts
-		.replace(/declare module "(?!kitsui)/g, 'declare module "kitsui/')
+		.replace(/module "(?!kitsui)/g, 'module "kitsui/')
 		.replace(/from "(?!kitsui)/g, 'from "kitsui/')
 		.replace(/import\("(?!kitsui)/g, 'import("kitsui/')
 

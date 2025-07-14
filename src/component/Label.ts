@@ -11,7 +11,11 @@ interface LabelExtensions {
 	setRequired (required?: boolean | State<boolean>): this
 }
 
-interface Label extends Component, LabelExtensions { }
+enum LabelStyleTargets {
+	Label,
+}
+
+interface Label extends Component, LabelExtensions, Component.StyleHost<typeof LabelStyleTargets> { }
 
 const Label = Component('label', (label): Label => {
 	const textWrapper = Component()
@@ -20,6 +24,7 @@ const Label = Component('label', (label): Label => {
 	let requiredOwner: State.Owner.Removable | undefined
 	let unuseTarget: State.Unsubscribe | undefined
 	return label
+		.setStyleTargets(LabelStyleTargets)
 		.extend<LabelExtensions>(label => ({
 			textWrapper,
 			for: State(undefined),
