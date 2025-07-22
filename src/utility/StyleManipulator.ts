@@ -22,7 +22,7 @@ interface StyleManipulatorFunctions<HOST> {
 	toggle (enabled: boolean, ...names: ComponentName[]): HOST
 	bind (state: State.Or<boolean>, ...names: ComponentName[]): HOST
 	// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
-	bind (state: State<boolean>, names: State<ComponentName[] | ComponentName | undefined>): HOST
+	bind (state: State.Or<boolean>, names: State<ComponentName[] | ComponentName | undefined>): HOST
 	// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 	bindFrom (state: State<ComponentName[] | ComponentName | undefined>): HOST
 	// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
@@ -109,12 +109,14 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 			},
 			bind (state, ...toAdd) {
 				if (State.is(toAdd[0])) {
-					const bstate = state as State<boolean>
+					const stateBool = State.is(state) ? undefined : state
+					const bstate = State.is(state) ? state : undefined
 					result.unbind(bstate)
 
 					const owner = State.Owner.create()
 					const currentNames: ComponentName[] = []
 					State.Use(owner, { state: bstate, names: toAdd[0] }).use(owner, ({ state, names }, { state: oldState, names: oldNames } = { state: false, names: undefined }) => {
+						oldState ??= stateBool
 						oldNames = oldNames && oldState ? Array.isArray(oldNames) ? oldNames : [oldNames] : []
 						names = names && state ? Array.isArray(names) ? names : [names] : []
 
@@ -128,7 +130,8 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 						updateClasses()
 					})
 
-					stateUnsubscribers.set(bstate, [owner.remove, currentNames])
+					if (bstate)
+						stateUnsubscribers.set(bstate, [owner.remove, currentNames])
 					return component
 				}
 
