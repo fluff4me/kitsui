@@ -2488,11 +2488,13 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
             },
             bind(state, ...toAdd) {
                 if (State_10.default.is(toAdd[0])) {
-                    const bstate = state;
+                    const stateBool = State_10.default.is(state) ? undefined : state;
+                    const bstate = State_10.default.is(state) ? state : undefined;
                     result.unbind(bstate);
                     const owner = State_10.default.Owner.create();
                     const currentNames = [];
                     State_10.default.Use(owner, { state: bstate, names: toAdd[0] }).use(owner, ({ state, names }, { state: oldState, names: oldNames } = { state: false, names: undefined }) => {
+                        oldState ??= stateBool;
                         oldNames = oldNames && oldState ? Array.isArray(oldNames) ? oldNames : [oldNames] : [];
                         names = names && state ? Array.isArray(names) ? names : [names] : [];
                         for (const oldName of oldNames ?? [])
@@ -2502,7 +2504,8 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
                         currentNames.splice(0, Infinity, ...names);
                         updateClasses();
                     });
-                    stateUnsubscribers.set(bstate, [owner.remove, currentNames]);
+                    if (bstate)
+                        stateUnsubscribers.set(bstate, [owner.remove, currentNames]);
                     return component;
                 }
                 const names = toAdd;
@@ -3549,9 +3552,11 @@ define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "k
         const messageText = (0, Component_2.default)().style(style.MessageText);
         const errorIcon = (0, Component_2.default)().style(style.ErrorIcon);
         const errorText = (0, Component_2.default)().style(style.ErrorText);
+        const loaded = (0, State_12.default)(false);
         let owner;
         let refresh;
         const onSetHandlers = [];
+        const onLoadHandlers = [];
         return loading.style(style.Loading)
             .extend(loading => ({
             spinner,
@@ -3559,40 +3564,66 @@ define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "k
             messageText,
             errorIcon,
             errorText,
+            loaded,
             refresh() {
                 refresh?.();
                 return this;
             },
-            set(state, initialiser) {
+            set(stateIn, initialiser) {
                 owner?.remove();
                 owner = State_12.default.Owner.create();
-                if (typeof state === 'function')
-                    state = State_12.default.Async(owner, state);
+                loaded.value = false;
+                const state = typeof stateIn !== 'function' ? stateIn : State_12.default.Async(owner, stateIn);
                 refresh = state.refresh;
-                loading.style.bind(state.settled, style.LoadingLoaded);
-                progressBar
-                    .style.bind(state.progress.map(owner, progress => progress?.progress === null), style.ProgressBarProgressUnknown)
-                    .style.bindVariable('progress', state.progress.map(owner, progress => progress?.progress ?? 1));
-                messageText.text.bind(state.progress.map(owner, progress => progress?.details));
+                updateDisplays();
+                state.settled.subscribe(owner, updateDisplays);
+                state.progress.subscribe(owner, updateDisplays);
                 state.state.use(owner, state => {
-                    storage.append(spinner, progressBar, messageText, errorIcon, errorText);
-                    loading.removeContents();
                     if (!state.settled) {
+                        clearContents();
                         loading.append(spinner, progressBar, messageText);
                         return;
                     }
                     if (state.error) {
+                        clearContents();
                         loading.append(errorIcon, errorText);
                         return;
                     }
-                    initialiser(loading, state.value);
+                    let loadHandlerIndex = 0;
+                    function runNextLoadHandler() {
+                        const loadHandler = onLoadHandlers[loadHandlerIndex];
+                        if (!loadHandler) {
+                            clearContents();
+                            loaded.value = true;
+                            initialiser(loading, state.value);
+                            return;
+                        }
+                        loadHandlerIndex++;
+                        return loadHandler(loading, runNextLoadHandler);
+                    }
+                    runNextLoadHandler();
                 });
                 for (const handler of onSetHandlers)
                     handler(loading, owner, state);
                 return loading;
+                function clearContents() {
+                    storage.append(spinner, progressBar, messageText, errorIcon, errorText);
+                    loading.removeContents();
+                }
+                function updateDisplays() {
+                    loading.style.bind(state.settled.value, style.LoadingLoaded);
+                    messageText.text.set(state.progress.value?.details);
+                    progressBar
+                        .style.bind(state.progress.value?.progress === null, style.ProgressBarProgressUnknown)
+                        .style.setVariable('progress', state.progress.value?.progress ?? 1);
+                }
             },
             onSet(handler) {
                 onSetHandlers.push(handler);
+                return loading;
+            },
+            onLoad(handler) {
+                onLoadHandlers.push(handler);
                 return loading;
             },
         }))

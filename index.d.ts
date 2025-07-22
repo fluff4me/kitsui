@@ -672,7 +672,7 @@ declare module "kitsui/utility/StyleManipulator" {
         toggle(...names: ComponentName[]): HOST;
         toggle(enabled: boolean, ...names: ComponentName[]): HOST;
         bind(state: State.Or<boolean>, ...names: ComponentName[]): HOST;
-        bind(state: State<boolean>, names: State<ComponentName[] | ComponentName | undefined>): HOST;
+        bind(state: State.Or<boolean>, names: State<ComponentName[] | ComponentName | undefined>): HOST;
         bindFrom(state: State<ComponentName[] | ComponentName | undefined>): HOST;
         unbind(state?: State<boolean> | State<ComponentName[] | ComponentName | undefined>): HOST;
         /** Add a combined style when multiple requirement styles are present */
@@ -1008,15 +1008,18 @@ declare module "kitsui/component/Loading" {
         ErrorText = 7
     }
     type OnSetHandler<HOST> = (loading: HOST, owner: State.Owner, state: State.Async<unknown, StringApplicatorSource>) => unknown;
+    type OnLoadHandler<HOST> = (loading: HOST, displayLoaded: () => unknown) => unknown;
     interface LoadingExtensions extends Loading.LoadedSlotExtensions {
         readonly spinner: Component;
         readonly progressBar: Component;
         readonly messageText: Component;
         readonly errorIcon: Component;
         readonly errorText: Component;
+        readonly loaded: State<boolean>;
         set<T>(state: State.Async<T, StringApplicatorSource>, initialiser: (slot: Loading.LoadedSlot, value: T) => unknown): this;
         set<T>(load: (signal: AbortSignal, setProgress: (progress: number | null, details?: StringApplicatorSource) => void) => Promise<T>, initialiser: (slot: Loading.LoadedSlot, value: T) => unknown): this;
         onSet(handler: OnSetHandler<this>): this;
+        onLoad(handler: OnLoadHandler<this>): this;
     }
     interface Loading extends Component, LoadingExtensions, Component.StyleHost<typeof LoadingStyleTargets> {
     }
