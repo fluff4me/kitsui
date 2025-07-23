@@ -967,12 +967,15 @@ namespace Component {
 
 	export type BuilderLike<PARAMS extends any[] = any[], COMPONENT extends Component = Component> = Builder<PARAMS, COMPONENT> | Extension<PARAMS, COMPONENT>
 
-	export interface Builder<PARAMS extends any[], BUILD_COMPONENT extends Component | undefined> extends Omit<Extension<PARAMS, Exclude<BUILD_COMPONENT, undefined>>, 'setName' | 'builderType' | 'extend' | typeof SYMBOL_COMPONENT_TYPE_BRAND> {
+	export interface BuilderExtensions<PARAMS extends any[], BUILD_COMPONENT extends Component | undefined> extends Omit<Extension<PARAMS, Exclude<BUILD_COMPONENT, undefined>>, 'setName' | 'builderType' | 'extend' | typeof SYMBOL_COMPONENT_TYPE_BRAND> {
 		readonly builderType: 'builder'
 		readonly [SYMBOL_COMPONENT_TYPE_BRAND]: BUILD_COMPONENT
-		(...params: PARAMS): BUILD_COMPONENT
 		setName (name: string): this
 		extend<T> (extensionProvider: (component: BUILD_COMPONENT & T) => Omit<T, typeof SYMBOL_COMPONENT_BRAND>): BUILD_COMPONENT & T
+	}
+
+	export interface Builder<PARAMS extends any[], BUILD_COMPONENT extends Component | undefined> extends BuilderExtensions<PARAMS, BUILD_COMPONENT> {
+		(...params: PARAMS): BUILD_COMPONENT
 	}
 
 	export interface BuilderAsync<PARAMS extends any[], BUILD_COMPONENT extends Component | undefined> extends Omit<ExtensionAsync<PARAMS, Exclude<BUILD_COMPONENT, undefined>>, 'setName' | 'builderType' | 'extend' | typeof SYMBOL_COMPONENT_TYPE_BRAND> {
