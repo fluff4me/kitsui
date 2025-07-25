@@ -851,7 +851,7 @@ define("kitsui/component/Label", ["require", "exports", "kitsui/Component", "kit
         let requiredOwner;
         let unuseTarget;
         return label
-            .setStyleTargets(LabelStyleTargets)
+            .addStyleTargets(LabelStyleTargets)
             .extend(label => ({
             textWrapper,
             for: (0, State_1.default)(undefined),
@@ -1395,102 +1395,32 @@ define("kitsui/utility/Time", ["require", "exports", "kitsui/utility/Strings"], 
     Object.assign(window, { Time });
     exports.default = Time;
 });
-define("kitsui/utility/Task", ["require", "exports", "kitsui/utility/Time"], function (require, exports, Time_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    Time_1 = __importDefault(Time_1);
-    const DEFAULT_INTERVAL = Time_1.default.seconds(1) / 144;
-    class Task {
-        interval;
-        static async yield(instantIfUnsupported = false) {
-            if (typeof scheduler !== 'undefined' && typeof scheduler.yield === 'function')
-                return scheduler.yield();
-            if (!instantIfUnsupported)
-                await new Promise(resolve => setTimeout(resolve, 0));
-        }
-        static post(callback, priority) {
-            if (typeof scheduler === 'undefined' || typeof scheduler.postTask !== 'function')
-                return callback();
-            return scheduler.postTask(callback, { priority });
-        }
-        lastYieldEnd = Date.now();
-        constructor(interval = DEFAULT_INTERVAL) {
-            this.interval = interval;
-        }
-        reset() {
-            this.lastYieldEnd = Date.now();
-        }
-        async yield(instantIfUnsupported = false) {
-            if (Date.now() - this.lastYieldEnd > this.interval) {
-                await Task.yield(instantIfUnsupported);
-                this.lastYieldEnd = Date.now();
-            }
-        }
-    }
-    exports.default = Task;
-});
-define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "kitsui/utility/Task"], function (require, exports, State_3, Task_1) {
+define("kitsui/utility/Viewport", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_3 = __importDefault(State_3);
-    Task_1 = __importDefault(Task_1);
-    var Style;
-    (function (Style) {
-        Style.properties = State_3.default.JIT(() => window.getComputedStyle(document.documentElement));
-        const measured = {};
-        function measure(property) {
-            if (measured[property])
-                return measured[property];
-            return Style.properties.mapManual(properties => {
-                const value = properties.getPropertyValue(property);
-                const element = document.createElement('div');
-                element.style.width = value;
-                element.style.pointerEvents = 'none';
-                element.style.opacity = '0';
-                element.style.position = 'fixed';
-                document.body.appendChild(element);
-                const state = measured[property] = (0, State_3.default)(0);
-                void Task_1.default.yield().then(() => {
-                    state.value = element.clientWidth;
-                    element.remove();
-                });
-                return measured[property];
-            });
-        }
-        Style.measure = measure;
-    })(Style || (Style = {}));
-    exports.default = Style;
-});
-define("kitsui/utility/Viewport", ["require", "exports", "kitsui/utility/State", "kitsui/utility/Style"], function (require, exports, State_4, Style_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    State_4 = __importDefault(State_4);
-    Style_1 = __importDefault(Style_1);
     var Viewport;
     (function (Viewport) {
-        Viewport.size = State_4.default.JIT(() => ({ w: window.innerWidth, h: window.innerHeight }));
-        Viewport.mobile = State_4.default.JIT(owner => {
-            const contentWidth = Style_1.default.measure('--content-width');
-            const result = Viewport.size.value.w < contentWidth.value;
-            contentWidth.subscribe(owner, Viewport.mobile.markDirty);
+        Viewport.size = State_3.default.JIT(() => ({ w: window.innerWidth, h: window.innerHeight }));
+        Viewport.mobile = State_3.default.JIT(owner => {
+            const contentWidth = 800;
+            const result = Viewport.size.value.w < contentWidth;
             Viewport.size.subscribe(owner, Viewport.mobile.markDirty);
             return result;
         });
-        Viewport.tablet = State_4.default.JIT(owner => {
-            const tabletWidth = Style_1.default.measure('--tablet-width');
-            const result = Viewport.size.value.w < tabletWidth.value;
-            tabletWidth.subscribe(owner, Viewport.tablet.markDirty);
+        Viewport.tablet = State_3.default.JIT(owner => {
+            const tabletWidth = 1200;
+            const result = Viewport.size.value.w < tabletWidth;
             Viewport.size.subscribe(owner, Viewport.tablet.markDirty);
             return result;
         });
-        Viewport.laptop = State_4.default.JIT(owner => {
-            const laptopWidth = Style_1.default.measure('--laptop-width');
-            const result = Viewport.size.value.w < laptopWidth.value;
-            laptopWidth.subscribe(owner, Viewport.laptop.markDirty);
+        Viewport.laptop = State_3.default.JIT(owner => {
+            const laptopWidth = 1600;
+            const result = Viewport.size.value.w < laptopWidth;
             Viewport.size.subscribe(owner, Viewport.laptop.markDirty);
             return result;
         });
-        Viewport.state = State_4.default.JIT(owner => {
+        Viewport.state = State_3.default.JIT(owner => {
             const result = Viewport.mobile.value ? 'mobile' : Viewport.tablet.value ? 'tablet' : Viewport.laptop.value ? 'laptop' : 'desktop';
             Viewport.mobile.subscribe(owner, Viewport.state.markDirty);
             Viewport.tablet.subscribe(owner, Viewport.state.markDirty);
@@ -1504,13 +1434,13 @@ define("kitsui/utility/Viewport", ["require", "exports", "kitsui/utility/State",
     })(Viewport || (Viewport = {}));
     exports.default = Viewport;
 });
-define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utility/Mouse", "kitsui/utility/State", "kitsui/utility/Time", "kitsui/utility/Viewport"], function (require, exports, Mouse_1, State_5, Time_2, Viewport_1) {
+define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utility/Mouse", "kitsui/utility/State", "kitsui/utility/Time", "kitsui/utility/Viewport"], function (require, exports, Mouse_1, State_4, Time_1, Viewport_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.AllowXOffscreen = exports.AllowYOffscreen = exports.ANCHOR_LOCATION_ALIGNMENTS = exports.ANCHOR_SIDE_VERTICAL = exports.ANCHOR_SIDE_HORIZONTAL = exports.ANCHOR_TYPES = void 0;
     Mouse_1 = __importDefault(Mouse_1);
-    State_5 = __importDefault(State_5);
-    Time_2 = __importDefault(Time_2);
+    State_4 = __importDefault(State_4);
+    Time_1 = __importDefault(Time_1);
     Viewport_1 = __importDefault(Viewport_1);
     ////////////////////////////////////
     //#region Anchor Strings
@@ -1569,7 +1499,7 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
     function AnchorManipulator(host) {
         let locationPreference;
         let refCache;
-        const location = (0, State_5.default)(undefined);
+        const location = (0, State_4.default)(undefined);
         let currentAlignment;
         let from;
         let lastRender = 0;
@@ -1577,6 +1507,7 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
         const subscribed = [];
         const addSubscription = (use) => use && subscribed.push(use);
         let unuseFrom;
+        let renderId = 0;
         const result = {
             state: location,
             isMouse: () => !locationPreference?.length,
@@ -1626,10 +1557,10 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                 location.value = undefined;
                 if (lastRender) {
                     const timeSinceLastRender = Date.now() - lastRender;
-                    if (timeSinceLastRender > Time_2.default.frame)
+                    if (timeSinceLastRender > Time_1.default.frame)
                         result.apply();
                     else if (rerenderTimeout === undefined)
-                        rerenderTimeout = window.setTimeout(result.apply, Time_2.default.frame - timeSinceLastRender);
+                        rerenderTimeout = window.setTimeout(result.apply, Time_1.default.frame - timeSinceLastRender);
                 }
                 return host;
             },
@@ -1735,6 +1666,16 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                 host.element.style.left = `${location.x}px`;
                 host.element.style.top = `${location.y}px`;
                 host.rect.markDirty();
+                if (!location.mouse) {
+                    const id = ++renderId;
+                    host.style.setProperty('display', 'none');
+                    host.style.setProperty('transition-duration', '0s');
+                    void new Promise(resolve => setTimeout(resolve, 50)).then(() => {
+                        if (renderId !== id)
+                            return;
+                        host.style.removeProperties('display', 'transition-duration');
+                    });
+                }
                 rerenderTimeout = undefined;
                 lastRender = Date.now();
                 return host;
@@ -1788,18 +1729,18 @@ define("kitsui/utility/Maps", ["require", "exports"], function (require, exports
     })(Maps || (Maps = {}));
     exports.default = Maps;
 });
-define("kitsui/utility/StringApplicator", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/State"], function (require, exports, Arrays_2, State_6) {
+define("kitsui/utility/StringApplicator", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/State"], function (require, exports, Arrays_2, State_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.StringApplicatorSource = void 0;
-    State_6 = __importDefault(State_6);
+    State_5 = __importDefault(State_5);
     let cumulativeSourceRequiredState;
     var StringApplicatorSource;
     (function (StringApplicatorSource) {
         StringApplicatorSource.REGISTRY = {};
         function register(source, value) {
             StringApplicatorSource.REGISTRY[source] = value;
-            cumulativeSourceRequiredState = State_6.default.MapManual(Object.values(StringApplicatorSource.REGISTRY).map(def => def.requiredState).filter(Arrays_2.NonNullish), () => null, false);
+            cumulativeSourceRequiredState = State_5.default.MapManual(Object.values(StringApplicatorSource.REGISTRY).map(def => def.requiredState).filter(Arrays_2.NonNullish), () => null, false);
         }
         StringApplicatorSource.register = register;
         function toString(source) {
@@ -1834,7 +1775,7 @@ define("kitsui/utility/StringApplicator", ["require", "exports", "kitsui/utility
                 applicator(source);
                 return;
             }
-            const subOwner = State_6.default.Owner.create();
+            const subOwner = State_5.default.Owner.create();
             cumulativeSourceRequiredState?.use(subOwner, () => applicator(source));
             return subOwner.remove;
         }
@@ -1845,13 +1786,13 @@ define("kitsui/utility/StringApplicator", ["require", "exports", "kitsui/utility
         let unown;
         let subUnown;
         let removed = false;
-        const state = (0, State_6.default)(defaultValue);
+        const state = (0, State_5.default)(defaultValue);
         const result = makeApplicator(host);
         const setInternal = set.bind(null, result);
         return result;
         function makeApplicator(host) {
             const hostOwner = host;
-            State_6.default.Owner.getRemovedState(host)?.matchManual(true, () => {
+            State_5.default.Owner.getRemovedState(host)?.matchManual(true, () => {
                 removed = true;
                 unbind?.();
                 unbind = undefined;
@@ -1887,7 +1828,7 @@ define("kitsui/utility/StringApplicator", ["require", "exports", "kitsui/utility
                         setInternal(defaultValue);
                         return host;
                     }
-                    if (!State_6.default.is(state)) {
+                    if (!State_5.default.is(state)) {
                         setInternal(state);
                         return host;
                     }
@@ -1942,17 +1883,17 @@ define("kitsui/utility/StringApplicator", ["require", "exports", "kitsui/utility
     })(StringApplicator || (StringApplicator = {}));
     exports.default = StringApplicator;
 });
-define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/utility/Maps", "kitsui/utility/State", "kitsui/utility/StringApplicator"], function (require, exports, Maps_1, State_7, StringApplicator_1) {
+define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/utility/Maps", "kitsui/utility/State", "kitsui/utility/StringApplicator"], function (require, exports, Maps_1, State_6, StringApplicator_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Maps_1 = __importDefault(Maps_1);
-    State_7 = __importDefault(State_7);
+    State_6 = __importDefault(State_6);
     function AttributeManipulator(component) {
         let removed = false;
         let translationHandlers;
         const unuseAttributeMap = new Map();
         const attributeStates = new Map();
-        State_7.default.Owner.getRemovedState(component)?.matchManual(true, () => {
+        State_6.default.Owner.getRemovedState(component)?.matchManual(true, () => {
             removed = true;
             for (const registration of Object.values(translationHandlers ?? {}))
                 registration.unuse?.();
@@ -1963,7 +1904,7 @@ define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/uti
                 return component.element.hasAttribute(attribute);
             },
             get(attribute) {
-                return Maps_1.default.compute(attributeStates, attribute, () => (0, State_7.default)(component.element.getAttribute(attribute) ?? undefined));
+                return Maps_1.default.compute(attributeStates, attribute, () => (0, State_6.default)(component.element.getAttribute(attribute) ?? undefined));
             },
             append(...attributes) {
                 for (const attribute of attributes) {
@@ -2172,11 +2113,11 @@ define("kitsui/utility/ClassManipulator", ["require", "exports"], function (requ
     }
     exports.default = ClassManipulator;
 });
-define("kitsui/utility/EventManipulator", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/State"], function (require, exports, Arrays_3, State_8) {
+define("kitsui/utility/EventManipulator", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/State"], function (require, exports, Arrays_3, State_7) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Arrays_3 = __importDefault(Arrays_3);
-    State_8 = __importDefault(State_8);
+    State_7 = __importDefault(State_7);
     const SYMBOL_REGISTERED_FUNCTION = Symbol('REGISTERED_FUNCTION');
     function isComponent(host) {
         return typeof host === 'object' && host !== null && 'isComponent' in host;
@@ -2248,17 +2189,17 @@ define("kitsui/utility/EventManipulator", ["require", "exports", "kitsui/utility
                 initialiser({
                     subscribe(event, handler) {
                         manipulator.subscribe(event, handler);
-                        State_8.default.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler));
+                        State_7.default.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler));
                         return this;
                     },
                     subscribeCapture(event, handler) {
                         manipulator.subscribeCapture(event, handler);
-                        State_8.default.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler));
+                        State_7.default.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler));
                         return this;
                     },
                     subscribePassive(event, handler) {
                         manipulator.subscribePassive(event, handler);
-                        State_8.default.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler));
+                        State_7.default.Owner.getRemovedState(owner).matchManual(true, () => manipulator.unsubscribe(event, handler));
                         return this;
                     },
                 });
@@ -2299,15 +2240,15 @@ define("kitsui/utility/EventManipulator", ["require", "exports", "kitsui/utility
     }
     exports.default = EventManipulator;
 });
-define("kitsui/utility/FocusListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_9) {
+define("kitsui/utility/FocusListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_8) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_9 = __importDefault(State_9);
+    State_8 = __importDefault(State_8);
     var FocusListener;
     (function (FocusListener) {
-        FocusListener.hasFocus = (0, State_9.default)(false);
-        FocusListener.focused = (0, State_9.default)(undefined);
-        FocusListener.focusedLast = (0, State_9.default)(undefined);
+        FocusListener.hasFocus = (0, State_8.default)(false);
+        FocusListener.focused = (0, State_8.default)(undefined);
+        FocusListener.focusedLast = (0, State_8.default)(undefined);
         function focusedComponent() {
             return FocusListener.focused.value?.component;
         }
@@ -2435,20 +2376,20 @@ define("kitsui/utility/FocusListener", ["require", "exports", "kitsui/utility/St
     exports.default = FocusListener;
     Object.assign(window, { FocusListener });
 });
-define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/State"], function (require, exports, Arrays_4, State_10) {
+define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/State"], function (require, exports, Arrays_4, State_9) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.style = void 0;
     Arrays_4 = __importStar(Arrays_4);
-    State_10 = __importDefault(State_10);
-    exports.style = (0, State_10.default)({});
+    State_9 = __importDefault(State_9);
+    exports.style = (0, State_9.default)({});
     function StyleManipulator(component) {
         const styles = new Set();
         const currentClasses = [];
         // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
         const stateUnsubscribers = new WeakMap();
         const unbindPropertyState = {};
-        const styleState = State_10.default.JIT(() => styles);
+        const styleState = State_9.default.JIT(() => styles);
         const combinations = [];
         // if (Env.isDev)
         exports.style.subscribe(component, () => updateClasses());
@@ -2487,13 +2428,13 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
                 return component;
             },
             bind(state, ...toAdd) {
-                if (State_10.default.is(toAdd[0])) {
-                    const stateBool = State_10.default.is(state) ? undefined : state;
-                    const bstate = State_10.default.is(state) ? state : undefined;
+                if (State_9.default.is(toAdd[0])) {
+                    const stateBool = State_9.default.is(state) ? undefined : state;
+                    const bstate = State_9.default.is(state) ? state : undefined;
                     result.unbind(bstate);
-                    const owner = State_10.default.Owner.create();
+                    const owner = State_9.default.Owner.create();
                     const currentNames = [];
-                    State_10.default.Use(owner, { state: bstate, names: toAdd[0] }).use(owner, ({ state, names }, { state: oldState, names: oldNames } = { state: false, names: undefined }) => {
+                    State_9.default.Use(owner, { state: bstate, names: toAdd[0] }).use(owner, ({ state, names }, { state: oldState, names: oldNames } = { state: false, names: undefined }) => {
                         oldState ??= stateBool;
                         oldNames = oldNames && oldState ? Array.isArray(oldNames) ? oldNames : [oldNames] : [];
                         names = names && state ? Array.isArray(names) ? names : [names] : [];
@@ -2509,7 +2450,7 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
                     return component;
                 }
                 const names = toAdd;
-                if (!State_10.default.is(state))
+                if (!State_9.default.is(state))
                     return result.toggle(state, ...names);
                 result.unbind(state);
                 const unsubscribe = state.use(component, active => {
@@ -2590,7 +2531,7 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
             },
             bindProperty(property, state) {
                 unbindPropertyState[property]?.();
-                if (State_10.default.is(state))
+                if (State_9.default.is(state))
                     unbindPropertyState[property] = state.use(component, value => setProperty(property, value));
                 else {
                     setProperty(property, state);
@@ -2676,7 +2617,7 @@ define("kitsui/utility/TextManipulator", ["require", "exports", "kitsui/utility/
     }
     exports.default = TextManipulator;
 });
-define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipulator", "kitsui/utility/Arrays", "kitsui/utility/AttributeManipulator", "kitsui/utility/ClassManipulator", "kitsui/utility/EventManipulator", "kitsui/utility/FocusListener", "kitsui/utility/Maps", "kitsui/utility/Objects", "kitsui/utility/State", "kitsui/utility/StringApplicator", "kitsui/utility/Strings", "kitsui/utility/StyleManipulator", "kitsui/utility/TextManipulator", "kitsui/utility/Viewport"], function (require, exports, AnchorManipulator_1, Arrays_5, AttributeManipulator_1, ClassManipulator_1, EventManipulator_1, FocusListener_1, Maps_2, Objects_2, State_11, StringApplicator_3, Strings_2, StyleManipulator_1, TextManipulator_1, Viewport_2) {
+define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipulator", "kitsui/utility/Arrays", "kitsui/utility/AttributeManipulator", "kitsui/utility/ClassManipulator", "kitsui/utility/EventManipulator", "kitsui/utility/FocusListener", "kitsui/utility/Maps", "kitsui/utility/Objects", "kitsui/utility/State", "kitsui/utility/StringApplicator", "kitsui/utility/Strings", "kitsui/utility/StyleManipulator", "kitsui/utility/TextManipulator", "kitsui/utility/Viewport"], function (require, exports, AnchorManipulator_1, Arrays_5, AttributeManipulator_1, ClassManipulator_1, EventManipulator_1, FocusListener_1, Maps_2, Objects_2, State_10, StringApplicator_3, Strings_2, StyleManipulator_1, TextManipulator_1, Viewport_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ComponentInsertionDestination = void 0;
@@ -2686,13 +2627,13 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
     EventManipulator_1 = __importDefault(EventManipulator_1);
     FocusListener_1 = __importDefault(FocusListener_1);
     Maps_2 = __importDefault(Maps_2);
-    State_11 = __importDefault(State_11);
+    State_10 = __importDefault(State_10);
     StringApplicator_3 = __importDefault(StringApplicator_3);
     Strings_2 = __importDefault(Strings_2);
     StyleManipulator_1 = __importDefault(StyleManipulator_1);
     TextManipulator_1 = __importDefault(TextManipulator_1);
     Viewport_2 = __importDefault(Viewport_2);
-    const selfScript = (0, State_11.default)(undefined);
+    const selfScript = (0, State_10.default)(undefined);
     const SYMBOL_COMPONENT_BRAND = Symbol('COMPONENT_BRAND');
     const ELEMENT_TO_COMPONENT_MAP = new WeakMap();
     (0, Objects_2.DefineMagic)(Element.prototype, 'component', {
@@ -2742,19 +2683,19 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         const jitTweaks = new Map();
         const nojit = {};
         let component = {
-            supers: (0, State_11.default)([]),
+            supers: (0, State_10.default)([]),
             isComponent: true,
             isInsertionDestination: true,
             element: document.createElement(type),
-            removed: (0, State_11.default)(false),
-            rooted: (0, State_11.default)(false),
+            removed: (0, State_10.default)(false),
+            rooted: (0, State_10.default)(false),
             nojit: nojit,
             get tagName() {
                 return component.element.tagName;
             },
             setOwner: newOwner => {
                 unuseOwnerRemove?.();
-                unuseOwnerRemove = State_11.default.Owner.getRemovedState(newOwner)?.use(component, removed => removed && component.remove());
+                unuseOwnerRemove = State_10.default.Owner.getRemovedState(newOwner)?.use(component, removed => removed && component.remove());
                 return component;
             },
             replaceElement: (newElement, keepContent) => {
@@ -2843,10 +2784,10 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 tweaker?.(component, ...params);
                 return component;
             },
-            setStyleTargets(styleEnum) {
+            addStyleTargets(styleEnum) {
                 const keys = Object.keys(styleEnum).filter(key => isNaN(+key));
                 for (const key of keys)
-                    component.styleTargets[key] = (0, State_11.default)(undefined);
+                    component.styleTargets[key] = (0, State_10.default)(undefined);
                 return component;
             },
             ...{
@@ -2880,51 +2821,51 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return (0, Objects_2.DefineProperty)(component, 'hovered', component.hoveredTime.mapManual(time => !!time));
             },
             get hoveredTime() {
-                return (0, Objects_2.DefineProperty)(component, 'hoveredTime', (0, State_11.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'hoveredTime', (0, State_10.default)(undefined));
             },
             get focused() {
                 return (0, Objects_2.DefineProperty)(component, 'focused', component.focusedTime.mapManual(time => !!time));
             },
             get focusedTime() {
-                return (0, Objects_2.DefineProperty)(component, 'focusedTime', (0, State_11.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'focusedTime', (0, State_10.default)(undefined));
             },
             get hasFocused() {
                 return (0, Objects_2.DefineProperty)(component, 'hasFocused', component.hasFocusedTime.mapManual(time => !!time));
             },
             get hasFocusedTime() {
-                return (0, Objects_2.DefineProperty)(component, 'hasFocusedTime', (0, State_11.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'hasFocusedTime', (0, State_10.default)(undefined));
             },
             get hadFocusedLast() {
-                return (0, Objects_2.DefineProperty)(component, 'hadFocusedLast', (0, State_11.default)(false));
+                return (0, Objects_2.DefineProperty)(component, 'hadFocusedLast', (0, State_10.default)(false));
             },
             get hoveredOrFocused() {
                 return (0, Objects_2.DefineProperty)(component, 'hoveredOrFocused', component.hoveredOrFocusedTime.mapManual(time => !!time));
             },
             get hoveredOrFocusedTime() {
-                return (0, Objects_2.DefineProperty)(component, 'hoveredOrFocusedTime', State_11.default.Generator(() => Math.max(component.hoveredTime.value ?? 0, component.focusedTime.value ?? 0) || undefined)
+                return (0, Objects_2.DefineProperty)(component, 'hoveredOrFocusedTime', State_10.default.Generator(() => Math.max(component.hoveredTime.value ?? 0, component.focusedTime.value ?? 0) || undefined)
                     .observe(component, component.hoveredTime, component.focusedTime));
             },
             get hoveredOrHasFocused() {
                 return (0, Objects_2.DefineProperty)(component, 'hoveredOrHasFocused', component.hoveredOrHasFocusedTime.mapManual(time => !!time));
             },
             get hoveredOrHasFocusedTime() {
-                return (0, Objects_2.DefineProperty)(component, 'hoveredOrHasFocusedTime', State_11.default.Generator(() => Math.max(component.hoveredTime.value ?? 0, component.hasFocusedTime.value ?? 0) || undefined)
+                return (0, Objects_2.DefineProperty)(component, 'hoveredOrHasFocusedTime', State_10.default.Generator(() => Math.max(component.hoveredTime.value ?? 0, component.hasFocusedTime.value ?? 0) || undefined)
                     .observe(component, component.hoveredTime, component.hasFocusedTime));
             },
             get active() {
                 return (0, Objects_2.DefineProperty)(component, 'active', component.activeTime.mapManual(time => !!time));
             },
             get activeTime() {
-                return (0, Objects_2.DefineProperty)(component, 'activeTime', (0, State_11.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'activeTime', (0, State_10.default)(undefined));
             },
             get id() {
-                return (0, Objects_2.DefineProperty)(component, 'id', (0, State_11.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'id', (0, State_10.default)(undefined));
             },
             get name() {
-                return (0, Objects_2.DefineProperty)(component, 'name', (0, State_11.default)(undefined));
+                return (0, Objects_2.DefineProperty)(component, 'name', (0, State_10.default)(undefined));
             },
             get rect() {
-                const rectState = State_11.default.JIT(() => component.element.getBoundingClientRect());
+                const rectState = State_10.default.JIT(() => component.element.getBoundingClientRect());
                 const oldMarkDirty = rectState.markDirty;
                 rectState.markDirty = () => {
                     oldMarkDirty();
@@ -3077,7 +3018,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return Component.closest(builder, component);
             },
             getStateForClosest(builders) {
-                const state = State_11.default.JIT(() => component.closest(builders));
+                const state = State_10.default.JIT(() => component.closest(builders));
                 component.receiveAncestorInsertEvents();
                 component.onRooted(() => {
                     state.markDirty();
@@ -3224,7 +3165,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 unuseAriaLabelledByIdState?.();
                 unuseAriaLabelledByIdState = undefined;
                 if (labelledBy) {
-                    const state = State_11.default.Generator(() => labelledBy.id.value ?? labelledBy.attributes.get('for'))
+                    const state = State_10.default.Generator(() => labelledBy.id.value ?? labelledBy.attributes.get('for'))
                         .observe(component, labelledBy.id, labelledBy.cast()?.for);
                     unuseAriaLabelledByIdState = state.use(component, id => component.attributes.set('aria-labelledby', id));
                 }
@@ -3359,18 +3300,18 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     return result.then(result => {
                         if (result !== component)
                             void ensureOriginalComponentNotSubscriptionOwner(component);
-                        return result;
+                        return applyExtensions(result);
                     });
                 if (result !== component)
                     void ensureOriginalComponentNotSubscriptionOwner(component);
-                return result;
+                return applyExtensions(result);
             };
             const simpleBuilder = (...params) => {
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
                 const component = realBuilder(undefined, ...params);
                 if (component instanceof Promise)
-                    return component.then(completeComponent);
-                return completeComponent(component);
+                    return component.then(applyExtensions).then(completeComponent);
+                return completeComponent(applyExtensions(component));
             };
             Object.defineProperty(builder, 'name', { value: name, configurable: true });
             Object.defineProperty(builder, Symbol.toStringTag, { value: name, configurable: true });
@@ -3379,6 +3320,13 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             Object.defineProperty(simpleBuilder, 'name', { value: name, configurable: true });
             Object.defineProperty(simpleBuilder, Symbol.toStringTag, { value: name, configurable: true });
             const extensions = [];
+            // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+            const styleTargets = (style) => {
+                extensions.push(component => {
+                    component.styleTargets(style);
+                });
+                return resultBuilder;
+            };
             const resultBuilder = Object.assign(simpleBuilder, {
                 from: realBuilder,
                 setName(newName) {
@@ -3390,20 +3338,20 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     extensions.push(extensionProvider);
                     return resultBuilder;
                 },
-                // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
-                styleTargets(style) {
-                    extensions.push(component => {
-                        component.styleTargets(style);
-                    });
-                    return resultBuilder;
-                },
+                styleTargets: styleTargets,
+                styleTargetsPartial: styleTargets,
             });
             return resultBuilder;
-            function completeComponent(component) {
+            function applyExtensions(component) {
                 if (!component)
                     return component;
                 for (const extension of extensions)
                     Object.assign(component, extension(component));
+                return component;
+            }
+            function completeComponent(component) {
+                if (!component)
+                    return component;
                 if (name) {
                     component[Symbol.toStringTag] ??= name.toString();
                     const tagName = `:${name.kebabcase}`;
@@ -3419,7 +3367,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
             }
             async function ensureOriginalComponentNotSubscriptionOwner(original) {
-                if (!original || !State_11.default.OwnerMetadata.hasSubscriptions(original))
+                if (!original || !State_10.default.OwnerMetadata.hasSubscriptions(original))
                     return;
                 const originalRef = new WeakRef(original);
                 original = undefined;
@@ -3524,13 +3472,166 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             }
         }
         Component.closest = closest;
+        function findAll(builder, element) {
+            const components = [];
+            const cursor = is(element) ? element.element : element ?? null;
+            if (cursor) {
+                const walker = document.createTreeWalker(cursor, NodeFilter.SHOW_ELEMENT);
+                let node;
+                while ((node = walker.nextNode())) {
+                    const component = node.component;
+                    if (component?.is(builder))
+                        components.push(component);
+                }
+            }
+            return components;
+        }
+        Component.findAll = findAll;
     })(Component || (Component = {}));
     exports.default = Component;
 });
-define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_2, State_12) {
+define("kitsui/component/Dialog", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_2, State_11) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Component_2 = __importDefault(Component_2);
+    State_11 = __importDefault(State_11);
+    const OPEN_DIALOGS = new Set();
+    function addOpenDialog(dialog) {
+        const hadOpenDialogs = !!OPEN_DIALOGS.size;
+        OPEN_DIALOGS.add(dialog);
+        if (!hadOpenDialogs)
+            Component_2.default.getDocument().style.setProperty('overflow', 'hidden');
+    }
+    function removeOpenDialog(dialog) {
+        OPEN_DIALOGS.delete(dialog);
+        if (!OPEN_DIALOGS.size)
+            Component_2.default.getDocument().style.removeProperties('overflow');
+    }
+    var DialogStyleTargets;
+    (function (DialogStyleTargets) {
+        DialogStyleTargets[DialogStyleTargets["Dialog"] = 0] = "Dialog";
+        DialogStyleTargets[DialogStyleTargets["Dialog_Open"] = 1] = "Dialog_Open";
+    })(DialogStyleTargets || (DialogStyleTargets = {}));
+    const Dialog = Object.assign(Component_2.default.Builder(() => {
+        const opened = (0, State_11.default)(false);
+        const willOpen = (0, State_11.default)(false);
+        const willClose = (0, State_11.default)(false);
+        let modal = true;
+        let unbind;
+        const dialog = (0, Component_2.default)('dialog')
+            .addStyleTargets(DialogStyleTargets);
+        const style = dialog.styleTargets;
+        dialog.style(style.Dialog)
+            .style.bind(opened, style.Dialog_Open);
+        return dialog.extend(dialog => ({
+            opened,
+            willClose,
+            willOpen,
+            setNotModal: (notModal = true) => {
+                modal = !notModal;
+                dialog.style.toggleProperty(notModal, 'position', 'fixed');
+                dialog.style.toggleProperty(notModal, 'inset', 'auto');
+                dialog.style.toggleProperty(notModal, 'z-index', '99999999999');
+                return dialog;
+            },
+            setFullscreen: (fullscreen = true) => {
+                dialog.style.toggleProperty(fullscreen, 'width', '100%');
+                dialog.style.toggleProperty(fullscreen, 'height', '100%');
+                dialog.style.toggleProperty(fullscreen, 'inset', '0');
+                return dialog;
+            },
+            open: () => {
+                willOpen.value = true;
+                if (!dialog.willOpen.value)
+                    return dialog;
+                unbind?.();
+                addOpenDialog(dialog);
+                dialog.element[modal ? 'showModal' : 'show']();
+                opened.value = true;
+                willOpen.value = false;
+                return dialog;
+            },
+            close: () => {
+                willClose.value = true;
+                if (!dialog.willClose.value)
+                    return dialog;
+                unbind?.();
+                removeOpenDialog(dialog);
+                dialog.element.close();
+                opened.value = false;
+                willClose.value = false;
+                return dialog;
+            },
+            toggle: (open = !dialog.opened.value) => {
+                const willChangeStateName = open ? 'willOpen' : 'willClose';
+                dialog[willChangeStateName].asMutable?.setValue(true);
+                if (!dialog[willChangeStateName].value)
+                    return dialog;
+                unbind?.();
+                if (open) {
+                    addOpenDialog(dialog);
+                    dialog.element[modal ? 'showModal' : 'show']();
+                }
+                else {
+                    removeOpenDialog(dialog);
+                    dialog.element.close();
+                }
+                opened.value = open ?? !opened.value;
+                dialog[willChangeStateName].asMutable?.setValue(false);
+                return dialog;
+            },
+            bind: state => {
+                unbind?.();
+                unbind = state.use(dialog, open => {
+                    const willChangeStateName = open ? 'willOpen' : 'willClose';
+                    dialog[willChangeStateName].asMutable?.setValue(true);
+                    if (open) {
+                        addOpenDialog(dialog);
+                        dialog.element[modal ? 'showModal' : 'show']();
+                    }
+                    else {
+                        removeOpenDialog(dialog);
+                        dialog.element.close();
+                    }
+                    opened.value = open;
+                    dialog[willChangeStateName].asMutable?.setValue(false);
+                });
+                return dialog;
+            },
+            unbind: () => {
+                unbind?.();
+                return dialog;
+            },
+        }));
+    }), {
+        await(dialog) {
+            let remove = false;
+            if (!dialog.rooted.value) {
+                remove = true;
+                dialog.appendTo(document.body);
+            }
+            return new Promise(resolve => {
+                dialog.open();
+                dialog.event.subscribe('close', event => {
+                    event.host.event.subscribe('transitionend', () => {
+                        if (remove)
+                            dialog.remove();
+                        resolve();
+                    });
+                });
+            });
+        },
+        forceCloseAll() {
+            for (const dialog of OPEN_DIALOGS)
+                dialog.close();
+        },
+    });
+    exports.default = Dialog;
+});
+define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_3, State_12) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Component_3 = __importDefault(Component_3);
     State_12 = __importDefault(State_12);
     var LoadingStyleTargets;
     (function (LoadingStyleTargets) {
@@ -3543,15 +3644,15 @@ define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "k
         LoadingStyleTargets[LoadingStyleTargets["ErrorIcon"] = 6] = "ErrorIcon";
         LoadingStyleTargets[LoadingStyleTargets["ErrorText"] = 7] = "ErrorText";
     })(LoadingStyleTargets || (LoadingStyleTargets = {}));
-    const Loading = (0, Component_2.default)((component) => {
-        const loading = component.setStyleTargets(LoadingStyleTargets);
+    const Loading = (0, Component_3.default)((component) => {
+        const loading = component.addStyleTargets(LoadingStyleTargets);
         const style = loading.styleTargets;
-        const storage = (0, Component_2.default)().setOwner(component);
-        const spinner = (0, Component_2.default)().style(style.Spinner);
-        const progressBar = (0, Component_2.default)().style(style.ProgressBar);
-        const messageText = (0, Component_2.default)().style(style.MessageText);
-        const errorIcon = (0, Component_2.default)().style(style.ErrorIcon);
-        const errorText = (0, Component_2.default)().style(style.ErrorText);
+        const storage = (0, Component_3.default)().setOwner(component);
+        const spinner = (0, Component_3.default)().style(style.Spinner);
+        const progressBar = (0, Component_3.default)().style(style.ProgressBar);
+        const messageText = (0, Component_3.default)().style(style.MessageText);
+        const errorIcon = (0, Component_3.default)().style(style.ErrorIcon);
+        const errorText = (0, Component_3.default)().style(style.ErrorText);
         const loaded = (0, State_12.default)(false);
         let owner;
         let refresh;
@@ -3635,13 +3736,739 @@ define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "k
     });
     exports.default = Loading;
 });
-define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_13) {
+define("kitsui/utility/HoverListener", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/Mouse"], function (require, exports, Arrays_6, Mouse_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    Arrays_6 = __importDefault(Arrays_6);
+    Mouse_2 = __importDefault(Mouse_2);
+    var HoverListener;
+    (function (HoverListener) {
+        let lastHovered = [];
+        function allHovered() {
+            return lastHovered;
+        }
+        HoverListener.allHovered = allHovered;
+        function hovered() {
+            return lastHovered.at(-1);
+        }
+        HoverListener.hovered = hovered;
+        function* allHoveredComponents() {
+            for (const element of lastHovered) {
+                const component = element.component;
+                if (component)
+                    yield component;
+            }
+        }
+        HoverListener.allHoveredComponents = allHoveredComponents;
+        function hoveredComponent() {
+            return lastHovered.at(-1)?.component;
+        }
+        HoverListener.hoveredComponent = hoveredComponent;
+        function listen() {
+            Mouse_2.default.onMove((event, allHovered) => {
+                const hovered = allHovered.at(-1);
+                if (hovered && (hovered.clientWidth === 0 || hovered.clientHeight === 0))
+                    Arrays_6.default.filterInPlace(allHovered, element => element.computedStyleMap().get('display')?.toString() !== 'none');
+                if (hovered === lastHovered.at(-1))
+                    return;
+                const newHovered = allHovered;
+                const noLongerHovering = lastHovered.filter(element => !newHovered.includes(element));
+                for (const element of noLongerHovering)
+                    if (element.component)
+                        element.component.hoveredTime.asMutable?.setValue(undefined);
+                const nowHovering = newHovered.filter(element => !lastHovered.includes(element));
+                for (const element of nowHovering)
+                    if (element.component)
+                        element.component.hoveredTime.asMutable?.setValue(Date.now());
+                lastHovered = newHovered;
+            });
+        }
+        HoverListener.listen = listen;
+    })(HoverListener || (HoverListener = {}));
+    exports.default = HoverListener;
+    Object.assign(window, { HoverListener });
+});
+define("kitsui/utility/InputBus", ["require", "exports", "kitsui/Component", "kitsui/utility/EventManipulator"], function (require, exports, Component_4, EventManipulator_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.HandlesMouseEvents = exports.HandlesKeyboardEvents = void 0;
+    Component_4 = __importDefault(Component_4);
+    EventManipulator_2 = __importDefault(EventManipulator_2);
+    var Classes;
+    (function (Classes) {
+        Classes["ReceiveFocusedClickEvents"] = "_receieve-focused-click-events";
+    })(Classes || (Classes = {}));
+    Component_4.default.extend(component => {
+        component.extend(component => ({
+            receiveFocusedClickEvents: () => component.classes.add(Classes.ReceiveFocusedClickEvents),
+        }));
+    });
+    exports.HandlesKeyboardEvents = Component_4.default.Tag().setName('HandlesKeyboardEvents');
+    exports.HandlesMouseEvents = Component_4.default.Tag().setName('HandlesMouseEvents');
+    const MOUSE_KEYNAME_MAP = {
+        [0]: 'MouseLeft',
+        [1]: 'MouseMiddle',
+        [2]: 'MouseRight',
+        [3]: 'Mouse3',
+        [4]: 'Mouse4',
+        [5]: 'Mouse5',
+        [`${undefined}`]: 'Mouse?',
+    };
+    let lastUsed = 0;
+    const inputDownTime = {};
+    const InputBus = Object.assign({
+        getPressStart: (name) => inputDownTime[name],
+        getPressDuration: (name) => inputDownTime[name] === undefined ? undefined : Date.now() - inputDownTime[name],
+        isDown: (name) => !!inputDownTime[name],
+        isUp: (name) => !inputDownTime[name],
+    }, {
+        event: (0, EventManipulator_2.default)({}),
+    });
+    function emitKeyEvent(e) {
+        const target = e.target;
+        const input = target?.closest('input[type=text], textarea, [contenteditable]') ?? null;
+        let usedByInput = !!input;
+        const isClick = true
+            && !usedByInput
+            && e.type === 'keydown'
+            && (e.key === 'Enter' || e.key === ' ')
+            && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey
+            && !!target?.classList.contains(Classes.ReceiveFocusedClickEvents);
+        if (isClick) {
+            const result = target?.component?.event.emit('click');
+            if (result?.stoppedPropagation === true)
+                e.stopPropagation();
+            else if (result?.stoppedPropagation === 'immediate')
+                e.stopImmediatePropagation();
+            if (result?.defaultPrevented) {
+                e.preventDefault();
+                return;
+            }
+        }
+        const eventKey = e.key ?? MOUSE_KEYNAME_MAP[e.button];
+        const eventType = e.type === 'mousedown' ? 'keydown' : e.type === 'mouseup' ? 'keyup' : e.type;
+        if (eventType === 'keydown')
+            inputDownTime[eventKey] = Date.now();
+        let cancelInput = false;
+        const event = {
+            key: eventKey,
+            ctrl: e.ctrlKey,
+            shift: e.shiftKey,
+            alt: e.altKey,
+            used: usedByInput,
+            input,
+            targetElement: target,
+            targetComponent: target?.component ?? null,
+            use: (key, ...modifiers) => {
+                if (event.used)
+                    return false;
+                const matches = event.matches(key, ...modifiers);
+                if (matches)
+                    event.used = true;
+                return matches;
+            },
+            useOverInput: (key, ...modifiers) => {
+                if (event.used && !usedByInput)
+                    return false;
+                const matches = event.matches(key, ...modifiers);
+                if (matches) {
+                    event.used = true;
+                    usedByInput = false;
+                }
+                return matches;
+            },
+            matches: (key, ...modifiers) => {
+                if (eventKey !== key)
+                    return false;
+                if (!modifiers.every(modifier => event[modifier]))
+                    return false;
+                return true;
+            },
+            cancelInput: () => cancelInput = true,
+            hovering: selector => {
+                const hovered = [...document.querySelectorAll(':hover')];
+                return selector ? hovered[hovered.length - 1]?.closest(selector) ?? undefined : hovered[hovered.length - 1];
+            },
+        };
+        if (eventType === 'keyup') {
+            event.usedAnotherKeyDuring = lastUsed > (inputDownTime[eventKey] ?? 0);
+            delete inputDownTime[eventKey];
+        }
+        InputBus.event.emit(eventType === 'keydown' ? 'Down' : 'Up', event);
+        if ((event.used && !usedByInput) || (usedByInput && cancelInput)) {
+            e.preventDefault();
+            lastUsed = Date.now();
+        }
+        if (usedByInput) {
+            if (e.type === 'keydown' && eventKey === 'Enter' && !event.shift && !event.alt) {
+                const form = target?.closest('form');
+                if (form && (target?.tagName.toLowerCase() === 'input' || target?.closest('[contenteditable]')) && !event.ctrl) {
+                    if (!Component_4.default.closest(exports.HandlesKeyboardEvents, target))
+                        e.preventDefault();
+                }
+                else {
+                    form?.requestSubmit();
+                }
+            }
+        }
+    }
+    document.addEventListener('keydown', emitKeyEvent, { capture: true });
+    document.addEventListener('keyup', emitKeyEvent, { capture: true });
+    document.addEventListener('mousedown', emitKeyEvent);
+    document.addEventListener('mouseup', emitKeyEvent);
+    document.addEventListener('click', emitKeyEvent);
+    Object.defineProperty(MouseEvent.prototype, 'used', {
+        get() {
+            return this._used ?? false;
+        },
+    });
+    Object.defineProperty(MouseEvent.prototype, 'use', {
+        value: function (key, ...modifiers) {
+            if (this._used)
+                return false;
+            const matches = this.matches(key, ...modifiers);
+            if (matches) {
+                this._used = true;
+                // allow click & contextmenu handlers to be considered "used" for IKeyUpEvents
+                lastUsed = Date.now();
+            }
+            return matches;
+        },
+    });
+    Object.defineProperty(MouseEvent.prototype, 'matches', {
+        value: function (key, ...modifiers) {
+            if (MOUSE_KEYNAME_MAP[this.button] !== key)
+                return false;
+            if (!modifiers.every(modifier => this[`${modifier}Key`]))
+                return false;
+            return true;
+        },
+    });
+    exports.default = InputBus;
+});
+define("kitsui/utility/Task", ["require", "exports", "kitsui/utility/Time"], function (require, exports, Time_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Time_2 = __importDefault(Time_2);
+    const DEFAULT_INTERVAL = Time_2.default.seconds(1) / 144;
+    class Task {
+        interval;
+        static async yield(instantIfUnsupported = false) {
+            if (typeof scheduler !== 'undefined' && typeof scheduler.yield === 'function')
+                return scheduler.yield();
+            if (!instantIfUnsupported)
+                await new Promise(resolve => setTimeout(resolve, 0));
+        }
+        static post(callback, priority) {
+            if (typeof scheduler === 'undefined' || typeof scheduler.postTask !== 'function')
+                return callback();
+            return scheduler.postTask(callback, { priority });
+        }
+        lastYieldEnd = Date.now();
+        constructor(interval = DEFAULT_INTERVAL) {
+            this.interval = interval;
+        }
+        reset() {
+            this.lastYieldEnd = Date.now();
+        }
+        async yield(instantIfUnsupported = false) {
+            if (Date.now() - this.lastYieldEnd > this.interval) {
+                await Task.yield(instantIfUnsupported);
+                this.lastYieldEnd = Date.now();
+            }
+        }
+    }
+    exports.default = Task;
+});
+define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "kitsui/component/Dialog", "kitsui/utility/FocusListener", "kitsui/utility/HoverListener", "kitsui/utility/InputBus", "kitsui/utility/Mouse", "kitsui/utility/Objects", "kitsui/utility/State", "kitsui/utility/Task", "kitsui/utility/Vector2", "kitsui/utility/Viewport"], function (require, exports, Component_5, Dialog_1, FocusListener_2, HoverListener_1, InputBus_1, Mouse_3, Objects_3, State_13, Task_1, Vector2_1, Viewport_3) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Component_5 = __importDefault(Component_5);
+    Dialog_1 = __importDefault(Dialog_1);
+    FocusListener_2 = __importDefault(FocusListener_2);
+    HoverListener_1 = __importDefault(HoverListener_1);
+    InputBus_1 = __importStar(InputBus_1);
+    Mouse_3 = __importDefault(Mouse_3);
     State_13 = __importDefault(State_13);
+    Task_1 = __importDefault(Task_1);
+    Vector2_1 = __importDefault(Vector2_1);
+    Viewport_3 = __importDefault(Viewport_3);
+    var FocusTrap;
+    (function (FocusTrap) {
+        let component;
+        function get() {
+            return component ??= (0, Component_5.default)()
+                .tabIndex('auto')
+                .ariaHidden()
+                .style.setProperties({
+                position: 'fixed',
+                display: 'none',
+            })
+                .prependTo(document.body);
+        }
+        function show() {
+            get().style.setProperty('display', 'inline');
+        }
+        FocusTrap.show = show;
+        function hide() {
+            get().style.setProperty('display', 'none');
+        }
+        FocusTrap.hide = hide;
+    })(FocusTrap || (FocusTrap = {}));
+    Component_5.default.extend(component => {
+        component.extend((component) => ({
+            hasPopoverSet() {
+                return !!component.popover;
+            },
+            clearPopover: () => component
+                .attributes.set('data-clear-popover', 'true'),
+            setPopover: (popoverEvent, initialiser) => {
+                if (component.popover)
+                    component.popover.remove();
+                component.style.setProperties({
+                    ['-webkitTouchCallout']: 'none',
+                    userSelect: 'none',
+                });
+                let isShown = false;
+                const popover = Popover(component)
+                    .anchor.from(component)
+                    .tweak(popover => popover
+                    .prepend((0, Component_5.default)()
+                    .style(popover.styleTargets.PopoverCloseSurface)
+                    .event.subscribe('click', () => popover.hide())))
+                    .setOwner(component)
+                    .setCloseDueToMouseInputFilter(event => {
+                    const hovered = HoverListener_1.default.hovered() ?? null;
+                    if (component.element.contains(hovered))
+                        return false;
+                    return true;
+                })
+                    .event.subscribe('toggle', e => {
+                    if (!popover.element.matches(':popover-open')) {
+                        isShown = false;
+                        component.clickState = false;
+                        Mouse_3.default.offMove(updatePopoverState);
+                    }
+                })
+                    .tweak(initialiser, component);
+                component.getStateForClosest(Dialog_1.default).use(popover, getDialog => {
+                    popover.appendTo(getDialog() ?? document.body);
+                });
+                let touchTimeout;
+                let touchStart;
+                let longpressed = false;
+                function cancelLongpress() {
+                    longpressed = false;
+                    touchStart = undefined;
+                    clearTimeout(touchTimeout);
+                }
+                component.event.until(popover, event => event
+                    .subscribe('touchstart', event => {
+                    touchStart = Vector2_1.default.fromClient(event.touches[0]);
+                    if (event.touches.length > 1)
+                        return cancelLongpress();
+                    const closestWithPopover = [
+                        event.targetComponent,
+                        ...event.targetComponent?.getAncestorComponents() ?? [],
+                    ]
+                        .find(component => component?.hasPopoverSet());
+                    ////////////////////////////////////
+                    //#region Debugging
+                    // function useError (supplier: () => unknown) {
+                    // 	try {
+                    // 		return supplier()
+                    // 	}
+                    // 	catch (e) {
+                    // 		return e instanceof Error ? e.message : String(e)
+                    // 	}
+                    // }
+                    // Component('pre')
+                    // 	.style.setProperties({
+                    // 		position: 'relative',
+                    // 		zIndex: '2',
+                    // 		background: '#222',
+                    // 		color: '#aaa',
+                    // 		fontSize: 'var(--font-0)',
+                    // 		whiteSpace: 'pre-wrap',
+                    // 	})
+                    // 	.text.set(Object
+                    // 		.entries({
+                    // 			eventPopoverHost: component?.fullType,
+                    // 			...(event.targetComponent === component
+                    // 				? { targetIsEventHost: true }
+                    // 				: {
+                    // 					targetIsEventHost: false,
+                    // 					target: event.targetComponent?.fullType,
+                    // 					...(closestWithPopover === component
+                    // 						? { closestIsEventHost: true }
+                    // 						: {
+                    // 							closestIsEventHost: false,
+                    // 							closestPopoverHost: closestWithPopover?.fullType,
+                    // 						}
+                    // 					),
+                    // 				}
+                    // 			),
+                    // 		})
+                    // 		.map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+                    // 		.join('\n')
+                    // 	)
+                    // 	.appendTo(component)
+                    //#endregion
+                    ////////////////////////////////////
+                    if (closestWithPopover !== component)
+                        return;
+                    touchTimeout = window.setTimeout(() => {
+                        longpressed = true;
+                        void updatePopoverState(null, null, 'longpress');
+                    }, 800);
+                })
+                    .subscribePassive('touchmove', event => {
+                    if (!touchStart)
+                        return;
+                    if (event.touches.length > 1)
+                        return cancelLongpress();
+                    const newPosition = Vector2_1.default.fromClient(event.touches[0]);
+                    if (!Vector2_1.default.distanceWithin(20, touchStart, newPosition))
+                        return cancelLongpress();
+                })
+                    .subscribe('touchend', event => {
+                    if (longpressed)
+                        event.preventDefault();
+                    cancelLongpress();
+                }));
+                popover.visible.match(component, true, async () => {
+                    if (popover.hasContent()) {
+                        popover.style.setProperty('opacity', '0');
+                        popover.show();
+                        await Task_1.default.yield();
+                        popover.anchor.apply();
+                        await Task_1.default.yield();
+                        popover.style.removeProperties('opacity');
+                    }
+                });
+                popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop);
+                popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft);
+                const hostHoveredOrFocusedForLongEnough = component.hoveredOrFocused.delay(popover, hoveredOrFocused => {
+                    if (!hoveredOrFocused)
+                        return 0; // no delay for mouseoff or blur
+                    return popover.getDelay();
+                });
+                if ((popoverEvent === 'hover/click' || popoverEvent === 'hover/longpress') && !component.popover)
+                    hostHoveredOrFocusedForLongEnough.subscribe(component, updatePopoverState);
+                component.clickState = false;
+                if (!component.popover) {
+                    component.event.subscribe('click', async (event) => {
+                        if (popoverEvent === 'hover/longpress')
+                            return;
+                        const closestHandlesMouseEvents = event.target.component?.closest(InputBus_1.HandlesMouseEvents);
+                        if (closestHandlesMouseEvents && closestHandlesMouseEvents?.element !== component.element && component.element.contains(closestHandlesMouseEvents.element))
+                            return;
+                        component.clickState = !component.clickState;
+                        event.stopPropagation();
+                        event.preventDefault();
+                        if (component.clickState)
+                            await showPopoverClick();
+                        else
+                            popover.hide();
+                    });
+                    component.receiveInsertEvents();
+                    component.receiveAncestorInsertEvents();
+                    component.event.subscribe(['insert', 'ancestorInsert'], updatePopoverParent);
+                }
+                popover.popoverHasFocus.subscribe(component, (hasFocused, oldValue) => {
+                    if (hasFocused)
+                        return;
+                    component.clickState = false;
+                    component.popover?.hide();
+                    if (oldValue !== 'no-focus')
+                        component.focus();
+                });
+                return component.extend(component => ({
+                    popover,
+                    popoverDescendants: [],
+                    tweakPopover: initialiser => {
+                        initialiser(component.popover, component);
+                        return component;
+                    },
+                    showPopover: () => {
+                        void showPopoverClick();
+                        return component;
+                    },
+                    togglePopover: () => {
+                        if (popover.visible.value)
+                            popover.hide();
+                        else
+                            void showPopoverClick();
+                        return component;
+                    },
+                }));
+                async function showPopoverClick() {
+                    popover.style.setProperty('opacity', '0');
+                    component.popover?.show();
+                    component.popover?.focus();
+                    component.popover?.style.removeProperties('left', 'top');
+                    await Task_1.default.yield();
+                    component.popover?.anchor.apply();
+                    await Task_1.default.yield();
+                    popover.style.removeProperties('opacity');
+                }
+                function updatePopoverParent() {
+                    if (!component.popover)
+                        return;
+                    const oldParent = component.popover.popoverParent.value;
+                    component.popover.popoverParent.asMutable?.setValue(component.closest(Popover));
+                    if (oldParent && oldParent !== component.popover.popoverParent.value)
+                        oldParent.popoverChildren.asMutable?.setValue(oldParent.popoverChildren.value.filter(c => c !== component.popover));
+                    if (component.popover.popoverParent.value && component.popover.popoverParent.value !== oldParent)
+                        component.popover.popoverParent.value.popoverChildren.asMutable?.setValue([...component.popover.popoverParent.value.popoverChildren.value, component.popover]);
+                }
+                async function updatePopoverState(_1, _2, reason) {
+                    if (!component.popover)
+                        return;
+                    const shouldShow = false
+                        || (hostHoveredOrFocusedForLongEnough.value && !Viewport_3.default.tablet.value)
+                        || reason === 'longpress'
+                        || (true
+                            && isShown
+                            && (false
+                                || (component.popover.isMouseWithin(true) && !shouldClearPopover())
+                                || InputBus_1.default.isDown('F4')))
+                        || !!component.clickState;
+                    ////////////////////////////////////
+                    //#region Debugging
+                    // Component('pre')
+                    // 	.style.setProperties({
+                    // 		fontSize: 'var(--font-0)',
+                    // 		whiteSpace: 'pre-wrap',
+                    // 	})
+                    // 	.text.set(JSON.stringify({
+                    // 		shouldShow,
+                    // 		isShown,
+                    // 		reason,
+                    // 	}, null, '  '))
+                    // 	.prependTo(document.body)
+                    //#endregion
+                    ////////////////////////////////////
+                    if (isShown === shouldShow)
+                        return;
+                    if (hostHoveredOrFocusedForLongEnough.value && !isShown)
+                        Mouse_3.default.onMove(updatePopoverState);
+                    if (!shouldShow)
+                        Mouse_3.default.offMove(updatePopoverState);
+                    if (!shouldShow)
+                        FocusTrap.hide();
+                    isShown = shouldShow;
+                    popover.style.setProperty('opacity', '0');
+                    component.popover.toggle(shouldShow);
+                    if (!shouldShow)
+                        return;
+                    FocusTrap.show();
+                    // component.popover.style.removeProperties('left', 'top')
+                    await Task_1.default.yield();
+                    component.popover.anchor.apply();
+                    await Task_1.default.yield();
+                    popover.style.removeProperties('opacity');
+                }
+                function shouldClearPopover() {
+                    if (!component.popover)
+                        return false;
+                    const hovered = HoverListener_1.default.hovered() ?? null;
+                    if (component.element.contains(hovered) || component.popover.element.contains(hovered))
+                        return false;
+                    const clearsPopover = hovered?.closest('[data-clear-popover]');
+                    if (!clearsPopover)
+                        return false;
+                    const clearsPopoverContainsHost = clearsPopover.contains(component.element);
+                    if (clearsPopoverContainsHost)
+                        return false;
+                    const clearsPopoverWithinPopover = clearsPopover.component?.closest(Popover);
+                    if (component.popover.containsPopoverDescendant(clearsPopoverWithinPopover))
+                        return false;
+                    return true;
+                }
+            },
+        }));
+    });
+    var PopoverStyleTargets;
+    (function (PopoverStyleTargets) {
+        PopoverStyleTargets[PopoverStyleTargets["Popover"] = 0] = "Popover";
+        PopoverStyleTargets[PopoverStyleTargets["PopoverCloseSurface"] = 1] = "PopoverCloseSurface";
+        PopoverStyleTargets[PopoverStyleTargets["Popover_AnchoredTop"] = 2] = "Popover_AnchoredTop";
+        PopoverStyleTargets[PopoverStyleTargets["Popover_AnchoredLeft"] = 3] = "Popover_AnchoredLeft";
+    })(PopoverStyleTargets || (PopoverStyleTargets = {}));
+    const Popover = Object.assign((0, Component_5.default)((component, host) => {
+        let mousePadding;
+        let delay = 0;
+        let unbind;
+        const visible = (0, State_13.default)(false);
+        let shouldCloseOnInput = true;
+        let inputFilter;
+        // let normalStacking = false
+        const popover = component
+            .style.setProperties({
+            position: 'fixed',
+            margin: 0,
+            overflow: 'visible',
+            transitionBehavior: 'allow-discrete',
+        })
+            .tabIndex('programmatic')
+            .attributes.set('popover', 'manual')
+            .extend(popover => ({
+            lastStateChangeTime: 0,
+            visible,
+            host: host,
+            popoverChildren: (0, State_13.default)([]),
+            popoverParent: (0, State_13.default)(undefined),
+            popoverHasFocus: FocusListener_2.default.focused.map(popover, focused => !focused ? 'no-focus'
+                : (visible.value && containsPopoverDescendant(focused)) ? 'focused'
+                    : undefined),
+            setCloseOnInput(closeOnInput = true) {
+                shouldCloseOnInput = closeOnInput;
+                return popover;
+            },
+            setCloseDueToMouseInputFilter(filter) {
+                inputFilter = filter;
+                return popover;
+            },
+            setMousePadding: padding => {
+                mousePadding = padding;
+                return popover;
+            },
+            setDelay(ms) {
+                delay = ms;
+                return popover;
+            },
+            getDelay() {
+                return delay;
+            },
+            // setNormalStacking () {
+            // 	Viewport.tablet.use(popover, isTablet => {
+            // 		const tablet = isTablet()
+            // 		popover.style.toggle(!tablet, 'popover--normal-stacking')
+            // 		popover.attributes.toggle(tablet, 'popover', 'manual')
+            // 		normalStacking = !tablet
+            // 		togglePopover(visible.value)
+            // 	})
+            // 	return popover
+            // },
+            isMouseWithin: (checkDescendants = false) => {
+                const padding = mousePadding ?? 100;
+                const x = popover.rect.value.x - padding;
+                const y = popover.rect.value.y - padding;
+                const width = popover.rect.value.width + padding * 2;
+                const height = popover.rect.value.height + padding * 2;
+                const mouseX = Mouse_3.default.state.value.x;
+                const mouseY = Mouse_3.default.state.value.y;
+                const intersects = (mouseX >= x && mouseX <= x + width) && (mouseY >= y && mouseY <= y + height);
+                if (intersects)
+                    return true;
+                if (checkDescendants)
+                    for (const child of popover.popoverChildren.value)
+                        if (child.isMouseWithin(true))
+                            return true;
+                return false;
+            },
+            containsPopoverDescendant,
+            show: () => {
+                unbind?.();
+                togglePopover(true);
+                popover.visible.asMutable?.setValue(true);
+                return popover;
+            },
+            hide: () => {
+                unbind?.();
+                togglePopover(false);
+                popover.visible.asMutable?.setValue(false);
+                return popover;
+            },
+            toggle: shown => {
+                unbind?.();
+                togglePopover(shown);
+                popover.visible.asMutable?.setValue(shown ?? !popover.visible.value);
+                return popover;
+            },
+            bind: state => {
+                unbind?.();
+                unbind = state.use(popover, shown => {
+                    togglePopover(shown);
+                    popover.visible.asMutable?.setValue(shown);
+                });
+                return popover;
+            },
+            unbind: () => {
+                unbind?.();
+                return popover;
+            },
+        }))
+            .addStyleTargets(PopoverStyleTargets);
+        const style = popover.styleTargets;
+        popover.style(style.Popover);
+        popover.event.subscribe('toggle', event => {
+            popover.visible.asMutable?.setValue(event.newState === 'open');
+        });
+        popover.onRooted(() => {
+            InputBus_1.default.event.subscribe('Down', onInputDown);
+            popover.removed.matchManual(true, () => InputBus_1.default.event.unsubscribe('Down', onInputDown));
+        });
+        return popover;
+        function togglePopover(shown) {
+            if (!popover.hasContent())
+                shown = false;
+            // if (normalStacking && !Viewport.tablet.value)
+            // 	popover.style.toggle(!shown, 'popover--normal-stacking--hidden')
+            // else
+            if (Viewport_3.default.tablet.value || popover.rooted.value)
+                popover
+                    // .style.remove('popover--normal-stacking--hidden')
+                    .attributes.set('popover', 'manual')
+                    .element.togglePopover(shown);
+            (0, Objects_3.mutable)(popover).lastStateChangeTime = Date.now();
+        }
+        function onInputDown(_, event) {
+            if (!popover.visible.value || !shouldCloseOnInput)
+                return;
+            if (!event.key.startsWith('Mouse') || popover.containsPopoverDescendant(HoverListener_1.default.hovered()))
+                return;
+            if (inputFilter && !inputFilter(event))
+                return;
+            if (popover.rooted.value)
+                popover
+                    .attributes.set('popover', 'manual')
+                    .element.togglePopover(false);
+            popover.visible.asMutable?.setValue(false);
+            (0, Objects_3.mutable)(popover).lastStateChangeTime = Date.now();
+        }
+        function containsPopoverDescendant(descendant) {
+            if (!descendant)
+                return false;
+            const node = Component_5.default.is(descendant) ? descendant.element : descendant;
+            if (popover.element.contains(node))
+                return true;
+            for (const child of popover.popoverChildren.value)
+                if (child === descendant)
+                    return true;
+                else if (child.containsPopoverDescendant(descendant))
+                    return true;
+            return false;
+        }
+    }), {
+        forceCloseAll() {
+            for (const popover of Component_5.default.findAll(Popover)) {
+                const host = popover.host;
+                host.clickState = false;
+                popover.hide();
+            }
+        },
+    });
+    exports.default = Popover;
+});
+define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_14) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_14 = __importDefault(State_14);
     function ComponentInsertionTransaction(component, onEnd) {
         let unuseComponentRemove = component?.removed.useManual(removed => removed && onComponentRemove());
-        const closed = (0, State_13.default)(false);
+        const closed = (0, State_14.default)(false);
         let removed = false;
         const result = {
             isInsertionDestination: true,
@@ -3728,14 +4555,14 @@ define("kitsui/utility/AbortablePromise", ["require", "exports"], function (requ
     })(AbortablePromise || (AbortablePromise = {}));
     exports.default = AbortablePromise;
 });
-define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kitsui/ext/ComponentInsertionTransaction", "kitsui/utility/AbortablePromise", "kitsui/utility/State"], function (require, exports, Component_3, ComponentInsertionTransaction_1, AbortablePromise_1, State_14) {
+define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kitsui/ext/ComponentInsertionTransaction", "kitsui/utility/AbortablePromise", "kitsui/utility/State"], function (require, exports, Component_6, ComponentInsertionTransaction_1, AbortablePromise_1, State_15) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Component_3 = __importStar(Component_3);
+    Component_6 = __importStar(Component_6);
     ComponentInsertionTransaction_1 = __importDefault(ComponentInsertionTransaction_1);
     AbortablePromise_1 = __importDefault(AbortablePromise_1);
-    State_14 = __importDefault(State_14);
-    Component_3.default.extend(component => {
+    State_15 = __importDefault(State_15);
+    Component_6.default.extend(component => {
         component.extend(component => ({
             hasContent() {
                 const walker = document.createTreeWalker(component.element, NodeFilter.SHOW_TEXT);
@@ -3748,7 +4575,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return false;
             },
             appendWhen(state, ...contents) {
-                let temporaryHolder = (0, Component_3.default)().append(...contents);
+                let temporaryHolder = (0, Component_6.default)().append(...contents);
                 Slot().appendTo(component).preserveContents().if(state, slot => {
                     slot.append(...contents);
                     temporaryHolder?.remove();
@@ -3757,7 +4584,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return component;
             },
             prependWhen(state, ...contents) {
-                let temporaryHolder = (0, Component_3.default)().append(...contents);
+                let temporaryHolder = (0, Component_6.default)().append(...contents);
                 Slot().prependTo(component).preserveContents().if(state, slot => {
                     slot.append(...contents);
                     temporaryHolder?.remove();
@@ -3766,7 +4593,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return component;
             },
             insertWhen(state, direction, sibling, ...contents) {
-                let temporaryHolder = (0, Component_3.default)().append(...contents);
+                let temporaryHolder = (0, Component_6.default)().append(...contents);
                 Slot().insertTo(component, direction, sibling).preserveContents().if(state, slot => {
                     slot.append(...contents);
                     temporaryHolder?.remove();
@@ -3777,7 +4604,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             appendToWhen(state, destination) {
                 let temporaryHolder;
                 if (component.parent) {
-                    temporaryHolder = (0, Component_3.default)();
+                    temporaryHolder = (0, Component_6.default)();
                     component.appendTo(temporaryHolder);
                 }
                 Slot().appendTo(destination).preserveContents().if(state, slot => {
@@ -3790,7 +4617,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             prependToWhen(state, destination) {
                 let temporaryHolder;
                 if (component.parent) {
-                    temporaryHolder = (0, Component_3.default)();
+                    temporaryHolder = (0, Component_6.default)();
                     component.appendTo(temporaryHolder);
                 }
                 Slot().prependTo(destination).preserveContents().if(state, slot => {
@@ -3803,7 +4630,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             insertToWhen(state, destination, direction, sibling) {
                 let temporaryHolder;
                 if (component.parent) {
-                    temporaryHolder = (0, Component_3.default)();
+                    temporaryHolder = (0, Component_6.default)();
                     component.appendTo(temporaryHolder);
                 }
                 Slot().insertTo(destination, direction, sibling).preserveContents().if(state, slot => {
@@ -3815,17 +4642,17 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
         }));
     });
-    const Slot = Object.assign(Component_3.default.Builder((slot) => {
+    const Slot = Object.assign(Component_6.default.Builder((slot) => {
         let unuse;
         let cleanup;
         let abort;
         let abortTransaction;
-        const elses = (0, State_14.default)({ elseIfs: [] });
+        const elses = (0, State_15.default)({ elseIfs: [] });
         let unuseElses;
         let unuseOwner;
         let preserveContents = false;
         let inserted = false;
-        const hidden = (0, State_14.default)(false);
+        const hidden = (0, State_15.default)(false);
         return slot
             .style.bindProperty('display', hidden.mapManual(hidden => hidden ? 'none' : 'contents'))
             .extend(slot => ({
@@ -3850,11 +4677,11 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 unuseElses = undefined;
                 const wasArrayState = Array.isArray(state);
                 if (!wasArrayState)
-                    state = State_14.default.get(state);
+                    state = State_15.default.get(state);
                 else {
-                    const owner = State_14.default.Owner.create();
+                    const owner = State_15.default.Owner.create();
                     unuseOwner = owner.remove;
-                    state = State_14.default.Map(owner, state, (...outputs) => outputs);
+                    state = State_15.default.Map(owner, state, (...outputs) => outputs);
                 }
                 unuse = state.use(slot, value => {
                     abort?.();
@@ -3863,7 +4690,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                     cleanup = undefined;
                     abortTransaction?.();
                     abortTransaction = undefined;
-                    const component = (0, Component_3.default)();
+                    const component = (0, Component_6.default)();
                     const transaction = (0, ComponentInsertionTransaction_1.default)(component, () => {
                         slot.removeContents();
                         slot.append(...component.element.children);
@@ -3906,7 +4733,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                         }
                         let unuseElsesList;
                         const unuseElsesContainer = elses.useManual(elses => {
-                            unuseElsesList = State_14.default.MapManual(elses.elseIfs.map(({ state }) => state), (...elses) => elses.indexOf(true))
+                            unuseElsesList = State_15.default.MapManual(elses.elseIfs.map(({ state }) => state), (...elses) => elses.indexOf(true))
                                 .useManual(elseToUse => {
                                 const initialiser = elseToUse === -1 ? elses.else : elses.elseIfs[elseToUse].initialiser;
                                 if (!initialiser) {
@@ -3946,7 +4773,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
         }))
             .tweak(slot => slot.removed.matchManual(true, () => cleanup?.()));
         function handleSlotInitialiser(initialiser) {
-            const component = (0, Component_3.default)();
+            const component = (0, Component_6.default)();
             const transaction = (0, ComponentInsertionTransaction_1.default)(component, () => {
                 slot.removeContents();
                 slot.append(...component.element.children);
@@ -3969,38 +4796,73 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 result = undefined;
             transaction.close();
             abortTransaction = undefined;
-            if (Component_3.default.is(result)) {
+            if (Component_6.default.is(result)) {
                 result.appendTo(slot);
                 inserted = true;
                 cleanup = undefined;
                 return;
             }
-            if (Component_3.ComponentInsertionDestination.is(result)) {
+            if (Component_6.ComponentInsertionDestination.is(result)) {
                 cleanup = undefined;
                 return;
             }
             cleanup = result;
         }
     }), {
-        using: (value, initialiser) => Slot().use(State_14.default.get(value), initialiser),
+        using: (value, initialiser) => Slot().use(State_15.default.get(value), initialiser),
     });
     exports.default = Slot;
 });
-define("kitsui", ["require", "exports", "kitsui/component/Label", "kitsui/component/Loading", "kitsui/component/Slot", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Label_1, Loading_1, Slot_1, Component_4, State_15) {
+define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "kitsui/component/Popover"], function (require, exports, Component_7, Popover_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Component_7 = __importDefault(Component_7);
+    Popover_1 = __importDefault(Popover_1);
+    var TooltipStyleTargets;
+    (function (TooltipStyleTargets) {
+        TooltipStyleTargets[TooltipStyleTargets["Tooltip"] = 0] = "Tooltip";
+    })(TooltipStyleTargets || (TooltipStyleTargets = {}));
+    const Tooltip = (0, Component_7.default)((component, host) => {
+        const tooltip = component.and(Popover_1.default, host)
+            .setDelay(300)
+            .setMousePadding(0)
+            .addStyleTargets(TooltipStyleTargets);
+        return tooltip.style(tooltip.styleTargets.Tooltip)
+            .anchor.add('aligned left', 'off bottom')
+            .anchor.add('aligned left', 'off top')
+            .anchor.add('aligned right', 'off bottom')
+            .anchor.add('aligned right', 'off top');
+    });
+    Component_7.default.extend(component => {
+        component.extend((component) => ({
+            setTooltip(initialiser) {
+                return component.setPopover('hover/longpress', (popover, host) => initialiser(popover.and(Tooltip, host), host));
+            },
+        }));
+    });
+    exports.default = Tooltip;
+});
+define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/component/Label", "kitsui/component/Loading", "kitsui/component/Popover", "kitsui/component/Slot", "kitsui/component/Tooltip", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Dialog_2, Label_1, Loading_1, Popover_2, Slot_1, Tooltip_1, Component_8, State_16) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Kit = exports.State = exports.Component = void 0;
+    Dialog_2 = __importDefault(Dialog_2);
     Label_1 = __importStar(Label_1);
     Loading_1 = __importDefault(Loading_1);
+    Popover_2 = __importDefault(Popover_2);
     Slot_1 = __importDefault(Slot_1);
-    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_4).default; } });
-    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_15).default; } });
+    Tooltip_1 = __importDefault(Tooltip_1);
+    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_8).default; } });
+    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_16).default; } });
     var Kit;
     (function (Kit) {
         Kit.Label = Label_1.default;
         Kit.LabelTarget = Label_1.LabelTarget;
         Kit.Slot = Slot_1.default;
         Kit.Loading = Loading_1.default;
+        Kit.Dialog = Dialog_2.default;
+        Kit.Popover = Popover_2.default;
+        Kit.Tooltip = Tooltip_1.default;
     })(Kit || (exports.Kit = Kit = {}));
 });
 define("kitsui/utility/ActiveListener", ["require", "exports"], function (require, exports) {
@@ -4063,10 +4925,10 @@ define("kitsui/utility/ActiveListener", ["require", "exports"], function (requir
     exports.default = ActiveListener;
     Object.assign(window, { ActiveListener });
 });
-define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_16) {
+define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_17) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_16 = __importDefault(State_16);
+    State_17 = __importDefault(State_17);
     function Applicator(host, defaultValueOrApply, apply) {
         const defaultValue = !apply ? undefined : defaultValueOrApply;
         apply ??= defaultValueOrApply;
@@ -4075,7 +4937,7 @@ define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State
         return result;
         function makeApplicator(host) {
             return {
-                state: (0, State_16.default)(defaultValue),
+                state: (0, State_17.default)(defaultValue),
                 set: value => {
                     unbind?.();
                     setInternal(value);
@@ -4105,23 +4967,23 @@ define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State
     }
     exports.default = Applicator;
 });
-define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_17) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    State_17 = __importDefault(State_17);
-    var BrowserListener;
-    (function (BrowserListener) {
-        BrowserListener.isWebkit = (0, State_17.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
-    })(BrowserListener || (BrowserListener = {}));
-    exports.default = BrowserListener;
-});
-define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_18) {
+define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_18) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_18 = __importDefault(State_18);
+    var BrowserListener;
+    (function (BrowserListener) {
+        BrowserListener.isWebkit = (0, State_18.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
+    })(BrowserListener || (BrowserListener = {}));
+    exports.default = BrowserListener;
+});
+define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_19) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_19 = __importDefault(State_19);
     var FontsListener;
     (function (FontsListener) {
-        FontsListener.loaded = (0, State_18.default)(false);
+        FontsListener.loaded = (0, State_19.default)(false);
         async function listen() {
             await document.fonts.ready;
             FontsListener.loaded.asMutable?.setValue(true);
@@ -4130,76 +4992,56 @@ define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/St
     })(FontsListener || (FontsListener = {}));
     exports.default = FontsListener;
 });
-define("kitsui/utility/HoverListener", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/Mouse"], function (require, exports, Arrays_6, Mouse_2) {
+define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_20) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Arrays_6 = __importDefault(Arrays_6);
-    Mouse_2 = __importDefault(Mouse_2);
-    var HoverListener;
-    (function (HoverListener) {
-        let lastHovered = [];
-        function allHovered() {
-            return lastHovered;
-        }
-        HoverListener.allHovered = allHovered;
-        function hovered() {
-            return lastHovered.at(-1);
-        }
-        HoverListener.hovered = hovered;
-        function* allHoveredComponents() {
-            for (const element of lastHovered) {
-                const component = element.component;
-                if (component)
-                    yield component;
-            }
-        }
-        HoverListener.allHoveredComponents = allHoveredComponents;
-        function hoveredComponent() {
-            return lastHovered.at(-1)?.component;
-        }
-        HoverListener.hoveredComponent = hoveredComponent;
-        function listen() {
-            Mouse_2.default.onMove((event, allHovered) => {
-                const hovered = allHovered.at(-1);
-                if (hovered && (hovered.clientWidth === 0 || hovered.clientHeight === 0))
-                    Arrays_6.default.filterInPlace(allHovered, element => element.computedStyleMap().get('display')?.toString() !== 'none');
-                if (hovered === lastHovered.at(-1))
-                    return;
-                const newHovered = allHovered;
-                const noLongerHovering = lastHovered.filter(element => !newHovered.includes(element));
-                for (const element of noLongerHovering)
-                    if (element.component)
-                        element.component.hoveredTime.asMutable?.setValue(undefined);
-                const nowHovering = newHovered.filter(element => !lastHovered.includes(element));
-                for (const element of nowHovering)
-                    if (element.component)
-                        element.component.hoveredTime.asMutable?.setValue(Date.now());
-                lastHovered = newHovered;
-            });
-        }
-        HoverListener.listen = listen;
-    })(HoverListener || (HoverListener = {}));
-    exports.default = HoverListener;
-    Object.assign(window, { HoverListener });
-});
-define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_19) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    State_19 = __importDefault(State_19);
+    State_20 = __importDefault(State_20);
     var PageListener;
     (function (PageListener) {
-        PageListener.visible = (0, State_19.default)(document.visibilityState === 'visible');
+        PageListener.visible = (0, State_20.default)(document.visibilityState === 'visible');
         document.addEventListener('visibilitychange', () => PageListener.visible.asMutable?.setValue(document.visibilityState === 'visible'));
     })(PageListener || (PageListener = {}));
     exports.default = PageListener;
 });
-define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_20) {
+define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "kitsui/utility/Task"], function (require, exports, State_21, Task_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_20 = __importDefault(State_20);
+    State_21 = __importDefault(State_21);
+    Task_2 = __importDefault(Task_2);
+    var Style;
+    (function (Style) {
+        Style.properties = State_21.default.JIT(() => window.getComputedStyle(document.documentElement));
+        const measured = {};
+        function measure(property) {
+            if (measured[property])
+                return measured[property];
+            return Style.properties.mapManual(properties => {
+                const value = properties.getPropertyValue(property);
+                const element = document.createElement('div');
+                element.style.width = value;
+                element.style.pointerEvents = 'none';
+                element.style.opacity = '0';
+                element.style.position = 'fixed';
+                document.body.appendChild(element);
+                const state = measured[property] = (0, State_21.default)(0);
+                void Task_2.default.yield().then(() => {
+                    state.value = element.clientWidth;
+                    element.remove();
+                });
+                return measured[property];
+            });
+        }
+        Style.measure = measure;
+    })(Style || (Style = {}));
+    exports.default = Style;
+});
+define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_22) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_22 = __importDefault(State_22);
     const TypeManipulator // Object.assign(
      = function (host, onAdd, onRemove) {
-        const state = (0, State_20.default)(new Set());
+        const state = (0, State_22.default)(new Set());
         return Object.assign(add, {
             state,
             remove,

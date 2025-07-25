@@ -362,25 +362,6 @@ declare module "kitsui/utility/Time" {
     }
     export default Time;
 }
-declare module "kitsui/utility/Task" {
-    export default class Task {
-        private readonly interval;
-        static yield(instantIfUnsupported?: boolean): Promise<void>;
-        static post<T>(callback: () => Promise<T>, priority: 'user-blocking' | 'user-visible' | 'background'): Promise<T>;
-        private lastYieldEnd;
-        constructor(interval?: number);
-        reset(): void;
-        yield(instantIfUnsupported?: boolean): Promise<void>;
-    }
-}
-declare module "kitsui/utility/Style" {
-    import State from "kitsui/utility/State";
-    namespace Style {
-        const properties: State.JIT<CSSStyleDeclaration>;
-        function measure(property: string): State<number>;
-    }
-    export default Style;
-}
 declare module "kitsui/utility/Viewport" {
     import State from "kitsui/utility/State";
     namespace Viewport {
@@ -815,7 +796,7 @@ declare module "kitsui/Component" {
         extendJIT<K extends Exclude<keyof this, symbol>, O extends this = this>(property: K, supplier: (component: this) => O[K]): this;
         override<K extends keyof this>(property: K, provider: (component: this, original: this[K]) => this[K]): this;
         tweakJIT<PARAMS extends any[], K extends Exclude<keyof this, symbol>, O extends this = this>(property: K, tweaker: (value: O[K], component: this) => unknown): this;
-        setStyleTargets<STYLE_TARGETS_ENUM>(styleTargetsEnum: STYLE_TARGETS_ENUM): this & Component.StyleHost<STYLE_TARGETS_ENUM>;
+        addStyleTargets<STYLE_TARGETS_ENUM>(styleTargetsEnum: STYLE_TARGETS_ENUM): this & Component.StyleHost<STYLE_TARGETS_ENUM>;
         tweak<PARAMS extends any[]>(tweaker?: (component: this, ...params: PARAMS) => unknown, ...params: PARAMS): this;
         disableInsertion(): Omit<this, keyof ComponentInsertionDestination>;
         appendTo(destination: ComponentInsertionDestination | Element): this;
@@ -911,6 +892,11 @@ declare module "kitsui/Component" {
                 [KEY in keyof STYLE]: State<ComponentName | undefined>;
             };
         }
+        export type PartialStyleTargets<HOST, PARENT> = HOST extends {
+            styleTargets: StyleTargets<any, infer STYLE>;
+        } ? PARENT extends {
+            styleTargets: StyleTargets<any, infer PARENT_STYLE>;
+        } ? Omit<STYLE, keyof PARENT_STYLE> : never : never;
         export interface StyleTargets<HOST, STYLE> {
             (style: {
                 [KEY in keyof STYLE]: ComponentName | null;
@@ -961,6 +947,9 @@ declare module "kitsui/Component" {
             styleTargets(style: EXT_COMPONENT extends StyleHost<infer STYLE> ? {
                 [KEY in keyof STYLE]: ComponentName | null;
             } : never): this;
+            styleTargetsPartial<STYLE>(style: EXT_COMPONENT extends StyleHost<infer FULL_STYLE> ? keyof STYLE extends keyof FULL_STYLE ? {
+                [KEY in keyof STYLE]: ComponentName | null;
+            } : never : never): EXT_COMPONENT & StyleHost<STYLE>;
         }
         export interface ExtensionAsync<PARAMS extends any[], EXT_COMPONENT extends Component> {
             readonly builderType: 'extension';
@@ -972,6 +961,9 @@ declare module "kitsui/Component" {
             styleTargets(style: EXT_COMPONENT extends StyleHost<infer STYLE> ? {
                 [KEY in keyof STYLE]: ComponentName | null;
             } : never): this;
+            styleTargetsPartial<STYLE>(style: EXT_COMPONENT extends StyleHost<infer FULL_STYLE> ? keyof STYLE extends keyof FULL_STYLE ? {
+                [KEY in keyof STYLE]: ComponentName | null;
+            } : never : never): EXT_COMPONENT & StyleHost<STYLE>;
         }
         export function Extension<PARAMS extends any[], COMPONENT extends Component>(builder: (component: Component, ...params: PARAMS) => COMPONENT): Extension<PARAMS, COMPONENT>;
         export function Extension<PARAMS extends any[], COMPONENT extends Component>(builder: (component: Component, ...params: PARAMS) => Promise<COMPONENT>): ExtensionAsync<PARAMS, COMPONENT>;
@@ -991,9 +983,42 @@ declare module "kitsui/Component" {
         export function closest<BUILDER extends Component.BuilderLike>(builder: BUILDER, element?: HTMLElement | Component | null): (BUILDER extends Component.BuilderLike<any[], infer COMPONENT> ? COMPONENT : never) | undefined;
         export function closest<COMPONENT extends Component>(builder: Component.Builder<any[], COMPONENT>, element?: HTMLElement | Component | null): COMPONENT | undefined;
         export function closest<COMPONENT extends Component>(builder: Component.Extension<any[], COMPONENT>, element?: HTMLElement | Component | null): COMPONENT | undefined;
+        export function findAll<BUILDERS extends Component.BuilderLike[]>(builder: BUILDERS, element?: HTMLElement | Component | null): {
+            [INDEX in keyof BUILDERS]: BUILDERS[INDEX] extends infer BUILDER ? (BUILDER extends Component.BuilderLike<any[], infer COMPONENT> ? COMPONENT : never) : never;
+        }[number][];
+        export function findAll<BUILDER extends Component.BuilderLike>(builder: BUILDER, element?: HTMLElement | Component | null): (BUILDER extends Component.BuilderLike<any[], infer COMPONENT> ? COMPONENT : never)[];
+        export function findAll<COMPONENT extends Component>(builder: Component.Builder<any[], COMPONENT>, element?: HTMLElement | Component | null): COMPONENT[];
+        export function findAll<COMPONENT extends Component>(builder: Component.Extension<any[], COMPONENT>, element?: HTMLElement | Component | null): COMPONENT[];
         export {};
     }
     export default Component;
+}
+declare module "kitsui/component/Dialog" {
+    import Component from "kitsui/Component";
+    import State from "kitsui/utility/State";
+    export interface DialogExtensions {
+        readonly willClose: State<boolean>;
+        readonly willOpen: State<boolean>;
+        readonly opened: State<boolean>;
+        setNotModal(notModal?: boolean): this;
+        setFullscreen(fullscreen?: boolean): this;
+        open(): this;
+        close(): this;
+        toggle(open?: boolean): this;
+        bind(state: State.Mutable<boolean>): this;
+        unbind(): this;
+    }
+    enum DialogStyleTargets {
+        Dialog = 0,
+        Dialog_Open = 1
+    }
+    interface Dialog extends Component, DialogExtensions, Component.StyleHost<typeof DialogStyleTargets> {
+    }
+    const Dialog: Component.Builder<[], Dialog> & {
+        await(dialog: Dialog): Promise<void>;
+        forceCloseAll(): void;
+    };
+    export default Dialog;
 }
 declare module "kitsui/component/Loading" {
     import Component from "kitsui/Component";
@@ -1034,6 +1059,146 @@ declare module "kitsui/component/Loading" {
     }
     const Loading: Component.Builder<[], Loading>;
     export default Loading;
+}
+declare module "kitsui/utility/HoverListener" {
+    import type Component from "kitsui/Component";
+    namespace HoverListener {
+        function allHovered(): readonly HTMLElement[];
+        function hovered(): HTMLElement | undefined;
+        function allHoveredComponents(): Generator<Component>;
+        function hoveredComponent(): Component | undefined;
+        function listen(): void;
+    }
+    export default HoverListener;
+}
+declare module "kitsui/utility/InputBus" {
+    import Component from "kitsui/Component";
+    import type { Events } from "kitsui/utility/EventManipulator";
+    import EventManipulator from "kitsui/utility/EventManipulator";
+    interface InputBusComponentExtensions {
+        receiveFocusedClickEvents(): this;
+    }
+    module "kitsui/Component" {
+        interface ComponentExtensions extends InputBusComponentExtensions {
+        }
+    }
+    export const HandlesKeyboardEvents: Component.Extension<[], Component<HTMLElement>>;
+    export const HandlesMouseEvents: Component.Extension<[], Component<HTMLElement>>;
+    type Modifier = 'ctrl' | 'shift' | 'alt';
+    export interface InputEvent {
+        key: string;
+        ctrl: boolean;
+        shift: boolean;
+        alt: boolean;
+        used: boolean;
+        targetElement: HTMLElement | null;
+        targetComponent: Component | null;
+        input: HTMLElement | null;
+        use(key: string, ...modifiers: Modifier[]): boolean;
+        useOverInput(key: string, ...modifiers: Modifier[]): boolean;
+        matches(key: string, ...modifiers: Modifier[]): boolean;
+        cancelInput(): void;
+        hovering(selector?: string): HTMLElement | undefined;
+    }
+    export interface InputUpEvent extends InputEvent {
+        usedAnotherKeyDuring: boolean;
+    }
+    export interface InputBusEvents {
+        Down(input: InputEvent): any;
+        Up(input: InputUpEvent): any;
+    }
+    interface InputBusExtensions {
+        getPressStart(name: string): number | undefined;
+        getPressDuration(name: string): number | undefined;
+        isDown(name: string): boolean;
+        isUp(name: string): boolean;
+    }
+    interface InputBus extends InputBusExtensions {
+        readonly event: EventManipulator<this, Events<Component, InputBusEvents>>;
+    }
+    const InputBus: InputBus;
+    global {
+        interface MouseEvent {
+            used: boolean;
+            use(key: string, ...modifiers: Modifier[]): boolean;
+            matches(key: string, ...modifiers: Modifier[]): boolean;
+        }
+        interface PointerEvent {
+            used: boolean;
+            use(key: string, ...modifiers: Modifier[]): boolean;
+            matches(key: string, ...modifiers: Modifier[]): boolean;
+        }
+    }
+    export default InputBus;
+}
+declare module "kitsui/utility/Task" {
+    export default class Task {
+        private readonly interval;
+        static yield(instantIfUnsupported?: boolean): Promise<void>;
+        static post<T>(callback: () => Promise<T>, priority: 'user-blocking' | 'user-visible' | 'background'): Promise<T>;
+        private lastYieldEnd;
+        constructor(interval?: number);
+        reset(): void;
+        yield(instantIfUnsupported?: boolean): Promise<void>;
+    }
+}
+declare module "kitsui/component/Popover" {
+    import Component from "kitsui/Component";
+    import type { InputEvent } from "kitsui/utility/InputBus";
+    import State from "kitsui/utility/State";
+    export interface PopoverComponentRegisteredExtensions {
+        popover: Popover;
+        tweakPopover(initialiser: PopoverInitialiser<this>): this;
+        /** Simulate a click on a button for this popover */
+        showPopover(): this;
+        togglePopover(): this;
+    }
+    export type PopoverInitialiser<HOST> = (popover: Popover, host: HOST) => unknown;
+    interface PopoverComponentExtensions {
+        /** Disallow any popovers to continue showing if this component is hovered */
+        clearPopover(): this;
+        setPopover(event: 'hover/longpress' | 'hover/click' | 'click', initialiser: PopoverInitialiser<this>): this & PopoverComponentRegisteredExtensions;
+        hasPopoverSet(): boolean;
+    }
+    module "kitsui/Component" {
+        interface ComponentExtensions extends PopoverComponentExtensions {
+        }
+    }
+    interface PopoverExtensions {
+        readonly visible: State<boolean>;
+        readonly popoverChildren: State<readonly Popover[]>;
+        readonly popoverParent: State<Popover | undefined>;
+        readonly popoverHasFocus: State<'focused' | 'no-focus' | undefined>;
+        readonly lastStateChangeTime: number;
+        readonly host: Component & PopoverComponentRegisteredExtensions | undefined;
+        /** Sets the distance the mouse can be from the popover before it hides, if it's shown due to hover */
+        setMousePadding(padding?: number): this;
+        /** Sets the delay until this popover will show (only in hover mode) */
+        setDelay(ms: number): this;
+        getDelay(): number;
+        isMouseWithin(checkDescendants?: true): boolean;
+        containsPopoverDescendant(node?: Node | Component): boolean;
+        /** Defaults on */
+        setCloseOnInput(closeOnInput?: boolean): this;
+        setCloseDueToMouseInputFilter(filter: (event: InputEvent) => boolean): this;
+        show(): this;
+        hide(): this;
+        toggle(shown?: boolean): this;
+        bind(state: State<boolean>): this;
+        unbind(): this;
+    }
+    enum PopoverStyleTargets {
+        Popover = 0,
+        PopoverCloseSurface = 1,
+        Popover_AnchoredTop = 2,
+        Popover_AnchoredLeft = 3
+    }
+    interface Popover extends Component, PopoverExtensions, Component.StyleHost<typeof PopoverStyleTargets> {
+    }
+    const Popover: Component.Builder<[host: Component<HTMLElement>], Popover> & {
+        forceCloseAll(): void;
+    };
+    export default Popover;
 }
 declare module "kitsui/ext/ComponentInsertionTransaction" {
     import type Component from "kitsui/Component";
@@ -1110,10 +1275,36 @@ declare module "kitsui/component/Slot" {
     };
     export default Slot;
 }
+declare module "kitsui/component/Tooltip" {
+    import Component from "kitsui/Component";
+    import type { PopoverComponentRegisteredExtensions } from "kitsui/component/Popover";
+    import Popover from "kitsui/component/Popover";
+    export type PopoverInitialiser<HOST> = (popover: Popover, host: HOST) => unknown;
+    interface TooltipComponentExtensions {
+        setTooltip(initialiser: PopoverInitialiser<this>): this & PopoverComponentRegisteredExtensions;
+    }
+    module "kitsui/Component" {
+        interface ComponentExtensions extends TooltipComponentExtensions {
+        }
+    }
+    interface TooltipExtensions {
+    }
+    enum TooltipStyleTargets {
+        Tooltip = 0
+    }
+    type PopoverWithTooltipStyleTargets = Popover & Component.StyleHost<typeof TooltipStyleTargets>;
+    interface Tooltip extends PopoverWithTooltipStyleTargets, TooltipExtensions {
+    }
+    const Tooltip: Component.Builder<[host: Component<HTMLElement>], Tooltip>;
+    export default Tooltip;
+}
 declare module "kitsui" {
+    import _Dialog from "kitsui/component/Dialog";
     import _Label, { LabelTarget as _LabelTarget } from "kitsui/component/Label";
     import _Loading from "kitsui/component/Loading";
+    import _Popover from "kitsui/component/Popover";
     import _Slot from "kitsui/component/Slot";
+    import _Tooltip from "kitsui/component/Tooltip";
     export { default as Component } from "kitsui/Component";
     export { default as State } from "kitsui/utility/State";
     export namespace Kit {
@@ -1127,6 +1318,17 @@ declare module "kitsui" {
         };
         type Loading = _Loading;
         const Loading: import("kitsui/Component").default.Builder<[], _Loading>;
+        type Dialog = _Dialog;
+        const Dialog: import("kitsui/Component").default.Builder<[], _Dialog> & {
+            await(dialog: _Dialog): Promise<void>;
+            forceCloseAll(): void;
+        };
+        type Popover = _Popover;
+        const Popover: import("kitsui/Component").default.Builder<[host: import("kitsui/Component").default<HTMLElement>], _Popover> & {
+            forceCloseAll(): void;
+        };
+        type Tooltip = _Tooltip;
+        const Tooltip: import("kitsui/Component").default.Builder<[host: import("kitsui/Component").default<HTMLElement>], _Tooltip>;
     }
 }
 declare module "kitsui/utility/ActiveListener" {
@@ -1176,23 +1378,20 @@ declare module "kitsui/utility/FontsListener" {
     }
     export default FontsListener;
 }
-declare module "kitsui/utility/HoverListener" {
-    import type Component from "kitsui/Component";
-    namespace HoverListener {
-        function allHovered(): readonly HTMLElement[];
-        function hovered(): HTMLElement | undefined;
-        function allHoveredComponents(): Generator<Component>;
-        function hoveredComponent(): Component | undefined;
-        function listen(): void;
-    }
-    export default HoverListener;
-}
 declare module "kitsui/utility/PageListener" {
     import State from "kitsui/utility/State";
     namespace PageListener {
         const visible: State.Mutable<boolean>;
     }
     export default PageListener;
+}
+declare module "kitsui/utility/Style" {
+    import State from "kitsui/utility/State";
+    namespace Style {
+        const properties: State.JIT<CSSStyleDeclaration>;
+        function measure(property: string): State<number>;
+    }
+    export default Style;
 }
 declare module "kitsui/utility/TypeManipulator" {
     import State from "kitsui/utility/State";
