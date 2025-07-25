@@ -42,7 +42,7 @@ namespace Loading {
 }
 
 const Loading = Component((component): Loading => {
-	const loading = component.setStyleTargets(LoadingStyleTargets)
+	const loading = component.addStyleTargets(LoadingStyleTargets)
 	const style = loading.styleTargets
 	const storage = Component().setOwner(component)
 

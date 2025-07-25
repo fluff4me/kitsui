@@ -155,7 +155,7 @@ interface BaseComponent<ELEMENT extends HTMLElement = HTMLElement> extends Compo
 	extendJIT<K extends Exclude<keyof this, symbol>, O extends this = this> (property: K, supplier: (component: this) => O[K]): this
 	override<K extends keyof this> (property: K, provider: (component: this, original: this[K]) => this[K]): this
 	tweakJIT<PARAMS extends any[], K extends Exclude<keyof this, symbol>, O extends this = this> (property: K, tweaker: (value: O[K], component: this) => unknown): this
-	setStyleTargets<STYLE_TARGETS_ENUM> (styleTargetsEnum: STYLE_TARGETS_ENUM): this & Component.StyleHost<STYLE_TARGETS_ENUM>
+	addStyleTargets<STYLE_TARGETS_ENUM> (styleTargetsEnum: STYLE_TARGETS_ENUM): this & Component.StyleHost<STYLE_TARGETS_ENUM>
 
 	tweak<PARAMS extends any[]> (tweaker?: (component: this, ...params: PARAMS) => unknown, ...params: PARAMS): this
 
@@ -404,7 +404,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			return component
 		},
 
-		setStyleTargets (styleEnum) {
+		addStyleTargets (styleEnum) {
 			const keys = Object.keys(styleEnum as never).filter(key => isNaN(+key))
 			for (const key of keys)
 				(component as Component & Component.StyleHost<Record<string, true>>).styleTargets[key] = State(undefined)
@@ -926,6 +926,13 @@ namespace Component {
 		styleTargets: StyleTargets<this, STYLE> & { [KEY in keyof STYLE]: State<ComponentName | undefined> }
 	}
 
+	export type PartialStyleTargets<HOST, PARENT> =
+		HOST extends { styleTargets: StyleTargets<any, infer STYLE> } ?
+		PARENT extends { styleTargets: StyleTargets<any, infer PARENT_STYLE> } ?
+		Omit<STYLE, keyof PARENT_STYLE>
+		: never
+		: never
+
 	export interface StyleTargets<HOST, STYLE> {
 		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 		(style: { [KEY in keyof STYLE]: ComponentName | null }): HOST
@@ -1009,20 +1016,20 @@ namespace Component {
 				return result.then(result => {
 					if (result !== component)
 						void ensureOriginalComponentNotSubscriptionOwner(component)
-					return result
+					return applyExtensions(result)
 				})
 
 			if (result !== component)
 				void ensureOriginalComponentNotSubscriptionOwner(component)
-			return result
+			return applyExtensions(result)
 		}
 		const simpleBuilder = (...params: any[]) => {
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
 			const component = realBuilder(undefined, ...params)
 			if (component instanceof Promise)
-				return component.then(completeComponent)
+				return component.then(applyExtensions).then(completeComponent)
 
-			return completeComponent(component)
+			return completeComponent(applyExtensions(component))
 		}
 
 		Object.defineProperty(builder, 'name', { value: name, configurable: true })
@@ -1033,6 +1040,14 @@ namespace Component {
 		Object.defineProperty(simpleBuilder, Symbol.toStringTag, { value: name, configurable: true })
 
 		const extensions: ((component: Component) => unknown)[] = []
+
+		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+		const styleTargets = (style: Record<string, ComponentName | null>) => {
+			extensions.push(component => {
+				(component as Component & StyleHost<Record<string, true>>).styleTargets(style)
+			})
+			return resultBuilder
+		}
 
 		const resultBuilder = Object.assign(simpleBuilder, {
 			from: realBuilder,
@@ -1045,22 +1060,24 @@ namespace Component {
 				extensions.push(extensionProvider)
 				return resultBuilder
 			},
-			// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
-			styleTargets (style: Record<string, ComponentName | null>) {
-				extensions.push(component => {
-					(component as Component & StyleHost<Record<string, true>>).styleTargets(style)
-				})
-				return resultBuilder
-			},
+			styleTargets: styleTargets,
+			styleTargetsPartial: styleTargets,
 		})
 		return resultBuilder
 
-		function completeComponent (component: Component) {
+		function applyExtensions (component: Component) {
 			if (!component)
 				return component
 
 			for (const extension of extensions)
 				Object.assign(component, extension(component))
+
+			return component
+		}
+
+		function completeComponent (component: Component) {
+			if (!component)
+				return component
 
 			if (name) {
 				(component as Component & { [Symbol.toStringTag]?: string })[Symbol.toStringTag] ??= name.toString()
@@ -1103,6 +1120,8 @@ namespace Component {
 		extend<T> (extensionProvider: (component: EXT_COMPONENT & T) => Omit<T, typeof SYMBOL_COMPONENT_BRAND>): EXT_COMPONENT & T
 		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 		styleTargets (style: EXT_COMPONENT extends StyleHost<infer STYLE> ? { [KEY in keyof STYLE]: ComponentName | null } : never): this
+		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+		styleTargetsPartial<STYLE> (style: EXT_COMPONENT extends StyleHost<infer FULL_STYLE> ? keyof STYLE extends keyof FULL_STYLE ? { [KEY in keyof STYLE]: ComponentName | null } : never : never): EXT_COMPONENT & StyleHost<STYLE>
 	}
 
 	export interface ExtensionAsync<PARAMS extends any[], EXT_COMPONENT extends Component> {
@@ -1114,6 +1133,8 @@ namespace Component {
 		extend<T> (extensionProvider: (component: EXT_COMPONENT & T) => Omit<T, typeof SYMBOL_COMPONENT_BRAND>): EXT_COMPONENT & T
 		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 		styleTargets (style: EXT_COMPONENT extends StyleHost<infer STYLE> ? { [KEY in keyof STYLE]: ComponentName | null } : never): this
+		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+		styleTargetsPartial<STYLE> (style: EXT_COMPONENT extends StyleHost<infer FULL_STYLE> ? keyof STYLE extends keyof FULL_STYLE ? { [KEY in keyof STYLE]: ComponentName | null } : never : never): EXT_COMPONENT & StyleHost<STYLE>
 	}
 
 	export function Extension<PARAMS extends any[], COMPONENT extends Component> (builder: (component: Component, ...params: PARAMS) => COMPONENT): Extension<PARAMS, COMPONENT>
@@ -1230,6 +1251,25 @@ namespace Component {
 
 			cursor = cursor.parentElement
 		}
+	}
+
+	export function findAll<BUILDERS extends Component.BuilderLike[]> (builder: BUILDERS, element?: HTMLElement | Component | null): { [INDEX in keyof BUILDERS]: BUILDERS[INDEX] extends infer BUILDER ? (BUILDER extends Component.BuilderLike<any[], infer COMPONENT> ? COMPONENT : never) : never }[number][]
+	export function findAll<BUILDER extends Component.BuilderLike> (builder: BUILDER, element?: HTMLElement | Component | null): (BUILDER extends Component.BuilderLike<any[], infer COMPONENT> ? COMPONENT : never)[]
+	export function findAll<COMPONENT extends Component> (builder: Component.Builder<any[], COMPONENT>, element?: HTMLElement | Component | null): COMPONENT[]
+	export function findAll<COMPONENT extends Component> (builder: Component.Extension<any[], COMPONENT>, element?: HTMLElement | Component | null): COMPONENT[]
+	export function findAll (builder: BuilderLike, element?: HTMLElement | Component | null) {
+		const components: Component[] = []
+		const cursor: HTMLElement | null = is(element) ? element.element : element ?? null
+		if (cursor) {
+			const walker = document.createTreeWalker(cursor, NodeFilter.SHOW_ELEMENT)
+			let node: Node | null
+			while ((node = walker.nextNode())) {
+				const component = (node as Element).component
+				if (component?.is(builder))
+					components.push(component)
+			}
+		}
+		return components
 	}
 
 }

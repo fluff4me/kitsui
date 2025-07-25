@@ -24,7 +24,7 @@ const Label = Component('label', (label): Label => {
 	let requiredOwner: State.Owner.Removable | undefined
 	let unuseTarget: State.Unsubscribe | undefined
 	return label
-		.setStyleTargets(LabelStyleTargets)
+		.addStyleTargets(LabelStyleTargets)
 		.extend<LabelExtensions>(label => ({
 			textWrapper,
 			for: State(undefined),

@@ -1,5 +1,4 @@
 import State from 'utility/State'
-import Style from 'utility/Style'
 
 namespace Viewport {
 
@@ -10,23 +9,20 @@ namespace Viewport {
 
 	export const size = State.JIT<Size>(() => ({ w: window.innerWidth, h: window.innerHeight }))
 	export const mobile = State.JIT(owner => {
-		const contentWidth = Style.measure('--content-width')
-		const result = size.value.w < contentWidth.value
-		contentWidth.subscribe(owner, mobile.markDirty)
+		const contentWidth = 800
+		const result = size.value.w < contentWidth
 		size.subscribe(owner, mobile.markDirty)
 		return result
 	})
 	export const tablet = State.JIT(owner => {
-		const tabletWidth = Style.measure('--tablet-width')
-		const result = size.value.w < tabletWidth.value
-		tabletWidth.subscribe(owner, tablet.markDirty)
+		const tabletWidth = 1200
+		const result = size.value.w < tabletWidth
 		size.subscribe(owner, tablet.markDirty)
 		return result
 	})
 	export const laptop = State.JIT(owner => {
-		const laptopWidth = Style.measure('--laptop-width')
-		const result = size.value.w < laptopWidth.value
-		laptopWidth.subscribe(owner, laptop.markDirty)
+		const laptopWidth = 1600
+		const result = size.value.w < laptopWidth
 		size.subscribe(owner, laptop.markDirty)
 		return result
 	})
