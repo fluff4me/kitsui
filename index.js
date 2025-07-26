@@ -1508,6 +1508,7 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
         const addSubscription = (use) => use && subscribed.push(use);
         let unuseFrom;
         let renderId = 0;
+        let rendered = false;
         const result = {
             state: location,
             isMouse: () => !locationPreference?.length,
@@ -1554,6 +1555,9 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                 return host;
             },
             markDirty: () => {
+                const anchoredBox = host?.rect.value;
+                if (!anchoredBox.width || !anchoredBox.height)
+                    return host;
                 location.value = undefined;
                 if (lastRender) {
                     const timeSinceLastRender = Date.now() - lastRender;
@@ -1666,7 +1670,7 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                 host.element.style.left = `${location.x}px`;
                 host.element.style.top = `${location.y}px`;
                 host.rect.markDirty();
-                if (!location.mouse) {
+                if (!location.mouse && !rendered) {
                     const id = ++renderId;
                     host.style.setProperty('display', 'none');
                     host.style.setProperty('transition-duration', '0s');
@@ -1674,6 +1678,7 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                         if (renderId !== id)
                             return;
                         host.style.removeProperties('display', 'transition-duration');
+                        rendered = true;
                     });
                 }
                 rerenderTimeout = undefined;
@@ -4138,12 +4143,12 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                 }));
                 popover.visible.match(component, true, async () => {
                     if (popover.hasContent()) {
-                        popover.style.setProperty('opacity', '0');
+                        popover.style.setProperty('visibility', 'hidden');
                         popover.show();
                         await Task_1.default.yield();
                         popover.anchor.apply();
                         await Task_1.default.yield();
-                        popover.style.removeProperties('opacity');
+                        popover.style.removeProperties('visibility');
                     }
                 });
                 popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop);
@@ -4203,14 +4208,14 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     },
                 }));
                 async function showPopoverClick() {
-                    popover.style.setProperty('opacity', '0');
+                    popover.style.setProperty('visibility', 'hidden');
                     component.popover?.show();
                     component.popover?.focus();
                     component.popover?.style.removeProperties('left', 'top');
                     await Task_1.default.yield();
                     component.popover?.anchor.apply();
                     await Task_1.default.yield();
-                    popover.style.removeProperties('opacity');
+                    popover.style.removeProperties('visibility');
                 }
                 function updatePopoverParent() {
                     if (!component.popover)
@@ -4258,16 +4263,16 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     if (!shouldShow)
                         FocusTrap.hide();
                     isShown = shouldShow;
-                    popover.style.setProperty('opacity', '0');
                     component.popover.toggle(shouldShow);
                     if (!shouldShow)
                         return;
+                    popover.style.setProperty('visibility', 'hidden');
                     FocusTrap.show();
                     // component.popover.style.removeProperties('left', 'top')
                     await Task_1.default.yield();
                     component.popover.anchor.apply();
                     await Task_1.default.yield();
-                    popover.style.removeProperties('opacity');
+                    popover.style.removeProperties('visibility');
                 }
                 function shouldClearPopover() {
                     if (!component.popover)

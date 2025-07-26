@@ -223,7 +223,7 @@ declare module "kitsui/utility/State" {
 declare module "kitsui/component/Label" {
     import Component from "kitsui/Component";
     import State from "kitsui/utility/State";
-    interface LabelExtensions {
+    export interface LabelExtensions {
         readonly textWrapper: Component;
         readonly for: State.Mutable<string | undefined>;
         readonly required: State.Mutable<boolean>;
@@ -1036,7 +1036,7 @@ declare module "kitsui/component/Loading" {
     }
     type OnSetHandler<HOST> = (loading: HOST, owner: State.Owner, state: State.Async<unknown, StringApplicatorSource>) => unknown;
     type OnLoadHandler<HOST> = (loading: HOST, displayLoaded: () => unknown) => unknown;
-    interface LoadingExtensions extends Loading.LoadedSlotExtensions {
+    export interface LoadingExtensions extends Loading.LoadedSlotExtensions {
         readonly spinner: Component;
         readonly progressBar: Component;
         readonly messageText: Component;
@@ -1154,7 +1154,7 @@ declare module "kitsui/component/Popover" {
         togglePopover(): this;
     }
     export type PopoverInitialiser<HOST> = (popover: Popover, host: HOST) => unknown;
-    interface PopoverComponentExtensions {
+    export interface PopoverComponentExtensions {
         /** Disallow any popovers to continue showing if this component is hovered */
         clearPopover(): this;
         setPopover(event: 'hover/longpress' | 'hover/click' | 'click', initialiser: PopoverInitialiser<this>): this & PopoverComponentRegisteredExtensions;
@@ -1164,7 +1164,7 @@ declare module "kitsui/component/Popover" {
         interface ComponentExtensions extends PopoverComponentExtensions {
         }
     }
-    interface PopoverExtensions {
+    export interface PopoverExtensions {
         readonly visible: State<boolean>;
         readonly popoverChildren: State<readonly Popover[]>;
         readonly popoverParent: State<Popover | undefined>;
@@ -1238,7 +1238,7 @@ declare module "kitsui/component/Slot" {
     import type { AbortablePromiseOr } from "kitsui/utility/AbortablePromise";
     import State from "kitsui/utility/State";
     import type { Falsy } from "kitsui/utility/Type";
-    interface SlotComponentExtensions {
+    export interface SlotComponentExtensions {
         hasContent(): boolean;
         appendWhen(state: State<boolean>, ...contents: (Component | Node | Falsy)[]): this;
         prependWhen(state: State<boolean>, ...contents: (Component | Node | Falsy)[]): this;
@@ -1255,7 +1255,7 @@ declare module "kitsui/component/Slot" {
         elseIf(state: State<boolean>, initialiser: Slot.Initialiser): this;
         else(initialiser: Slot.Initialiser): this;
     }
-    interface SlotExtensions {
+    export interface SlotExtensions {
         use<const STATES extends State<any>[]>(states: STATES, initialiser: (slot: ComponentInsertionTransaction, ...values: {
             [INDEX in keyof STATES]: STATES[INDEX] extends State<infer T> ? T : never;
         }) => Slot.InitialiserReturn): this;
@@ -1287,7 +1287,7 @@ declare module "kitsui/component/Tooltip" {
         interface ComponentExtensions extends TooltipComponentExtensions {
         }
     }
-    interface TooltipExtensions {
+    export interface TooltipExtensions {
     }
     enum TooltipStyleTargets {
         Tooltip = 0
