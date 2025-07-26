@@ -15,7 +15,7 @@ enum LoadingStyleTargets {
 
 type OnSetHandler<HOST> = (loading: HOST, owner: State.Owner, state: State.Async<unknown, StringApplicatorSource>) => unknown
 type OnLoadHandler<HOST> = (loading: HOST, displayLoaded: () => unknown) => unknown
-interface LoadingExtensions extends Loading.LoadedSlotExtensions {
+export interface LoadingExtensions extends Loading.LoadedSlotExtensions {
 	readonly spinner: Component
 	readonly progressBar: Component
 	readonly messageText: Component

@@ -47,7 +47,7 @@ interface InternalPopoverExtensions {
 
 export type PopoverInitialiser<HOST> = (popover: Popover, host: HOST) => unknown
 
-interface PopoverComponentExtensions {
+export interface PopoverComponentExtensions {
 	/** Disallow any popovers to continue showing if this component is hovered */
 	clearPopover (): this
 	setPopover (event: 'hover/longpress' | 'hover/click' | 'click', initialiser: PopoverInitialiser<this>): this & PopoverComponentRegisteredExtensions
@@ -200,12 +200,12 @@ Component.extend(component => {
 
 			popover.visible.match(component, true, async () => {
 				if (popover.hasContent()) {
-					popover.style.setProperty('opacity', '0')
+					popover.style.setProperty('visibility', 'hidden')
 					popover.show()
 					await Task.yield()
 					popover.anchor.apply()
 					await Task.yield()
-					popover.style.removeProperties('opacity')
+					popover.style.removeProperties('visibility')
 				}
 			})
 
@@ -280,14 +280,14 @@ Component.extend(component => {
 			}))
 
 			async function showPopoverClick () {
-				popover.style.setProperty('opacity', '0')
+				popover.style.setProperty('visibility', 'hidden')
 				component.popover?.show()
 				component.popover?.focus()
 				component.popover?.style.removeProperties('left', 'top')
 				await Task.yield()
 				component.popover?.anchor.apply()
 				await Task.yield()
-				popover.style.removeProperties('opacity')
+				popover.style.removeProperties('visibility')
 			}
 
 			function updatePopoverParent () {
@@ -349,17 +349,17 @@ Component.extend(component => {
 					FocusTrap.hide()
 
 				isShown = shouldShow
-				popover.style.setProperty('opacity', '0')
 				component.popover.toggle(shouldShow)
 				if (!shouldShow)
 					return
 
+				popover.style.setProperty('visibility', 'hidden')
 				FocusTrap.show()
 				// component.popover.style.removeProperties('left', 'top')
 				await Task.yield()
 				component.popover.anchor.apply()
 				await Task.yield()
-				popover.style.removeProperties('opacity')
+				popover.style.removeProperties('visibility')
 			}
 
 			function shouldClearPopover () {
@@ -388,7 +388,7 @@ Component.extend(component => {
 	}))
 })
 
-interface PopoverExtensions {
+export interface PopoverExtensions {
 	readonly visible: State<boolean>
 	readonly popoverChildren: State<readonly Popover[]>
 	readonly popoverParent: State<Popover | undefined>

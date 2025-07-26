@@ -5,7 +5,7 @@ import AbortablePromise from 'utility/AbortablePromise'
 import State from 'utility/State'
 import type { Falsy } from 'utility/Type'
 
-interface SlotComponentExtensions {
+export interface SlotComponentExtensions {
 	hasContent (): boolean
 	appendWhen (state: State<boolean>, ...contents: (Component | Node | Falsy)[]): this
 	prependWhen (state: State<boolean>, ...contents: (Component | Node | Falsy)[]): this
@@ -110,7 +110,7 @@ interface SlotIfElseExtensions {
 	else (initialiser: Slot.Initialiser): this
 }
 
-interface SlotExtensions {
+export interface SlotExtensions {
 	use<const STATES extends State<any>[]> (states: STATES, initialiser: (slot: ComponentInsertionTransaction, ...values: { [INDEX in keyof STATES]: STATES[INDEX] extends State<infer T> ? T : never }) => Slot.InitialiserReturn): this
 	use<T> (state: T | State<T>, initialiser: (slot: ComponentInsertionTransaction, value: T) => Slot.InitialiserReturn): this
 	if (state: State<boolean>, initialiser: Slot.Initialiser): this & SlotIfElseExtensions

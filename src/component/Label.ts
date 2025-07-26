@@ -1,7 +1,7 @@
 import Component from 'Component'
 import State from 'utility/State'
 
-interface LabelExtensions {
+export interface LabelExtensions {
 	readonly textWrapper: Component
 	readonly for: State.Mutable<string | undefined>
 	readonly required: State.Mutable<boolean>

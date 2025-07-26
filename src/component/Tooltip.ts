@@ -12,7 +12,7 @@ declare module 'Component' {
 	interface ComponentExtensions extends TooltipComponentExtensions { }
 }
 
-interface TooltipExtensions { }
+export interface TooltipExtensions { }
 
 enum TooltipStyleTargets {
 	Tooltip,
