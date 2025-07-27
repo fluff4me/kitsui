@@ -128,6 +128,7 @@ interface BaseComponent<ELEMENT extends HTMLElement = HTMLElement> extends Compo
 
 	/** Causes this element to be removed when its owner is removed */
 	setOwner (owner: State.Owner | undefined): this
+	hasOwner (): boolean
 
 	setId (id?: string | State<string | undefined>): this
 	setRandomId (): this
@@ -303,6 +304,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			unuseOwnerRemove = State.Owner.getRemovedState(newOwner)?.use(component, removed => removed && component.remove())
 			return component
 		},
+		hasOwner: () => !!unuseOwnerRemove,
 
 		replaceElement: (newElement: HTMLElement | keyof HTMLElementTagNameMap, keepContent?: boolean) => {
 			if (typeof newElement === 'string' && newElement.toUpperCase() === component.element.tagName.toUpperCase())

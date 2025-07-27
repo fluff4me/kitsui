@@ -77,7 +77,7 @@ Component.extend(component => {
 			const popoverIn = Component.is(initialiserOrPopover) ? initialiserOrPopover : undefined
 			const initialiser = Component.is(initialiserOrPopover) ? undefined : initialiserOrPopover
 
-			if (popoverIn) {
+			if (popoverIn && popoverIn.hasOwner()) {
 				console.log('Detaching popover from owner', popoverIn)
 				popoverIn.setOwner(undefined)
 			}
