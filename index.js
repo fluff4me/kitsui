@@ -1515,6 +1515,8 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
             from: component => {
                 unuseFrom?.();
                 from = component;
+                refCache = undefined;
+                result.markDirty();
                 unuseFrom = from?.removed.useManual(removed => {
                     if (removed) {
                         from = undefined;
@@ -1555,7 +1557,7 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                 return host;
             },
             markDirty: () => {
-                const anchoredBox = host?.rect.value;
+                const anchoredBox = host.rect.value;
                 if (!anchoredBox.width || !anchoredBox.height)
                     return host;
                 location.value = undefined;
@@ -1574,7 +1576,7 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                 for (const unuse of subscribed)
                     unuse();
                 subscribed.length = 0;
-                const anchoredBox = host?.rect.value;
+                const anchoredBox = host.rect.value;
                 if (!anchoredBox.width || !anchoredBox.height) {
                     location.value = undefined;
                     return { x: 0, y: 0, mouse: false };
@@ -4020,6 +4022,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
         }
         FocusTrap.hide = hide;
     })(FocusTrap || (FocusTrap = {}));
+    const PopoverHost = Component_5.default.Tag();
     Component_5.default.extend(component => {
         component.extend((component) => ({
             hasPopoverSet() {
@@ -4027,15 +4030,22 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
             },
             clearPopover: () => component
                 .attributes.set('data-clear-popover', 'true'),
-            setPopover: (popoverEvent, initialiser) => {
+            setPopover: (popoverEvent, initialiserOrPopover) => {
+                component.and(PopoverHost);
                 if (component.popover)
                     component.popover.remove();
+                const popoverIn = Component_5.default.is(initialiserOrPopover) ? initialiserOrPopover : undefined;
+                const initialiser = Component_5.default.is(initialiserOrPopover) ? undefined : initialiserOrPopover;
+                if (popoverIn) {
+                    console.log('Detaching popover from owner', popoverIn);
+                    popoverIn.setOwner(undefined);
+                }
                 component.style.setProperties({
                     ['-webkitTouchCallout']: 'none',
                     userSelect: 'none',
                 });
                 let isShown = false;
-                const popover = Popover(component)
+                const popover = popoverIn ?? Popover()
                     .anchor.from(component)
                     .tweak(popover => popover
                     .prepend((0, Component_5.default)()
@@ -4055,7 +4065,21 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                         Mouse_3.default.offMove(updatePopoverState);
                     }
                 })
-                    .tweak(initialiser, component);
+                    .tweak(initialiser, component)
+                    .tweak(popover => {
+                    popover.visible.match(popover, true, async () => {
+                        if (popover.hasContent()) {
+                            popover.style.setProperty('visibility', 'hidden');
+                            popover.show();
+                            await Task_1.default.yield();
+                            popover.anchor.apply();
+                            await Task_1.default.yield();
+                            popover.style.removeProperties('visibility');
+                        }
+                    });
+                    popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop);
+                    popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft);
+                });
                 component.getStateForClosest(Dialog_1.default).use(popover, getDialog => {
                     popover.appendTo(getDialog() ?? document.body);
                 });
@@ -4141,18 +4165,6 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                         event.preventDefault();
                     cancelLongpress();
                 }));
-                popover.visible.match(component, true, async () => {
-                    if (popover.hasContent()) {
-                        popover.style.setProperty('visibility', 'hidden');
-                        popover.show();
-                        await Task_1.default.yield();
-                        popover.anchor.apply();
-                        await Task_1.default.yield();
-                        popover.style.removeProperties('visibility');
-                    }
-                });
-                popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop);
-                popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft);
                 const hostHoveredOrFocusedForLongEnough = component.hoveredOrFocused.delay(popover, hoveredOrFocused => {
                     if (!hoveredOrFocused)
                         return 0; // no delay for mouseoff or blur
@@ -4208,6 +4220,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     },
                 }));
                 async function showPopoverClick() {
+                    popover.anchor.from(component);
                     popover.style.setProperty('visibility', 'hidden');
                     component.popover?.show();
                     component.popover?.focus();
@@ -4266,6 +4279,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     component.popover.toggle(shouldShow);
                     if (!shouldShow)
                         return;
+                    popover.anchor.from(component);
                     popover.style.setProperty('visibility', 'hidden');
                     FocusTrap.show();
                     // component.popover.style.removeProperties('left', 'top')
@@ -4301,7 +4315,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
         PopoverStyleTargets[PopoverStyleTargets["Popover_AnchoredTop"] = 2] = "Popover_AnchoredTop";
         PopoverStyleTargets[PopoverStyleTargets["Popover_AnchoredLeft"] = 3] = "Popover_AnchoredLeft";
     })(PopoverStyleTargets || (PopoverStyleTargets = {}));
-    const Popover = Object.assign((0, Component_5.default)((component, host) => {
+    const Popover = Object.assign((0, Component_5.default)((component) => {
         let mousePadding;
         let delay = 0;
         let unbind;
@@ -4321,7 +4335,6 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
             .extend(popover => ({
             lastStateChangeTime: 0,
             visible,
-            host: host,
             popoverChildren: (0, State_13.default)([]),
             popoverParent: (0, State_13.default)(undefined),
             popoverHasFocus: FocusListener_2.default.focused.map(popover, focused => !focused ? 'no-focus'
@@ -4458,10 +4471,10 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
         }
     }), {
         forceCloseAll() {
-            for (const popover of Component_5.default.findAll(Popover)) {
-                const host = popover.host;
+            for (const popoverHost of Component_5.default.findAll(PopoverHost)) {
+                const host = popoverHost;
                 host.clickState = false;
-                popover.hide();
+                host.popover.hide();
             }
         },
     });
@@ -4827,8 +4840,8 @@ define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "k
     (function (TooltipStyleTargets) {
         TooltipStyleTargets[TooltipStyleTargets["Tooltip"] = 0] = "Tooltip";
     })(TooltipStyleTargets || (TooltipStyleTargets = {}));
-    const Tooltip = (0, Component_7.default)((component, host) => {
-        const tooltip = component.and(Popover_1.default, host)
+    const Tooltip = (0, Component_7.default)((component) => {
+        const tooltip = component.and(Popover_1.default)
             .setDelay(300)
             .setMousePadding(0)
             .addStyleTargets(TooltipStyleTargets);
@@ -4840,8 +4853,11 @@ define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "k
     });
     Component_7.default.extend(component => {
         component.extend((component) => ({
-            setTooltip(initialiser) {
-                return component.setPopover('hover/longpress', (popover, host) => initialiser(popover.and(Tooltip, host), host));
+            setTooltip(initialiserOrTooltip) {
+                if (Component_7.default.is(initialiserOrTooltip))
+                    return component.setPopover('hover/longpress', initialiserOrTooltip);
+                const initialiser = initialiserOrTooltip;
+                return component.setPopover('hover/longpress', (popover, host) => initialiser(popover.and(Tooltip), host));
             },
         }));
     });

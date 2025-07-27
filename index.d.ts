@@ -1158,6 +1158,7 @@ declare module "kitsui/component/Popover" {
         /** Disallow any popovers to continue showing if this component is hovered */
         clearPopover(): this;
         setPopover(event: 'hover/longpress' | 'hover/click' | 'click', initialiser: PopoverInitialiser<this>): this & PopoverComponentRegisteredExtensions;
+        setPopover(event: 'hover/longpress' | 'hover/click' | 'click', popover: Popover): this & PopoverComponentRegisteredExtensions;
         hasPopoverSet(): boolean;
     }
     module "kitsui/Component" {
@@ -1170,7 +1171,6 @@ declare module "kitsui/component/Popover" {
         readonly popoverParent: State<Popover | undefined>;
         readonly popoverHasFocus: State<'focused' | 'no-focus' | undefined>;
         readonly lastStateChangeTime: number;
-        readonly host: Component & PopoverComponentRegisteredExtensions | undefined;
         /** Sets the distance the mouse can be from the popover before it hides, if it's shown due to hover */
         setMousePadding(padding?: number): this;
         /** Sets the delay until this popover will show (only in hover mode) */
@@ -1195,7 +1195,7 @@ declare module "kitsui/component/Popover" {
     }
     interface Popover extends Component, PopoverExtensions, Component.StyleHost<typeof PopoverStyleTargets> {
     }
-    const Popover: Component.Builder<[host: Component<HTMLElement>], Popover> & {
+    const Popover: Component.Builder<[], Popover> & {
         forceCloseAll(): void;
     };
     export default Popover;
@@ -1282,6 +1282,7 @@ declare module "kitsui/component/Tooltip" {
     export type PopoverInitialiser<HOST> = (popover: Popover, host: HOST) => unknown;
     interface TooltipComponentExtensions {
         setTooltip(initialiser: PopoverInitialiser<this>): this & PopoverComponentRegisteredExtensions;
+        setTooltip(tooltip: Tooltip): this & PopoverComponentRegisteredExtensions;
     }
     module "kitsui/Component" {
         interface ComponentExtensions extends TooltipComponentExtensions {
@@ -1295,7 +1296,7 @@ declare module "kitsui/component/Tooltip" {
     type PopoverWithTooltipStyleTargets = Popover & Component.StyleHost<typeof TooltipStyleTargets>;
     interface Tooltip extends PopoverWithTooltipStyleTargets, TooltipExtensions {
     }
-    const Tooltip: Component.Builder<[host: Component<HTMLElement>], Tooltip>;
+    const Tooltip: Component.Builder<[], Tooltip>;
     export default Tooltip;
 }
 declare module "kitsui" {
@@ -1324,11 +1325,11 @@ declare module "kitsui" {
             forceCloseAll(): void;
         };
         type Popover = _Popover;
-        const Popover: import("kitsui/Component").default.Builder<[host: import("kitsui/Component").default<HTMLElement>], _Popover> & {
+        const Popover: import("kitsui/Component").default.Builder<[], _Popover> & {
             forceCloseAll(): void;
         };
         type Tooltip = _Tooltip;
-        const Tooltip: import("kitsui/Component").default.Builder<[host: import("kitsui/Component").default<HTMLElement>], _Tooltip>;
+        const Tooltip: import("kitsui/Component").default.Builder<[], _Tooltip>;
     }
 }
 declare module "kitsui/utility/ActiveListener" {
