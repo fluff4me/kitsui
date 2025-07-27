@@ -6,6 +6,7 @@ export type PopoverInitialiser<HOST> = (popover: Popover, host: HOST) => unknown
 
 interface TooltipComponentExtensions {
 	setTooltip (initialiser: PopoverInitialiser<this>): this & PopoverComponentRegisteredExtensions
+	setTooltip (tooltip: Tooltip): this & PopoverComponentRegisteredExtensions
 }
 
 declare module 'Component' {
@@ -21,8 +22,8 @@ enum TooltipStyleTargets {
 type PopoverWithTooltipStyleTargets = Popover & Component.StyleHost<typeof TooltipStyleTargets>
 interface Tooltip extends PopoverWithTooltipStyleTargets, TooltipExtensions { }
 
-const Tooltip = Component((component, host: Component): Tooltip => {
-	const tooltip = component.and(Popover, host)
+const Tooltip = Component((component): Tooltip => {
+	const tooltip = component.and(Popover)
 		.setDelay(300)
 		.setMousePadding(0)
 		.addStyleTargets(TooltipStyleTargets)
@@ -35,8 +36,12 @@ const Tooltip = Component((component, host: Component): Tooltip => {
 
 Component.extend(component => {
 	component.extend<TooltipComponentExtensions>((component: Component & TooltipComponentExtensions & Partial<PopoverComponentRegisteredExtensions>) => ({
-		setTooltip (initialiser) {
-			return component.setPopover('hover/longpress', (popover, host) => initialiser(popover.and(Tooltip, host), host))
+		setTooltip (initialiserOrTooltip) {
+			if (Component.is(initialiserOrTooltip))
+				return component.setPopover('hover/longpress', initialiserOrTooltip)
+
+			const initialiser = initialiserOrTooltip
+			return component.setPopover('hover/longpress', (popover, host) => initialiser(popover.and(Tooltip), host))
 		},
 	}))
 })

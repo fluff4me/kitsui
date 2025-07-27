@@ -51,12 +51,15 @@ export interface PopoverComponentExtensions {
 	/** Disallow any popovers to continue showing if this component is hovered */
 	clearPopover (): this
 	setPopover (event: 'hover/longpress' | 'hover/click' | 'click', initialiser: PopoverInitialiser<this>): this & PopoverComponentRegisteredExtensions
+	setPopover (event: 'hover/longpress' | 'hover/click' | 'click', popover: Popover): this & PopoverComponentRegisteredExtensions
 	hasPopoverSet (): boolean
 }
 
 declare module 'Component' {
 	interface ComponentExtensions extends PopoverComponentExtensions { }
 }
+
+const PopoverHost = Component.Tag()
 
 Component.extend(component => {
 	component.extend<PopoverComponentExtensions>((component: Component & PopoverComponentExtensions & Partial<PopoverComponentRegisteredExtensions> & Partial<InternalPopoverExtensions>) => ({
@@ -65,9 +68,19 @@ Component.extend(component => {
 		},
 		clearPopover: () => component
 			.attributes.set('data-clear-popover', 'true'),
-		setPopover: (popoverEvent, initialiser) => {
+		setPopover: (popoverEvent, initialiserOrPopover) => {
+			component.and(PopoverHost)
+
 			if (component.popover)
 				component.popover.remove()
+
+			const popoverIn = Component.is(initialiserOrPopover) ? initialiserOrPopover : undefined
+			const initialiser = Component.is(initialiserOrPopover) ? undefined : initialiserOrPopover
+
+			if (popoverIn) {
+				console.log('Detaching popover from owner', popoverIn)
+				popoverIn.setOwner(undefined)
+			}
 
 			component.style.setProperties({
 				['-webkitTouchCallout' as never]: 'none',
@@ -76,7 +89,7 @@ Component.extend(component => {
 
 			let isShown = false
 
-			const popover = Popover(component)
+			const popover = popoverIn ?? Popover()
 				.anchor.from(component)
 				.tweak(popover => popover
 					.prepend(Component()
@@ -100,6 +113,21 @@ Component.extend(component => {
 					}
 				})
 				.tweak(initialiser, component)
+				.tweak(popover => {
+					popover.visible.match(popover, true, async () => {
+						if (popover.hasContent()) {
+							popover.style.setProperty('visibility', 'hidden')
+							popover.show()
+							await Task.yield()
+							popover.anchor.apply()
+							await Task.yield()
+							popover.style.removeProperties('visibility')
+						}
+					})
+
+					popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop)
+					popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft)
+				})
 
 			component.getStateForClosest(Dialog).use(popover, getDialog => {
 				popover.appendTo(getDialog() ?? document.body)
@@ -198,20 +226,6 @@ Component.extend(component => {
 				})
 			)
 
-			popover.visible.match(component, true, async () => {
-				if (popover.hasContent()) {
-					popover.style.setProperty('visibility', 'hidden')
-					popover.show()
-					await Task.yield()
-					popover.anchor.apply()
-					await Task.yield()
-					popover.style.removeProperties('visibility')
-				}
-			})
-
-			popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop)
-			popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft)
-
 			const hostHoveredOrFocusedForLongEnough = component.hoveredOrFocused.delay(popover, hoveredOrFocused => {
 				if (!hoveredOrFocused)
 					return 0 // no delay for mouseoff or blur
@@ -280,6 +294,7 @@ Component.extend(component => {
 			}))
 
 			async function showPopoverClick () {
+				popover.anchor.from(component)
 				popover.style.setProperty('visibility', 'hidden')
 				component.popover?.show()
 				component.popover?.focus()
@@ -353,6 +368,7 @@ Component.extend(component => {
 				if (!shouldShow)
 					return
 
+				popover.anchor.from(component)
 				popover.style.setProperty('visibility', 'hidden')
 				FocusTrap.show()
 				// component.popover.style.removeProperties('left', 'top')
@@ -394,7 +410,6 @@ export interface PopoverExtensions {
 	readonly popoverParent: State<Popover | undefined>
 	readonly popoverHasFocus: State<'focused' | 'no-focus' | undefined>
 	readonly lastStateChangeTime: number
-	readonly host: Component & PopoverComponentRegisteredExtensions | undefined
 
 	/** Sets the distance the mouse can be from the popover before it hides, if it's shown due to hover */
 	setMousePadding (padding?: number): this
@@ -427,7 +442,7 @@ enum PopoverStyleTargets {
 interface Popover extends Component, PopoverExtensions, Component.StyleHost<typeof PopoverStyleTargets> { }
 
 const Popover = Object.assign(
-	Component((component, host: Component): Popover => {
+	Component((component): Popover => {
 		let mousePadding: number | undefined
 		let delay = 0
 		let unbind: State.Unsubscribe | undefined
@@ -447,7 +462,6 @@ const Popover = Object.assign(
 			.extend<PopoverExtensions>(popover => ({
 				lastStateChangeTime: 0,
 				visible,
-				host: host as never,
 				popoverChildren: State([]),
 				popoverParent: State(undefined),
 				popoverHasFocus: FocusListener.focused.map(popover, focused =>
@@ -610,10 +624,10 @@ const Popover = Object.assign(
 	}),
 	{
 		forceCloseAll () {
-			for (const popover of Component.findAll(Popover)) {
-				const host = popover.host as Component & PopoverComponentRegisteredExtensions & InternalPopoverExtensions
+			for (const popoverHost of Component.findAll(PopoverHost)) {
+				const host = popoverHost as Component & PopoverComponentRegisteredExtensions & InternalPopoverExtensions
 				host.clickState = false
-				popover.hide()
+				host.popover.hide()
 			}
 		},
 	},

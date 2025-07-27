@@ -195,6 +195,8 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 		from: component => {
 			unuseFrom?.()
 			from = component
+			refCache = undefined
+			result.markDirty()
 			unuseFrom = from?.removed.useManual(removed => {
 				if (removed) {
 					from = undefined
@@ -239,7 +241,7 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 			return host
 		},
 		markDirty: () => {
-			const anchoredBox = host?.rect.value
+			const anchoredBox = host.rect.value
 			if (!anchoredBox.width || !anchoredBox.height)
 				return host
 
@@ -264,7 +266,7 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 
 			subscribed.length = 0
 
-			const anchoredBox = host?.rect.value
+			const anchoredBox = host.rect.value
 			if (!anchoredBox.width || !anchoredBox.height) {
 				location.value = undefined
 				return { x: 0, y: 0, mouse: false } as AnchorLocation
