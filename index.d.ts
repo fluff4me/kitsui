@@ -768,6 +768,7 @@ declare module "kitsui/Component" {
         readonly fullType: string;
         /** Causes this element to be removed when its owner is removed */
         setOwner(owner: State.Owner | undefined): this;
+        hasOwner(): boolean;
         setId(id?: string | State<string | undefined>): this;
         setRandomId(): this;
         setName(name?: string | State<string | undefined>): this;

@@ -2705,6 +2705,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 unuseOwnerRemove = State_10.default.Owner.getRemovedState(newOwner)?.use(component, removed => removed && component.remove());
                 return component;
             },
+            hasOwner: () => !!unuseOwnerRemove,
             replaceElement: (newElement, keepContent) => {
                 if (typeof newElement === 'string' && newElement.toUpperCase() === component.element.tagName.toUpperCase())
                     return component; // already correct tag type
@@ -4036,7 +4037,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     component.popover.remove();
                 const popoverIn = Component_5.default.is(initialiserOrPopover) ? initialiserOrPopover : undefined;
                 const initialiser = Component_5.default.is(initialiserOrPopover) ? undefined : initialiserOrPopover;
-                if (popoverIn) {
+                if (popoverIn && popoverIn.hasOwner()) {
                     console.log('Detaching popover from owner', popoverIn);
                     popoverIn.setOwner(undefined);
                 }
