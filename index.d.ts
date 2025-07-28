@@ -211,11 +211,17 @@ declare module "kitsui/utility/State" {
             [I in keyof INPUT]: Exclude<INPUT[I], undefined> extends State<infer INPUT> ? INPUT : undefined;
         }>) => State.Or<OUTPUT>, equals?: ComparatorFunction<NoInfer<OUTPUT>>): Generator<OUTPUT>;
         export function Use<const INPUT extends Record<string, (State<unknown> | undefined)>>(owner: Owner, input: INPUT): Generator<{
-            [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT, infer OUTPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT, infer OUTPUT> | undefined ? INPUT | undefined : undefined;
+            [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined;
         }>;
+        export function Use<const INPUT extends Record<string, (State<unknown> | undefined)>>(owner: Owner, input: INPUT, user: {
+            [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined;
+        } extends infer VALUETYPE ? (value: VALUETYPE, oldValue?: VALUETYPE) => unknown : never): State.Unsubscribe;
         export function UseManual<const INPUT extends Record<string, (State<unknown> | undefined)>>(input: INPUT): Generator<{
-            [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT, infer OUTPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT, infer OUTPUT> | undefined ? INPUT | undefined : undefined;
+            [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined;
         }>;
+        export function UseManual<const INPUT extends Record<string, (State<unknown> | undefined)>>(input: INPUT, user: {
+            [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined;
+        } extends infer VALUETYPE ? (value: VALUETYPE, oldValue?: VALUETYPE) => unknown : never): State.Unsubscribe;
         export {};
     }
     export default State;

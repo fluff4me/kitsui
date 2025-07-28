@@ -822,14 +822,32 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                 .observeManual(...inputs.filter(Arrays_1.NonNullish));
         }
         State.MapManual = MapManual;
-        function Use(owner, input) {
-            return Generator(() => Object.fromEntries(Object.entries(input).map(([key, state]) => [key, state?.value])))
-                .observe(owner, ...Object.values(input).filter(Arrays_1.NonNullish));
+        function Use(owner, input, userIn) {
+            const user = userIn;
+            const toObserve = Object.values(input).filter(Arrays_1.NonNullish);
+            const gen = Generator(() => Object.fromEntries(Object.entries(input).map(([key, state]) => [key, state?.value])))
+                .observe(owner, ...toObserve);
+            if (!user)
+                return gen;
+            const unsub = gen.use(owner, user);
+            return () => {
+                unsub();
+                gen.unobserve(...toObserve);
+            };
         }
         State.Use = Use;
-        function UseManual(input) {
-            return Generator(() => Object.fromEntries(Object.entries(input).map(([key, state]) => [key, state?.value])))
-                .observeManual(...Object.values(input).filter(Arrays_1.NonNullish));
+        function UseManual(input, userIn) {
+            const user = userIn;
+            const toObserve = Object.values(input).filter(Arrays_1.NonNullish);
+            const gen = Generator(() => Object.fromEntries(Object.entries(input).map(([key, state]) => [key, state?.value])))
+                .observeManual(...toObserve);
+            if (!user)
+                return gen;
+            const unsub = gen.useManual(user);
+            return () => {
+                unsub();
+                gen.unobserve(...toObserve);
+            };
         }
         State.UseManual = UseManual;
     })(State || (State = {}));
