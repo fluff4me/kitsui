@@ -960,14 +960,40 @@ namespace State {
 			.observeManual(...inputs.filter(FilterNonNullish))
 	}
 
-	export function Use<const INPUT extends Record<string, (State<unknown> | undefined)>> (owner: Owner, input: INPUT): Generator<{ [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT, infer OUTPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT, infer OUTPUT> | undefined ? INPUT | undefined : undefined }> {
-		return Generator(() => Object.fromEntries(Object.entries(input).map(([key, state]) => [key, state?.value])) as never)
-			.observe(owner, ...Object.values(input).filter(FilterNonNullish))
+	export function Use<const INPUT extends Record<string, (State<unknown> | undefined)>> (owner: Owner, input: INPUT): Generator<{ [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined }>
+	export function Use<const INPUT extends Record<string, (State<unknown> | undefined)>> (owner: Owner, input: INPUT, user: { [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined } extends infer VALUETYPE ? (value: VALUETYPE, oldValue?: VALUETYPE) => unknown : never): State.Unsubscribe
+	export function Use (owner: Owner, input: unknown, userIn?: any): Generator<any> | State.Unsubscribe {
+		const user = userIn as ((value: unknown, oldValue?: unknown) => unknown) | undefined
+		const toObserve = Object.values(input as object).filter(FilterNonNullish) as State<unknown>[]
+		const gen = Generator(() => Object.fromEntries(Object.entries(input as Record<string, State<unknown>>).map(([key, state]) => [key, state?.value])) as never)
+			.observe(owner, ...toObserve)
+
+		if (!user)
+			return gen
+
+		const unsub = gen.use(owner, user)
+		return () => {
+			unsub()
+			gen.unobserve(...toObserve)
+		}
 	}
 
-	export function UseManual<const INPUT extends Record<string, (State<unknown> | undefined)>> (input: INPUT): Generator<{ [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT, infer OUTPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT, infer OUTPUT> | undefined ? INPUT | undefined : undefined }> {
-		return Generator(() => Object.fromEntries(Object.entries(input).map(([key, state]) => [key, state?.value])) as never)
-			.observeManual(...Object.values(input).filter(FilterNonNullish))
+	export function UseManual<const INPUT extends Record<string, (State<unknown> | undefined)>> (input: INPUT): Generator<{ [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined }>
+	export function UseManual<const INPUT extends Record<string, (State<unknown> | undefined)>> (input: INPUT, user: { [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined } extends infer VALUETYPE ? (value: VALUETYPE, oldValue?: VALUETYPE) => unknown : never): State.Unsubscribe
+	export function UseManual (input: unknown, userIn?: any): Generator<any> | State.Unsubscribe {
+		const user = userIn as ((value: unknown, oldValue?: unknown) => unknown) | undefined
+		const toObserve = Object.values(input as object).filter(FilterNonNullish) as State<unknown>[]
+		const gen = Generator(() => Object.fromEntries(Object.entries(input as Record<string, State<unknown>>).map(([key, state]) => [key, state?.value])) as never)
+			.observeManual(...toObserve)
+
+		if (!user)
+			return gen
+
+		const unsub = gen.useManual(user)
+		return () => {
+			unsub()
+			gen.unobserve(...toObserve)
+		}
 	}
 }
 
