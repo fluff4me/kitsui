@@ -306,15 +306,16 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 							break
 					}
 
-					if (preference.options?.xValid?.(x, xBox, anchoredBox) === false) {
+					if (preference.options?.xValid?.(x, xBox, anchoredBox) === false)
 						continue
-					}
 
-					if (!xConf.sticky && anchoredBox.width < Viewport.size.value.w && !preference.options?.allowXOffscreen) {
+					if (anchoredBox.width < Viewport.size.value.w && !preference.options?.allowXOffscreen) {
 						const isXOffScreen = x < 0 || x + anchoredBox.width > Viewport.size.value.w
-						if (isXOffScreen) {
+						if (isXOffScreen && !xConf.sticky)
 							continue
-						}
+
+						if (isXOffScreen)
+							x = x < 0 ? 0 : Viewport.size.value.w - anchoredBox.width
 					}
 
 					const yConf = preference.yAnchor
@@ -340,16 +341,16 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 							break
 					}
 
-					if (preference.options?.yValid?.(y, yBox, anchoredBox) === false) {
+					if (preference.options?.yValid?.(y, yBox, anchoredBox) === false)
 						continue
-					}
 
-					if (!yConf.sticky && anchoredBox.height < Viewport.size.value.h && !preference.options?.allowYOffscreen) {
-						const isYOffScreen = y < 0
-							|| y + anchoredBox.height > Viewport.size.value.h
-						if (isYOffScreen) {
+					if (anchoredBox.height < Viewport.size.value.h && !preference.options?.allowYOffscreen) {
+						const isYOffScreen = y < 0 || y + anchoredBox.height > Viewport.size.value.h
+						if (isYOffScreen && !yConf.sticky)
 							continue
-						}
+
+						if (isYOffScreen)
+							y = y < 0 ? 0 : Viewport.size.value.h - anchoredBox.height
 					}
 
 					return location.value ??= { mouse: false, padX: xConf.type === 'off', alignment, x, y, yRefBox: yBox, xRefBox: xBox, preference }
