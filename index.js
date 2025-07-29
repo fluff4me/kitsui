@@ -1628,14 +1628,14 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                                 alignment = 'centre';
                                 break;
                         }
-                        if (preference.options?.xValid?.(x, xBox, anchoredBox) === false) {
+                        if (preference.options?.xValid?.(x, xBox, anchoredBox) === false)
                             continue;
-                        }
-                        if (!xConf.sticky && anchoredBox.width < Viewport_1.default.size.value.w && !preference.options?.allowXOffscreen) {
+                        if (anchoredBox.width < Viewport_1.default.size.value.w && !preference.options?.allowXOffscreen) {
                             const isXOffScreen = x < 0 || x + anchoredBox.width > Viewport_1.default.size.value.w;
-                            if (isXOffScreen) {
+                            if (isXOffScreen && !xConf.sticky)
                                 continue;
-                            }
+                            if (isXOffScreen)
+                                x = x < 0 ? 0 : Viewport_1.default.size.value.w - anchoredBox.width;
                         }
                         const yConf = preference.yAnchor;
                         const yRef = resolveAnchorRef(preference.yRefSelector);
@@ -1657,15 +1657,14 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                                 y = yRefY - anchoredBox.height / 2;
                                 break;
                         }
-                        if (preference.options?.yValid?.(y, yBox, anchoredBox) === false) {
+                        if (preference.options?.yValid?.(y, yBox, anchoredBox) === false)
                             continue;
-                        }
-                        if (!yConf.sticky && anchoredBox.height < Viewport_1.default.size.value.h && !preference.options?.allowYOffscreen) {
-                            const isYOffScreen = y < 0
-                                || y + anchoredBox.height > Viewport_1.default.size.value.h;
-                            if (isYOffScreen) {
+                        if (anchoredBox.height < Viewport_1.default.size.value.h && !preference.options?.allowYOffscreen) {
+                            const isYOffScreen = y < 0 || y + anchoredBox.height > Viewport_1.default.size.value.h;
+                            if (isYOffScreen && !yConf.sticky)
                                 continue;
-                            }
+                            if (isYOffScreen)
+                                y = y < 0 ? 0 : Viewport_1.default.size.value.h - anchoredBox.height;
                         }
                         return location.value ??= { mouse: false, padX: xConf.type === 'off', alignment, x, y, yRefBox: yBox, xRefBox: xBox, preference };
                     }
