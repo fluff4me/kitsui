@@ -111,7 +111,7 @@ interface SlotIfElseExtensions {
 }
 
 export interface SlotExtensions {
-	use<const STATES extends State<any>[]> (states: STATES, initialiser: (slot: ComponentInsertionTransaction, ...values: { [INDEX in keyof STATES]: STATES[INDEX] extends State<infer T> ? T : never }) => Slot.InitialiserReturn): this
+	// use<const STATES extends State<any>[]> (states: STATES, initialiser: (slot: ComponentInsertionTransaction, ...values: { [INDEX in keyof STATES]: STATES[INDEX] extends State<infer T> ? T : never }) => Slot.InitialiserReturn): this
 	use<T> (state: T | State<T>, initialiser: (slot: ComponentInsertionTransaction, value: T) => Slot.InitialiserReturn): this
 	if (state: State<boolean>, initialiser: Slot.Initialiser): this & SlotIfElseExtensions
 	preserveContents (): this
