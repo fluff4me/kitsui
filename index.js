@@ -4689,9 +4689,11 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
         let preserveContents = false;
         let inserted = false;
         const hidden = (0, State_15.default)(false);
+        const useDisplayContents = (0, State_15.default)(true);
         return slot
-            .style.bindProperty('display', hidden.mapManual(hidden => hidden ? 'none' : 'contents'))
+            .style.bindProperty('display', State_15.default.MapManual([hidden, useDisplayContents], (hidden, useDisplayContents) => hidden ? 'none' : useDisplayContents ? 'contents' : undefined))
             .extend(slot => ({
+            useDisplayContents,
             preserveContents() {
                 if (elses.value.elseIfs.length || elses.value.else)
                     throw new Error('Cannot preserve contents when using elses');

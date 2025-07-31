@@ -1266,6 +1266,7 @@ declare module "kitsui/component/Slot" {
         use<T>(state: T | State<T>, initialiser: (slot: ComponentInsertionTransaction, value: T) => Slot.InitialiserReturn): this;
         if(state: State<boolean>, initialiser: Slot.Initialiser): this & SlotIfElseExtensions;
         preserveContents(): this;
+        useDisplayContents: State.Mutable<boolean>;
     }
     interface Slot extends Component, SlotExtensions {
     }
