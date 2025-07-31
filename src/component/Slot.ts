@@ -115,6 +115,7 @@ export interface SlotExtensions {
 	use<T> (state: T | State<T>, initialiser: (slot: ComponentInsertionTransaction, value: T) => Slot.InitialiserReturn): this
 	if (state: State<boolean>, initialiser: Slot.Initialiser): this & SlotIfElseExtensions
 	preserveContents (): this
+	useDisplayContents: State.Mutable<boolean>
 }
 
 interface Slot extends Component, SlotExtensions { }
@@ -143,10 +144,12 @@ const Slot = Object.assign(
 		let preserveContents = false
 		let inserted = false
 		const hidden = State(false)
+		const useDisplayContents = State(true)
 
 		return slot
-			.style.bindProperty('display', hidden.mapManual(hidden => hidden ? 'none' : 'contents'))
+			.style.bindProperty('display', State.MapManual([hidden, useDisplayContents], (hidden, useDisplayContents) => hidden ? 'none' : useDisplayContents ? 'contents' : undefined))
 			.extend<SlotExtensions & SlotIfElseExtensions>(slot => ({
+				useDisplayContents,
 				preserveContents () {
 					if (elses.value.elseIfs.length || elses.value.else)
 						throw new Error('Cannot preserve contents when using elses')
