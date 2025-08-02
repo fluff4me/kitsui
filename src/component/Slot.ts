@@ -110,9 +110,11 @@ interface SlotIfElseExtensions {
 	else (initialiser: Slot.Initialiser): this
 }
 
+interface SlotInsertionTransaction extends State.Owner, ComponentInsertionTransaction { }
+
 export interface SlotExtensions {
 	// use<const STATES extends State<any>[]> (states: STATES, initialiser: (slot: ComponentInsertionTransaction, ...values: { [INDEX in keyof STATES]: STATES[INDEX] extends State<infer T> ? T : never }) => Slot.InitialiserReturn): this
-	use<T> (state: T | State<T>, initialiser: (slot: ComponentInsertionTransaction, value: T) => Slot.InitialiserReturn): this
+	use<T> (state: T | State<T>, initialiser: (slot: SlotInsertionTransaction, value: T) => Slot.InitialiserReturn): this
 	if (state: State<boolean>, initialiser: Slot.Initialiser): this & SlotIfElseExtensions
 	preserveContents (): this
 	useDisplayContents: State.Mutable<boolean>
@@ -122,8 +124,8 @@ interface Slot extends Component, SlotExtensions { }
 
 namespace Slot {
 	export type Cleanup = () => unknown
-	export type Initialiser = (slot: ComponentInsertionTransaction) => Slot.InitialiserReturn
-	export type InitialiserReturn = AbortablePromiseOr<Slot.Cleanup | Component | ComponentInsertionTransaction | undefined | null | false | 0 | '' | void>
+	export type Initialiser = (slot: SlotInsertionTransaction) => Slot.InitialiserReturn
+	export type InitialiserReturn = AbortablePromiseOr<Slot.Cleanup | Component | SlotInsertionTransaction | undefined | null | false | 0 | '' | void>
 }
 
 const Slot = Object.assign(
@@ -145,6 +147,7 @@ const Slot = Object.assign(
 		let inserted = false
 		const hidden = State(false)
 		const useDisplayContents = State(true)
+		let contentsOwner: State.Owner.Removable | undefined
 
 		return slot
 			.style.bindProperty('display', State.MapManual([hidden, useDisplayContents], (hidden, useDisplayContents) => hidden ? 'none' : useDisplayContents ? 'contents' : undefined))
@@ -157,7 +160,7 @@ const Slot = Object.assign(
 					preserveContents = true
 					return slot
 				},
-				use: (state: unknown, initialiser: (slot: ComponentInsertionTransaction, ...values: any[]) => Slot.InitialiserReturn) => {
+				use: (state: unknown, initialiser: (slot: SlotInsertionTransaction, ...values: any[]) => Slot.InitialiserReturn) => {
 					if (preserveContents)
 						throw new Error('Cannot "use" when preserving contents')
 
@@ -180,14 +183,21 @@ const Slot = Object.assign(
 						abort?.(); abort = undefined
 						cleanup?.(); cleanup = undefined
 						abortTransaction?.(); abortTransaction = undefined
+						contentsOwner?.remove(); contentsOwner = State.Owner.create()
 
 						const component = Component()
-						const transaction = ComponentInsertionTransaction(component, () => {
-							slot.removeContents()
-							slot.append(...component.element.children)
-							inserted = true
-						})
-						Object.assign(transaction, { closed: component.removed })
+						const transaction = Object.assign(
+							ComponentInsertionTransaction(component, () => {
+								slot.removeContents()
+								slot.append(...component.element.children)
+								inserted = true
+								component.remove()
+							}),
+							{
+								closed: component.removed,
+								removed: contentsOwner.removed,
+							}
+						)
 						abortTransaction = transaction.abort
 
 						handleSlotInitialiserReturn(transaction, wasArrayState
@@ -268,13 +278,21 @@ const Slot = Object.assign(
 			.tweak(slot => slot.removed.matchManual(true, () => cleanup?.()))
 
 		function handleSlotInitialiser (initialiser: Slot.Initialiser) {
+			contentsOwner?.remove(); contentsOwner = State.Owner.create()
+
 			const component = Component()
-			const transaction = ComponentInsertionTransaction(component, () => {
-				slot.removeContents()
-				slot.append(...component.element.children)
-				inserted = true
-			})
-			Object.assign(transaction, { closed: component.removed })
+			const transaction = Object.assign(
+				ComponentInsertionTransaction(component, () => {
+					slot.removeContents()
+					slot.append(...component.element.children)
+					inserted = true
+					component.remove()
+				}),
+				{
+					closed: component.removed,
+					removed: contentsOwner.removed,
+				},
+			)
 			abortTransaction = transaction.abort
 
 			handleSlotInitialiserReturn(transaction, initialiser(transaction))
