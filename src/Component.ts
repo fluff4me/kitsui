@@ -210,6 +210,7 @@ interface BaseComponent<ELEMENT extends HTMLElement = HTMLElement> extends Compo
 	getFirstDescendant (): Component | undefined
 	/** Iterates through all descendants that have an associated component of the given type */
 	getFirstDescendant<COMPONENT extends Component> (filterBuilder: Component.BuilderLike<any[], COMPONENT>): COMPONENT | undefined
+	contains (componentOrElement?: Component | Node | null): boolean
 
 	remove (): void
 	removeContents (): this
@@ -743,6 +744,10 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		getFirstDescendant (builder?: Component.BuilderLike) {
 			const [first] = component.getDescendants(builder!)
 			return first
+		},
+		contains (elementOrComponent) {
+			const descendant = Component.is(elementOrComponent) ? elementOrComponent.element : elementOrComponent
+			return descendant === undefined || descendant === null ? false : component.element.contains(descendant)
 		},
 
 		receiveRootedEvents () {
