@@ -8,6 +8,7 @@ namespace Viewport {
 	}
 
 	export const size = State.JIT<Size>(() => ({ w: window.innerWidth, h: window.innerHeight }))
+	export const sizeExcludingScrollbars = State.JIT<Size>(() => ({ w: document.documentElement.clientWidth, h: document.documentElement.clientHeight }))
 	export const mobile = State.JIT(owner => {
 		const contentWidth = 800
 		const result = size.value.w < contentWidth
@@ -42,7 +43,7 @@ namespace Viewport {
 	})
 
 	export function listen () {
-		window.addEventListener('resize', size.markDirty)
+		window.addEventListener('resize', () => { size.markDirty(); sizeExcludingScrollbars.markDirty() })
 	}
 }
 
