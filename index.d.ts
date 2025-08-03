@@ -376,7 +376,6 @@ declare module "kitsui/utility/Viewport" {
             h: number;
         }
         const size: State.JIT<Size>;
-        const sizeExcludingScrollbars: State.JIT<Size>;
         const mobile: State.JIT<boolean>;
         const tablet: State.JIT<boolean>;
         const laptop: State.JIT<boolean>;
@@ -434,8 +433,6 @@ declare module "kitsui/utility/AnchorManipulator" {
         y: number;
         mouse: boolean;
         padX: boolean;
-        xPosSide: 'left' | 'right';
-        yPosSide: 'top' | 'bottom';
         alignment?: AnchorLocationAlignment;
         xRefBox?: DOMRect;
         yRefBox?: DOMRect;
@@ -859,7 +856,6 @@ declare module "kitsui/Component" {
         getFirstDescendant(): Component | undefined;
         /** Iterates through all descendants that have an associated component of the given type */
         getFirstDescendant<COMPONENT extends Component>(filterBuilder: Component.BuilderLike<any[], COMPONENT>): COMPONENT | undefined;
-        contains(componentOrElement?: Component | Node | null): boolean;
         remove(): void;
         removeContents(): this;
         receiveRootedEvents(): this;
@@ -1266,10 +1262,8 @@ declare module "kitsui/component/Slot" {
         elseIf(state: State<boolean>, initialiser: Slot.Initialiser): this;
         else(initialiser: Slot.Initialiser): this;
     }
-    interface SlotInsertionTransaction extends State.Owner, ComponentInsertionTransaction {
-    }
     export interface SlotExtensions {
-        use<T>(state: T | State<T>, initialiser: (slot: SlotInsertionTransaction, value: T) => Slot.InitialiserReturn): this;
+        use<T>(state: T | State<T>, initialiser: (slot: ComponentInsertionTransaction, value: T) => Slot.InitialiserReturn): this;
         if(state: State<boolean>, initialiser: Slot.Initialiser): this & SlotIfElseExtensions;
         preserveContents(): this;
         useDisplayContents: State.Mutable<boolean>;
@@ -1278,8 +1272,8 @@ declare module "kitsui/component/Slot" {
     }
     namespace Slot {
         type Cleanup = () => unknown;
-        type Initialiser = (slot: SlotInsertionTransaction) => Slot.InitialiserReturn;
-        type InitialiserReturn = AbortablePromiseOr<Slot.Cleanup | Component | SlotInsertionTransaction | undefined | null | false | 0 | '' | void>;
+        type Initialiser = (slot: ComponentInsertionTransaction) => Slot.InitialiserReturn;
+        type InitialiserReturn = AbortablePromiseOr<Slot.Cleanup | Component | ComponentInsertionTransaction | undefined | null | false | 0 | '' | void>;
     }
     const Slot: Component.Builder<[], Slot> & {
         using: <T>(value: T | State<T>, initialiser: (transaction: ComponentInsertionTransaction, value: T) => Slot.InitialiserReturn) => Slot;

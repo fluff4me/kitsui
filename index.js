@@ -1420,7 +1420,6 @@ define("kitsui/utility/Viewport", ["require", "exports", "kitsui/utility/State"]
     var Viewport;
     (function (Viewport) {
         Viewport.size = State_3.default.JIT(() => ({ w: window.innerWidth, h: window.innerHeight }));
-        Viewport.sizeExcludingScrollbars = State_3.default.JIT(() => ({ w: document.documentElement.clientWidth, h: document.documentElement.clientHeight }));
         Viewport.mobile = State_3.default.JIT(owner => {
             const contentWidth = 800;
             const result = Viewport.size.value.w < contentWidth;
@@ -1447,7 +1446,7 @@ define("kitsui/utility/Viewport", ["require", "exports", "kitsui/utility/State"]
             return result;
         });
         function listen() {
-            window.addEventListener('resize', () => { Viewport.size.markDirty(); Viewport.sizeExcludingScrollbars.markDirty(); });
+            window.addEventListener('resize', Viewport.size.markDirty);
         }
         Viewport.listen = listen;
     })(Viewport || (Viewport = {}));
@@ -1603,7 +1602,7 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                 if (anchoredBox && locationPreference && from) {
                     for (const preference of locationPreference) {
                         if (!preference)
-                            return location.value ??= { mouse: false, x: -10000, y: -10000, padX: false, xPosSide: 'left', yPosSide: 'top' };
+                            return location.value ??= { mouse: false, x: -10000, y: -10000, padX: false };
                         let alignment = 'left';
                         const xConf = preference.xAnchor;
                         const xRef = resolveAnchorRef(preference.xRefSelector);
@@ -1611,57 +1610,32 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                             continue;
                         const xBox = xRef?.rect.value;
                         addSubscription(xRef?.rect.subscribe(host, result.markDirty));
-                        const xRefCentre = (xBox?.left ?? 0) + (xBox?.width ?? Viewport_1.default.size.value.w) / 2;
-                        const xRefLeft = xBox?.left ?? xRefCentre;
-                        const xRefRight = xBox?.right ?? xRefCentre;
-                        let boxLeft, boxRight;
+                        const xCenter = (xBox?.left ?? 0) + (xBox?.width ?? Viewport_1.default.size.value.w) / 2;
+                        const xRefX = (xConf.side === 'right' ? xBox?.right : xConf.side === 'left' ? xBox?.left : xCenter) ?? xCenter;
+                        let x;
                         switch (xConf.type) {
                             case 'aligned':
+                                x = xConf.side === 'right' ? xRefX - anchoredBox.width - xConf.offset : xRefX + xConf.offset;
                                 alignment = xConf.side;
-                                if (xConf.side === 'left') {
-                                    // this.left = anchor.left
-                                    boxLeft = xRefLeft + xConf.offset;
-                                    boxRight = boxLeft + anchoredBox.width;
-                                }
-                                else {
-                                    // this.right = anchor.right
-                                    boxRight = xRefRight - xConf.offset;
-                                    boxLeft = boxRight - anchoredBox.width;
-                                }
                                 break;
                             case 'off':
+                                x = xConf.side === 'right' ? xRefX + xConf.offset : xRefX - anchoredBox.width - xConf.offset;
+                                // alignment is inverted side for "off"
                                 alignment = xConf.side === 'left' ? 'right' : 'left';
-                                if (xConf.side === 'left') {
-                                    // this.right = anchor.left
-                                    boxRight = xRefLeft - xConf.offset;
-                                    boxLeft = boxRight - anchoredBox.width;
-                                }
-                                else {
-                                    // this.left = anchor.right
-                                    boxLeft = xRefRight + xConf.offset;
-                                    boxRight = boxLeft + anchoredBox.width;
-                                }
                                 break;
                             case 'centre':
-                                boxLeft = xRefCentre - anchoredBox.width / 2;
-                                boxRight = boxLeft + anchoredBox.width;
+                                x = xRefX - anchoredBox.width / 2;
                                 alignment = 'centre';
                                 break;
                         }
-                        if (preference.options?.xValid?.(boxLeft, xBox, anchoredBox) === false)
+                        if (preference.options?.xValid?.(x, xBox, anchoredBox) === false)
                             continue;
                         if (anchoredBox.width < Viewport_1.default.size.value.w && !preference.options?.allowXOffscreen) {
-                            const isXOffScreen = boxLeft < 0 || boxRight > Viewport_1.default.size.value.w;
+                            const isXOffScreen = x < 0 || x + anchoredBox.width > Viewport_1.default.size.value.w;
                             if (isXOffScreen && !xConf.sticky)
                                 continue;
-                            if (boxLeft < 0) {
-                                boxLeft = 0;
-                                boxRight = anchoredBox.width;
-                            }
-                            else if (boxRight > Viewport_1.default.size.value.w) {
-                                boxRight = Viewport_1.default.size.value.w;
-                                boxLeft = boxRight - anchoredBox.width;
-                            }
+                            if (isXOffScreen)
+                                x = x < 0 ? 0 : Viewport_1.default.size.value.w - anchoredBox.width;
                         }
                         const yConf = preference.yAnchor;
                         const yRef = resolveAnchorRef(preference.yRefSelector);
@@ -1669,87 +1643,33 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                             continue;
                         const yBox = yRef?.rect.value;
                         addSubscription(yRef?.rect.subscribe(host, result.markDirty));
-                        const yRefCentre = (yBox?.top ?? 0) + (yBox?.height ?? Viewport_1.default.size.value.h) / 2;
-                        const yRefTop = yBox?.top ?? yRefCentre;
-                        const yRefBottom = yBox?.bottom ?? yRefCentre;
-                        let boxTop, boxBottom;
+                        const yCenter = (yBox?.top ?? 0) + (yBox?.height ?? Viewport_1.default.size.value.h) / 2;
+                        const yRefY = (yConf.side === 'bottom' ? yBox?.bottom : yConf.side === 'top' ? yBox?.top : yCenter) ?? yCenter;
+                        let y;
                         switch (yConf.type) {
                             case 'aligned':
-                                if (yConf.side === 'top') {
-                                    // this.top = anchor.top
-                                    boxTop = yRefTop + yConf.offset;
-                                    boxBottom = boxTop + anchoredBox.height;
-                                }
-                                else {
-                                    // this.bottom = anchor.bottom
-                                    boxBottom = yRefBottom - yConf.offset;
-                                    boxTop = boxBottom - anchoredBox.height;
-                                }
+                                y = yConf.side === 'bottom' ? yRefY - anchoredBox.height - yConf.offset : yRefY + yConf.offset;
                                 break;
                             case 'off':
-                                if (yConf.side === 'top') {
-                                    // this.bottom = anchor.top
-                                    boxBottom = yRefTop - yConf.offset;
-                                    boxTop = boxBottom - anchoredBox.height;
-                                }
-                                else {
-                                    // this.top = anchor.bottom
-                                    boxTop = yRefBottom + yConf.offset;
-                                    boxBottom = boxTop + anchoredBox.height;
-                                }
+                                y = yConf.side === 'bottom' ? yRefY + yConf.offset : yRefY - anchoredBox.height - yConf.offset;
                                 break;
                             case 'centre':
-                                boxTop = yRefCentre - anchoredBox.height / 2;
-                                boxBottom = boxTop + anchoredBox.height;
+                                y = yRefY - anchoredBox.height / 2;
                                 break;
                         }
-                        if (preference.options?.yValid?.(boxTop, yBox, anchoredBox) === false)
+                        if (preference.options?.yValid?.(y, yBox, anchoredBox) === false)
                             continue;
                         if (anchoredBox.height < Viewport_1.default.size.value.h && !preference.options?.allowYOffscreen) {
-                            const isYOffScreen = boxTop < 0 || boxBottom > Viewport_1.default.size.value.h;
+                            const isYOffScreen = y < 0 || y + anchoredBox.height > Viewport_1.default.size.value.h;
                             if (isYOffScreen && !yConf.sticky)
                                 continue;
-                            if (boxTop < 0) {
-                                boxTop = 0;
-                                boxBottom = anchoredBox.height;
-                            }
-                            else if (boxBottom > Viewport_1.default.size.value.h) {
-                                boxBottom = Viewport_1.default.size.value.h;
-                                boxTop = boxBottom - anchoredBox.height;
-                            }
+                            if (isYOffScreen)
+                                y = y < 0 ? 0 : Viewport_1.default.size.value.h - anchoredBox.height;
                         }
-                        let finalX, finalY, xPosSide, yPosSide;
-                        if ((xConf.type === 'aligned' && xConf.side === 'right') || (xConf.type === 'off' && xConf.side === 'left')) {
-                            xPosSide = 'right';
-                            finalX = Viewport_1.default.sizeExcludingScrollbars.value.w - boxRight;
-                        }
-                        else {
-                            xPosSide = 'left';
-                            finalX = boxLeft;
-                        }
-                        if ((yConf.type === 'aligned' && yConf.side === 'bottom') || (yConf.type === 'off' && yConf.side === 'top')) {
-                            yPosSide = 'bottom';
-                            finalY = Viewport_1.default.sizeExcludingScrollbars.value.h - boxBottom;
-                        }
-                        else {
-                            yPosSide = 'top';
-                            finalY = boxTop;
-                        }
-                        return (location.value ??= {
-                            mouse: false,
-                            padX: xConf.type === 'off',
-                            alignment,
-                            x: finalX,
-                            y: finalY,
-                            xPosSide,
-                            yPosSide,
-                            yRefBox: yBox,
-                            xRefBox: xBox,
-                            preference,
-                        });
+                        return location.value ??= { mouse: false, padX: xConf.type === 'off', alignment, x, y, yRefBox: yBox, xRefBox: xBox, preference };
                     }
                 }
-                return location.value ??= { mouse: true, padX: true, ...Mouse_1.default.state.value, xPosSide: 'left', yPosSide: 'top' };
+                return location.value ??= { mouse: true, padX: true, ...Mouse_1.default.state.value };
             },
             apply: () => {
                 const location = result.get();
@@ -1766,10 +1686,8 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                     // this.surface.classes.add(`aligned-${this.currentAlignment}`)
                 }
                 // this.surface.classes.toggle(location.padX, "pad-x")
-                host.element.style.left = location.xPosSide === 'left' ? `${location.x}px` : 'auto';
-                host.element.style.right = location.xPosSide === 'right' ? `${location.x}px` : 'auto';
-                host.element.style.top = location.yPosSide === 'top' ? `${location.y}px` : 'auto';
-                host.element.style.bottom = location.yPosSide === 'bottom' ? `${location.y}px` : 'auto';
+                host.element.style.left = `${location.x}px`;
+                host.element.style.top = `${location.y}px`;
                 host.rect.markDirty();
                 if (!location.mouse && !rendered) {
                     const id = ++renderId;
@@ -3206,10 +3124,6 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             getFirstDescendant(builder) {
                 const [first] = component.getDescendants(builder);
                 return first;
-            },
-            contains(elementOrComponent) {
-                const descendant = Component.is(elementOrComponent) ? elementOrComponent.element : elementOrComponent;
-                return descendant === undefined || descendant === null ? false : component.element.contains(descendant);
             },
             receiveRootedEvents() {
                 component.element.classList.add(Classes.ReceiveRootedEvents);
@@ -4776,7 +4690,6 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
         let inserted = false;
         const hidden = (0, State_15.default)(false);
         const useDisplayContents = (0, State_15.default)(true);
-        let contentsOwner;
         return slot
             .style.bindProperty('display', State_15.default.MapManual([hidden, useDisplayContents], (hidden, useDisplayContents) => hidden ? 'none' : useDisplayContents ? 'contents' : undefined))
             .extend(slot => ({
@@ -4815,18 +4728,13 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                     cleanup = undefined;
                     abortTransaction?.();
                     abortTransaction = undefined;
-                    contentsOwner?.remove();
-                    contentsOwner = State_15.default.Owner.create();
                     const component = (0, Component_6.default)();
-                    const transaction = Object.assign((0, ComponentInsertionTransaction_1.default)(component, () => {
+                    const transaction = (0, ComponentInsertionTransaction_1.default)(component, () => {
                         slot.removeContents();
                         slot.append(...component.element.children);
                         inserted = true;
-                        component.remove();
-                    }), {
-                        closed: component.removed,
-                        removed: contentsOwner.removed,
                     });
+                    Object.assign(transaction, { closed: component.removed });
                     abortTransaction = transaction.abort;
                     handleSlotInitialiserReturn(transaction, wasArrayState
                         ? initialiser(transaction, ...value)
@@ -4903,18 +4811,13 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
         }))
             .tweak(slot => slot.removed.matchManual(true, () => cleanup?.()));
         function handleSlotInitialiser(initialiser) {
-            contentsOwner?.remove();
-            contentsOwner = State_15.default.Owner.create();
             const component = (0, Component_6.default)();
-            const transaction = Object.assign((0, ComponentInsertionTransaction_1.default)(component, () => {
+            const transaction = (0, ComponentInsertionTransaction_1.default)(component, () => {
                 slot.removeContents();
                 slot.append(...component.element.children);
                 inserted = true;
-                component.remove();
-            }), {
-                closed: component.removed,
-                removed: contentsOwner.removed,
             });
+            Object.assign(transaction, { closed: component.removed });
             abortTransaction = transaction.abort;
             handleSlotInitialiserReturn(transaction, initialiser(transaction));
         }
