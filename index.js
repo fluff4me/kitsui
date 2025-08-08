@@ -286,6 +286,9 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                     equalsMap.set(value, equalsResult = State.Generator(() => result.value === value).observeManual(result));
                 return equalsResult;
             },
+            notEquals(value) {
+                return result.equals(value).not;
+            },
             coalesce(right) {
                 const rightState = State.get(right);
                 return State.Generator(() => {

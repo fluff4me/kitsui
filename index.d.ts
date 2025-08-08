@@ -68,6 +68,7 @@ declare module "kitsui/utility/State" {
         falsy: State.Generator<boolean>;
         not: State.Generator<boolean>;
         equals(value: T): State.Generator<boolean>;
+        notEquals(value: T): State.Generator<boolean>;
         coalesce<R>(right: State.Or<R>): State.Generator<Exclude<T, null | undefined> | R>;
         delay(owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null, equals?: State.ComparatorFunction<T>): State<T>;
         delay<R>(owner: State.Owner, delay: SupplierOr<number, [T]>, mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>;
