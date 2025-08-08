@@ -32,6 +32,7 @@ interface State<T, E = T> {
 	falsy: State.Generator<boolean>
 	not: State.Generator<boolean>
 	equals (value: T): State.Generator<boolean>
+	notEquals (value: T): State.Generator<boolean>
 	coalesce<R> (right: State.Or<R>): State.Generator<Exclude<T, null | undefined> | R>
 
 	delay (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null, equals?: State.ComparatorFunction<T>): State<T>
@@ -208,6 +209,9 @@ function State<T> (defaultValue: T, comparator?: State.ComparatorFunction<T>): S
 			if (equalsResult === undefined)
 				equalsMap.set(value, equalsResult = State.Generator(() => result.value === value).observeManual(result))
 			return equalsResult
+		},
+		notEquals (value) {
+			return result.equals(value).not
 		},
 		coalesce (right) {
 			const rightState = State.get(right)
