@@ -110,7 +110,7 @@ interface SlotIfElseExtensions {
 	else (initialiser: Slot.Initialiser): this
 }
 
-interface SlotInsertionTransaction extends State.Owner, ComponentInsertionTransaction { }
+export interface SlotInsertionTransaction extends State.Owner, ComponentInsertionTransaction { }
 
 export interface SlotExtensions {
 	// use<const STATES extends State<any>[]> (states: STATES, initialiser: (slot: ComponentInsertionTransaction, ...values: { [INDEX in keyof STATES]: STATES[INDEX] extends State<infer T> ? T : never }) => Slot.InitialiserReturn): this

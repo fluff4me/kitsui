@@ -559,7 +559,16 @@ namespace State {
 
 	export function Async<FROM, T, D = never> (owner: State.Owner, from: State<FROM>, generator: AsyncMapGenerator<FROM, T, D>): Async<T>
 	export function Async<T, D = never> (owner: State.Owner, generator: AsyncGenerator<T, D>): Async<T>
-	export function Async<FROM, T, D = never> (owner: State.Owner, _from: State<FROM> | AsyncGenerator<T, D>, _generator?: AsyncMapGenerator<FROM, T, D>): Async<T> {
+	export function Async<FROM, T, D = never> (from: State<FROM>, generator: AsyncMapGenerator<FROM, T, D>): Async<T>
+	export function Async<T, D = never> (generator: AsyncGenerator<T, D>): Async<T>
+	export function Async (...args: any[]): Async<any> {
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-return
+		return State.Owner.getRemovedState(args[0])
+			? createAsyncState(...args as [State.Owner, State<any>])
+			: createAsyncState(State.Owner.create(), ...args as [State<any>])
+	}
+
+	function createAsyncState<FROM, T, D = never> (owner: State.Owner, _from: State<FROM> | AsyncGenerator<T, D>, _generator?: AsyncMapGenerator<FROM, T, D>): Async<T> {
 		const from = State.is(_from) ? _from : State(null as FROM)
 		const generator: AsyncMapGenerator<FROM, T, D> = State.is(_from) ? _generator! : (_, signal, setProgress) => _from(signal, setProgress)
 
