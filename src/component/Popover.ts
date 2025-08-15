@@ -121,6 +121,7 @@ Component.extend(component => {
 							await Task.yield()
 							popover.anchor.apply()
 							await Task.yield()
+							popover.anchor.markDirty()
 							popover.style.removeProperties('visibility')
 						}
 					})
@@ -296,12 +297,13 @@ Component.extend(component => {
 			async function showPopoverClick () {
 				popover.anchor.from(component)
 				popover.style.setProperty('visibility', 'hidden')
-				component.popover?.show()
-				component.popover?.focus()
-				component.popover?.style.removeProperties('left', 'top')
+				popover.show()
+				popover.focus()
+				popover.style.removeProperties('left', 'top')
 				await Task.yield()
-				component.popover?.anchor.apply()
+				popover.anchor.apply()
 				await Task.yield()
+				popover.anchor.markDirty()
 				popover.style.removeProperties('visibility')
 			}
 
@@ -364,7 +366,7 @@ Component.extend(component => {
 					FocusTrap.hide()
 
 				isShown = shouldShow
-				component.popover.toggle(shouldShow)
+				popover.toggle(shouldShow)
 				if (!shouldShow)
 					return
 
@@ -373,8 +375,9 @@ Component.extend(component => {
 				FocusTrap.show()
 				// component.popover.style.removeProperties('left', 'top')
 				await Task.yield()
-				component.popover.anchor.apply()
+				popover.anchor.apply()
 				await Task.yield()
+				popover.anchor.markDirty()
 				popover.style.removeProperties('visibility')
 			}
 

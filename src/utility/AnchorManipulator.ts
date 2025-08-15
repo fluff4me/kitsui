@@ -189,6 +189,7 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 
 	let unuseFrom: State.Unsubscribe | undefined
 
+	let applyOwner: State.Owner.Removable | undefined
 	let renderId = 0
 	let rendered = false
 	const result: AnchorManipulator<HOST> = {
@@ -446,6 +447,8 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 			return location.value ??= { mouse: true, padX: true, ...Mouse.state.value, xPosSide: 'left', yPosSide: 'top' }
 		},
 		apply: () => {
+			applyOwner?.remove(); applyOwner = State.Owner.create()
+
 			const location = result.get()
 			let alignment = location.alignment ?? currentAlignment
 			if (location.mouse) {
@@ -453,6 +456,9 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 				if (shouldFlip) {
 					alignment = currentAlignment === 'left' ? 'right' : 'left'
 				}
+
+				Mouse.onMove(result.markDirty)
+				applyOwner.removed.subscribeManual(removed => removed && Mouse.offMove(result.markDirty))
 			}
 
 			if (currentAlignment !== alignment) {
@@ -467,7 +473,7 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 			host.element.style.top = location.yPosSide === 'top' ? `${location.y}px` : 'auto'
 			host.element.style.bottom = location.yPosSide === 'bottom' ? `${location.y}px` : 'auto'
 			host.rect.markDirty()
-			if (!location.mouse && !rendered) {
+			if (!rendered) {
 				const id = ++renderId
 				host.style.setProperty('display', 'none')
 				host.style.setProperty('transition-duration', '0s')
