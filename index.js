@@ -519,7 +519,14 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
             return result;
         }
         State.JIT = JIT;
-        function Async(owner, _from, _generator) {
+        function Async(...args) {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+            return State.Owner.getRemovedState(args[0])
+                ? createAsyncState(...args)
+                : createAsyncState(State.Owner.create(), ...args);
+        }
+        State.Async = Async;
+        function createAsyncState(owner, _from, _generator) {
             const from = State.is(_from) ? _from : State(null);
             const generator = State.is(_from) ? _generator : (_, signal, setProgress) => _from(signal, setProgress);
             const state = State({
@@ -577,7 +584,6 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
             });
             return result;
         }
-        State.Async = Async;
         function Array(...values) {
             const itemStates = [];
             const subscribers = [];
@@ -1529,6 +1535,7 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
         const subscribed = [];
         const addSubscription = (use) => use && subscribed.push(use);
         let unuseFrom;
+        let applyOwner;
         let renderId = 0;
         let rendered = false;
         const result = {
@@ -1755,6 +1762,8 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                 return location.value ??= { mouse: true, padX: true, ...Mouse_1.default.state.value, xPosSide: 'left', yPosSide: 'top' };
             },
             apply: () => {
+                applyOwner?.remove();
+                applyOwner = State_4.default.Owner.create();
                 const location = result.get();
                 let alignment = location.alignment ?? currentAlignment;
                 if (location.mouse) {
@@ -1762,6 +1771,8 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                     if (shouldFlip) {
                         alignment = currentAlignment === 'left' ? 'right' : 'left';
                     }
+                    Mouse_1.default.onMove(result.markDirty);
+                    applyOwner.removed.subscribeManual(removed => removed && Mouse_1.default.offMove(result.markDirty));
                 }
                 if (currentAlignment !== alignment) {
                     currentAlignment = alignment;
@@ -1774,7 +1785,7 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                 host.element.style.top = location.yPosSide === 'top' ? `${location.y}px` : 'auto';
                 host.element.style.bottom = location.yPosSide === 'bottom' ? `${location.y}px` : 'auto';
                 host.rect.markDirty();
-                if (!location.mouse && !rendered) {
+                if (!rendered) {
                     const id = ++renderId;
                     host.style.setProperty('display', 'none');
                     host.style.setProperty('transition-duration', '0s');
@@ -4181,6 +4192,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                             await Task_1.default.yield();
                             popover.anchor.apply();
                             await Task_1.default.yield();
+                            popover.anchor.markDirty();
                             popover.style.removeProperties('visibility');
                         }
                     });
@@ -4329,12 +4341,13 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                 async function showPopoverClick() {
                     popover.anchor.from(component);
                     popover.style.setProperty('visibility', 'hidden');
-                    component.popover?.show();
-                    component.popover?.focus();
-                    component.popover?.style.removeProperties('left', 'top');
+                    popover.show();
+                    popover.focus();
+                    popover.style.removeProperties('left', 'top');
                     await Task_1.default.yield();
-                    component.popover?.anchor.apply();
+                    popover.anchor.apply();
                     await Task_1.default.yield();
+                    popover.anchor.markDirty();
                     popover.style.removeProperties('visibility');
                 }
                 function updatePopoverParent() {
@@ -4383,7 +4396,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     if (!shouldShow)
                         FocusTrap.hide();
                     isShown = shouldShow;
-                    component.popover.toggle(shouldShow);
+                    popover.toggle(shouldShow);
                     if (!shouldShow)
                         return;
                     popover.anchor.from(component);
@@ -4391,8 +4404,9 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     FocusTrap.show();
                     // component.popover.style.removeProperties('left', 'top')
                     await Task_1.default.yield();
-                    component.popover.anchor.apply();
+                    popover.anchor.apply();
                     await Task_1.default.yield();
+                    popover.anchor.markDirty();
                     popover.style.removeProperties('visibility');
                 }
                 function shouldClearPopover() {

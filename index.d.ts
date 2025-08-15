@@ -170,6 +170,8 @@ declare module "kitsui/utility/State" {
         export type AsyncGenerator<T, D = never> = (signal: AbortSignal, setProgress: (progress: number | null, details?: D) => void) => Promise<T>;
         export function Async<FROM, T, D = never>(owner: State.Owner, from: State<FROM>, generator: AsyncMapGenerator<FROM, T, D>): Async<T>;
         export function Async<T, D = never>(owner: State.Owner, generator: AsyncGenerator<T, D>): Async<T>;
+        export function Async<FROM, T, D = never>(from: State<FROM>, generator: AsyncMapGenerator<FROM, T, D>): Async<T>;
+        export function Async<T, D = never>(generator: AsyncGenerator<T, D>): Async<T>;
         export interface EndpointResult<T> extends Async<T> {
             refresh(): void;
         }
@@ -1267,7 +1269,7 @@ declare module "kitsui/component/Slot" {
         elseIf(state: State<boolean>, initialiser: Slot.Initialiser): this;
         else(initialiser: Slot.Initialiser): this;
     }
-    interface SlotInsertionTransaction extends State.Owner, ComponentInsertionTransaction {
+    export interface SlotInsertionTransaction extends State.Owner, ComponentInsertionTransaction {
     }
     export interface SlotExtensions {
         use<T>(state: T | State<T>, initialiser: (slot: SlotInsertionTransaction, value: T) => Slot.InitialiserReturn): this;
