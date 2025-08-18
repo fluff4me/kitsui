@@ -105,6 +105,7 @@ declare module "kitsui/utility/State" {
         export function is<T>(value: unknown): value is State<T>;
         export function get<T>(value: T | State.Mutable<T>): State.Mutable<T>;
         export function get<T>(value: T | State<T>): State<T>;
+        export function Mutable<T>(owner: State.Owner, value: T | State<T>): State.Mutable<T>;
         export function value<T>(state: T | State<T>): T;
         export function getInternalValue<T>(state: T | State<T>): T;
         const SYMBOL_HAS_SUBSCRIPTIONS: unique symbol;

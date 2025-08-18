@@ -360,6 +360,14 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
             return is(value) ? value : State(value);
         }
         State.get = get;
+        function Mutable(owner, value) {
+            if (!is(value))
+                return State(value);
+            const state = State(undefined);
+            state.bind(owner, value);
+            return state;
+        }
+        State.Mutable = Mutable;
         function value(state) {
             return is(state) ? state.value : state;
         }
@@ -4976,7 +4984,7 @@ define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "k
     })(TooltipStyleTargets || (TooltipStyleTargets = {}));
     const Tooltip = (0, Component_7.default)((component) => {
         const tooltip = component.and(Popover_1.default)
-            .setDelay(300)
+            .setDelay(200)
             .setMousePadding(0)
             .addStyleTargets(TooltipStyleTargets);
         return tooltip.style(tooltip.styleTargets.Tooltip)
