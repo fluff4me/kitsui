@@ -314,6 +314,15 @@ namespace State {
 		return is<T>(value) ? value : State(value)
 	}
 
+	export function Mutable<T> (owner: State.Owner, value: T | State<T>): State.Mutable<T> {
+		if (!is<T>(value))
+			return State(value)
+
+		const state = State<T>(undefined!)
+		state.bind(owner, value)
+		return state
+	}
+
 	export function value<T> (state: T | State<T>): T {
 		return is<T>(state) ? state.value : state
 	}

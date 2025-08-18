@@ -24,7 +24,7 @@ interface Tooltip extends PopoverWithTooltipStyleTargets, TooltipExtensions { }
 
 const Tooltip = Component((component): Tooltip => {
 	const tooltip = component.and(Popover)
-		.setDelay(300)
+		.setDelay(200)
 		.setMousePadding(0)
 		.addStyleTargets(TooltipStyleTargets)
 	return tooltip.style(tooltip.styleTargets.Tooltip)
