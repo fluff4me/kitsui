@@ -19,20 +19,20 @@ namespace FocusListener {
 	// let updatingFocusState = false
 	// let cursor = 0
 	// const queue: QueuedFocusChange[] = []
-	export function focus (element: HTMLElement) {
+	export function focus (element: HTMLElement, force = false) {
 		// if (updatingFocusState || exhaustingQueue) {
 		// 	queue.splice(cursor, 0, { type: "focus", element })
 		// 	cursor++
 		// 	return
 		// }
 
-		focusInternal(element)
+		focusInternal(element, force)
 	}
 
 	let focusedThisTick = 0
 	let focusTimeout: number | undefined
-	function focusInternal (element: HTMLElement) {
-		if (document.querySelector(':focus-visible') === element)
+	function focusInternal (element: HTMLElement, force = false) {
+		if (!force && document.querySelector(':focus-visible') === element)
 			return
 
 		if (focusedThisTick > 100)
@@ -42,6 +42,10 @@ namespace FocusListener {
 		element.focus()
 		window.clearTimeout(focusTimeout)
 		window.setTimeout(() => focusedThisTick = 0)
+
+		if (force) {
+			updateFocusState(element)
+		}
 	}
 
 	export function blur (element: HTMLElement) {
@@ -75,11 +79,11 @@ namespace FocusListener {
 	}
 
 	// let exhaustingQueue = false
-	function updateFocusState () {
+	function updateFocusState (element?: HTMLElement) {
 		if (document.activeElement && document.activeElement !== document.body && location.hash && document.activeElement.id !== location.hash.slice(1))
 			history.pushState(undefined, '', ' ')
 
-		const newFocused = document.querySelector(':focus-visible') ?? undefined
+		const newFocused = element ?? document.querySelector(':focus-visible') ?? undefined
 		if (newFocused === focused.value)
 			return
 
