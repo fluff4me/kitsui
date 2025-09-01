@@ -3980,7 +3980,7 @@ define("kitsui/utility/InputBus", ["require", "exports", "kitsui/Component", "ki
         }
         const eventKey = e.key ?? MOUSE_KEYNAME_MAP[e.button];
         const eventType = e.type === 'mousedown' ? 'keydown' : e.type === 'mouseup' ? 'keyup' : e.type;
-        if (eventType === 'keydown')
+        if (eventType === 'keydown' && !inputDownTime[eventKey])
             inputDownTime[eventKey] = Date.now();
         let cancelInput = false;
         const event = {
