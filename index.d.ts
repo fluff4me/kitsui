@@ -641,7 +641,7 @@ declare module "kitsui/utility/FocusListener" {
         const focused: State.Mutable<Element | undefined>;
         const focusedLast: State.Mutable<Element | undefined>;
         function focusedComponent(): Component | undefined;
-        function focus(element: HTMLElement): void;
+        function focus(element: HTMLElement, force?: boolean): void;
         function blur(element: HTMLElement): void;
         function listen(): void;
     }

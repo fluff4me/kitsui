@@ -2388,19 +2388,19 @@ define("kitsui/utility/FocusListener", ["require", "exports", "kitsui/utility/St
         // let updatingFocusState = false
         // let cursor = 0
         // const queue: QueuedFocusChange[] = []
-        function focus(element) {
+        function focus(element, force = false) {
             // if (updatingFocusState || exhaustingQueue) {
             // 	queue.splice(cursor, 0, { type: "focus", element })
             // 	cursor++
             // 	return
             // }
-            focusInternal(element);
+            focusInternal(element, force);
         }
         FocusListener.focus = focus;
         let focusedThisTick = 0;
         let focusTimeout;
-        function focusInternal(element) {
-            if (document.querySelector(':focus-visible') === element)
+        function focusInternal(element, force = false) {
+            if (!force && document.querySelector(':focus-visible') === element)
                 return;
             if (focusedThisTick > 100)
                 return;
@@ -2408,6 +2408,9 @@ define("kitsui/utility/FocusListener", ["require", "exports", "kitsui/utility/St
             element.focus();
             window.clearTimeout(focusTimeout);
             window.setTimeout(() => focusedThisTick = 0);
+            if (force) {
+                updateFocusState(element);
+            }
         }
         function blur(element) {
             // if (updatingFocusState || exhaustingQueue) {
@@ -2436,10 +2439,10 @@ define("kitsui/utility/FocusListener", ["require", "exports", "kitsui/utility/St
                 updateFocusState();
         }
         // let exhaustingQueue = false
-        function updateFocusState() {
+        function updateFocusState(element) {
             if (document.activeElement && document.activeElement !== document.body && location.hash && document.activeElement.id !== location.hash.slice(1))
                 history.pushState(undefined, '', ' ');
-            const newFocused = document.querySelector(':focus-visible') ?? undefined;
+            const newFocused = element ?? document.querySelector(':focus-visible') ?? undefined;
             if (newFocused === FocusListener.focused.value)
                 return;
             // updatingFocusState = true
