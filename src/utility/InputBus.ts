@@ -117,7 +117,7 @@ function emitKeyEvent (e: RawEvent) {
 
 	const eventKey = e.key ?? MOUSE_KEYNAME_MAP[e.button!]
 	const eventType = e.type === 'mousedown' ? 'keydown' : e.type === 'mouseup' ? 'keyup' : e.type as 'keydown' | 'keyup'
-	if (eventType === 'keydown')
+	if (eventType === 'keydown' && !inputDownTime[eventKey])
 		inputDownTime[eventKey] = Date.now()
 
 	let cancelInput = false
