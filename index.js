@@ -2560,13 +2560,12 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
             },
             bind(state, ...toAdd) {
                 if (State_9.default.is(toAdd[0])) {
-                    const stateBool = State_9.default.is(state) ? undefined : state;
-                    const bstate = State_9.default.is(state) ? state : undefined;
-                    result.unbind(bstate);
+                    const actualInputState = State_9.default.is(state) ? state : undefined;
+                    result.unbind(actualInputState);
+                    state = State_9.default.get(state);
                     const owner = State_9.default.Owner.create();
                     const currentNames = [];
-                    State_9.default.Use(owner, { state: bstate, names: toAdd[0] }).use(owner, ({ state, names }, { state: oldState, names: oldNames } = { state: false, names: undefined }) => {
-                        oldState ??= stateBool;
+                    State_9.default.Use(owner, { state: state, names: toAdd[0] }).use(owner, ({ state, names }, { state: oldState, names: oldNames } = { state: false, names: undefined }) => {
                         oldNames = oldNames && oldState ? Array.isArray(oldNames) ? oldNames : [oldNames] : [];
                         names = names && state ? Array.isArray(names) ? names : [names] : [];
                         for (const oldName of oldNames ?? [])
@@ -2576,8 +2575,8 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
                         currentNames.splice(0, Infinity, ...names);
                         updateClasses();
                     });
-                    if (bstate)
-                        stateUnsubscribers.set(bstate, [owner.remove, currentNames]);
+                    if (actualInputState)
+                        stateUnsubscribers.set(actualInputState, [owner.remove, currentNames]);
                     return component;
                 }
                 const names = toAdd;
