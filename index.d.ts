@@ -1273,10 +1273,17 @@ declare module "kitsui/component/Slot" {
     export interface SlotInsertionTransaction extends State.Owner, ComponentInsertionTransaction {
     }
     export interface SlotExtensions {
-        use<T>(state: T | State<T>, initialiser: (slot: SlotInsertionTransaction, value: T) => Slot.InitialiserReturn): this;
+        use<T>(state: State<T>, initialiser: (slot: SlotInsertionTransaction, value: T) => Slot.InitialiserReturn): this;
+        use<const INPUT extends Record<string, (State<unknown> | undefined)>>(state: INPUT, initialiser: (slot: SlotInsertionTransaction, value: NoInfer<{
+            [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined;
+        }>) => Slot.InitialiserReturn): this;
+        use<const INPUT extends (State<unknown> | undefined)[]>(state: INPUT, initialiser: (slot: SlotInsertionTransaction, ...value: NoInfer<{
+            [I in keyof INPUT]: INPUT[I] extends State<infer INPUT> ? INPUT : undefined;
+        }>) => Slot.InitialiserReturn): this;
         if(state: State<boolean>, initialiser: Slot.Initialiser): this & SlotIfElseExtensions;
         preserveContents(): this;
         useDisplayContents: State.Mutable<boolean>;
+        noDisplayContents(): this;
     }
     interface Slot extends Component, SlotExtensions {
     }

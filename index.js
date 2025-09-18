@@ -4808,6 +4808,10 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             .style.bindProperty('display', State_15.default.MapManual([hidden, useDisplayContents], (hidden, useDisplayContents) => hidden ? 'none' : useDisplayContents ? 'contents' : undefined))
             .extend(slot => ({
             useDisplayContents,
+            noDisplayContents() {
+                useDisplayContents.value = false;
+                return slot;
+            },
             preserveContents() {
                 if (elses.value.elseIfs.length || elses.value.else)
                     throw new Error('Cannot preserve contents when using elses');
@@ -4828,12 +4832,16 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 unuseElses?.();
                 unuseElses = undefined;
                 const wasArrayState = Array.isArray(state);
-                if (!wasArrayState)
-                    state = State_15.default.get(state);
-                else {
+                const wasObjectState = !wasArrayState && !State_15.default.is(state);
+                if (wasArrayState) {
                     const owner = State_15.default.Owner.create();
                     unuseOwner = owner.remove;
                     state = State_15.default.Map(owner, state, (...outputs) => outputs);
+                }
+                else if (wasObjectState) {
+                    const owner = State_15.default.Owner.create();
+                    unuseOwner = owner.remove;
+                    state = State_15.default.Use(owner, state);
                 }
                 unuse = state.use(slot, value => {
                     abort?.();
