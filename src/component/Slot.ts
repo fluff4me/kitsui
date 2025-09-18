@@ -114,10 +114,13 @@ export interface SlotInsertionTransaction extends State.Owner, ComponentInsertio
 
 export interface SlotExtensions {
 	// use<const STATES extends State<any>[]> (states: STATES, initialiser: (slot: ComponentInsertionTransaction, ...values: { [INDEX in keyof STATES]: STATES[INDEX] extends State<infer T> ? T : never }) => Slot.InitialiserReturn): this
-	use<T> (state: T | State<T>, initialiser: (slot: SlotInsertionTransaction, value: T) => Slot.InitialiserReturn): this
+	use<T> (state: State<T>, initialiser: (slot: SlotInsertionTransaction, value: T) => Slot.InitialiserReturn): this
+	use<const INPUT extends Record<string, (State<unknown> | undefined)>> (state: INPUT, initialiser: (slot: SlotInsertionTransaction, value: NoInfer<{ [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined }>) => Slot.InitialiserReturn): this
+	use<const INPUT extends (State<unknown> | undefined)[]> (state: INPUT, initialiser: (slot: SlotInsertionTransaction, ...value: NoInfer<{ [I in keyof INPUT]: INPUT[I] extends State<infer INPUT> ? INPUT : undefined }>) => Slot.InitialiserReturn): this
 	if (state: State<boolean>, initialiser: Slot.Initialiser): this & SlotIfElseExtensions
 	preserveContents (): this
 	useDisplayContents: State.Mutable<boolean>
+	noDisplayContents (): this
 }
 
 interface Slot extends Component, SlotExtensions { }
@@ -153,6 +156,10 @@ const Slot = Object.assign(
 			.style.bindProperty('display', State.MapManual([hidden, useDisplayContents], (hidden, useDisplayContents) => hidden ? 'none' : useDisplayContents ? 'contents' : undefined))
 			.extend<SlotExtensions & SlotIfElseExtensions>(slot => ({
 				useDisplayContents,
+				noDisplayContents () {
+					useDisplayContents.value = false
+					return slot
+				},
 				preserveContents () {
 					if (elses.value.elseIfs.length || elses.value.else)
 						throw new Error('Cannot preserve contents when using elses')
@@ -160,7 +167,7 @@ const Slot = Object.assign(
 					preserveContents = true
 					return slot
 				},
-				use: (state: unknown, initialiser: (slot: SlotInsertionTransaction, ...values: any[]) => Slot.InitialiserReturn) => {
+				use: (state: State<unknown> | Record<string, State<unknown> | undefined> | (State<unknown> | undefined)[], initialiser: (slot: SlotInsertionTransaction, ...value: any[]) => Slot.InitialiserReturn) => {
 					if (preserveContents)
 						throw new Error('Cannot "use" when preserving contents')
 
@@ -171,12 +178,16 @@ const Slot = Object.assign(
 					unuseElses?.(); unuseElses = undefined
 
 					const wasArrayState = Array.isArray(state)
-					if (!wasArrayState)
-						state = State.get(state)
-					else {
+					const wasObjectState = !wasArrayState && !State.is(state)
+					if (wasArrayState) {
 						const owner = State.Owner.create()
 						unuseOwner = owner.remove
 						state = State.Map(owner, state as State<any>[], (...outputs) => outputs as never[])
+					}
+					else if (wasObjectState) {
+						const owner = State.Owner.create()
+						unuseOwner = owner.remove
+						state = State.Use(owner, state as Record<string, State<any> | undefined>)
 					}
 
 					unuse = (state as State<unknown>).use(slot, value => {
