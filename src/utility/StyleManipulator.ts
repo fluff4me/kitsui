@@ -109,14 +109,14 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 			},
 			bind (state, ...toAdd) {
 				if (State.is(toAdd[0])) {
-					const stateBool = State.is(state) ? undefined : state
-					const bstate = State.is(state) ? state : undefined
-					result.unbind(bstate)
+					const actualInputState = State.is(state) ? state : undefined
+					result.unbind(actualInputState)
+
+					state = State.get(state)
 
 					const owner = State.Owner.create()
 					const currentNames: ComponentName[] = []
-					State.Use(owner, { state: bstate, names: toAdd[0] }).use(owner, ({ state, names }, { state: oldState, names: oldNames } = { state: false, names: undefined }) => {
-						oldState ??= stateBool
+					State.Use(owner, { state: state, names: toAdd[0] }).use(owner, ({ state, names }, { state: oldState, names: oldNames } = { state: false, names: undefined }) => {
 						oldNames = oldNames && oldState ? Array.isArray(oldNames) ? oldNames : [oldNames] : []
 						names = names && state ? Array.isArray(names) ? names : [names] : []
 
@@ -130,8 +130,8 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 						updateClasses()
 					})
 
-					if (bstate)
-						stateUnsubscribers.set(bstate, [owner.remove, currentNames])
+					if (actualInputState)
+						stateUnsubscribers.set(actualInputState, [owner.remove, currentNames])
 					return component
 				}
 
