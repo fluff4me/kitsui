@@ -2750,7 +2750,7 @@ define("kitsui/utility/TextManipulator", ["require", "exports", "kitsui/utility/
 define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipulator", "kitsui/utility/Arrays", "kitsui/utility/AttributeManipulator", "kitsui/utility/ClassManipulator", "kitsui/utility/EventManipulator", "kitsui/utility/FocusListener", "kitsui/utility/Maps", "kitsui/utility/Objects", "kitsui/utility/State", "kitsui/utility/StringApplicator", "kitsui/utility/Strings", "kitsui/utility/StyleManipulator", "kitsui/utility/TextManipulator", "kitsui/utility/Viewport"], function (require, exports, AnchorManipulator_1, Arrays_5, AttributeManipulator_1, ClassManipulator_1, EventManipulator_1, FocusListener_1, Maps_2, Objects_2, State_10, StringApplicator_3, Strings_2, StyleManipulator_1, TextManipulator_1, Viewport_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ComponentInsertionDestination = void 0;
+    exports.ComponentPerf = exports.ComponentInsertionDestination = void 0;
     AnchorManipulator_1 = __importDefault(AnchorManipulator_1);
     AttributeManipulator_1 = __importDefault(AttributeManipulator_1);
     ClassManipulator_1 = __importDefault(ClassManipulator_1);
@@ -2796,7 +2796,30 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         Classes["ReceiveChildrenInsertEvents"] = "_receive-children-insert-events";
         Classes["ReceiveInsertEvents"] = "_receive-insert-events";
         Classes["ReceiveScrollEvents"] = "_receieve-scroll-events";
+        Classes["HasRect"] = "_has-rect";
+        Classes["HasStatesToMarkDirtyOnInsertions"] = "_has-states-to-mark-dirty-on-insertions";
     })(Classes || (Classes = {}));
+    const SYMBOL_RECT_STATE = Symbol('RECT_STATE');
+    const SYMBOL_CALLBACKS_ON_INSERTIONS = Symbol('CALLBACKS_ON_INSERTIONS');
+    var ComponentPerf;
+    (function (ComponentPerf) {
+        function Rect(component) {
+            return component?.[SYMBOL_RECT_STATE];
+        }
+        ComponentPerf.Rect = Rect;
+        let CallbacksOnInsertions;
+        (function (CallbacksOnInsertions) {
+            function add(component, callback) {
+                const states = component[SYMBOL_CALLBACKS_ON_INSERTIONS] ??= [];
+                states.push(callback);
+            }
+            CallbacksOnInsertions.add = add;
+            function get(component) {
+                return component?.[SYMBOL_CALLBACKS_ON_INSERTIONS] ?? [];
+            }
+            CallbacksOnInsertions.get = get;
+        })(CallbacksOnInsertions = ComponentPerf.CallbacksOnInsertions || (ComponentPerf.CallbacksOnInsertions = {}));
+    })(ComponentPerf || (exports.ComponentPerf = ComponentPerf = {}));
     const componentExtensionsRegistry = [];
     function Component(type, builder) {
         if (typeof type === 'function' || typeof builder === 'function')
@@ -2810,6 +2833,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         let unuseAriaControlsIdState;
         let unuseOwnerRemove;
         let descendantsListeningForScroll;
+        let descendantRectsListeningForScroll;
         const jitTweaks = new Map();
         const nojit = {};
         let component = {
@@ -2995,20 +3019,27 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             get name() {
                 return (0, Objects_2.DefineProperty)(component, 'name', (0, State_10.default)(undefined));
             },
+            ...{
+                [SYMBOL_RECT_STATE]: undefined,
+            },
             get rect() {
                 const rectState = State_10.default.JIT(() => component.element.getBoundingClientRect());
                 const oldMarkDirty = rectState.markDirty;
                 rectState.markDirty = () => {
                     oldMarkDirty();
+                    for (const descendant of this.element.getElementsByClassName(Classes.HasRect))
+                        ComponentPerf.Rect(descendant.component)?.markDirty();
                     for (const descendant of this.element.getElementsByClassName(Classes.ReceiveAncestorRectDirtyEvents))
                         descendant.component?.event.emit('ancestorRectDirty');
                     return rectState;
                 };
-                this.receiveInsertEvents();
-                this.receiveAncestorInsertEvents();
-                this.receiveAncestorScrollEvents();
-                this.classes.add(Classes.ReceiveAncestorRectDirtyEvents);
-                this.event.subscribe(['insert', 'ancestorInsert', 'ancestorScroll', 'ancestorRectDirty'], rectState.markDirty);
+                // this.receiveInsertEvents()
+                // this.receiveAncestorInsertEvents()
+                // this.receiveAncestorScrollEvents()
+                this.classes.add(
+                // Classes.ReceiveAncestorRectDirtyEvents,
+                Classes.HasRect);
+                // this.event.subscribe(['insert', 'ancestorInsert', 'ancestorScroll', 'ancestorRectDirty'], rectState.markDirty)
                 Viewport_2.default.size.subscribe(component, rectState.markDirty);
                 return (0, Objects_2.DefineProperty)(component, 'rect', rectState);
             },
@@ -3150,12 +3181,14 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             },
             getStateForClosest(builders) {
                 const state = State_10.default.JIT(() => component.closest(builders));
-                component.receiveAncestorInsertEvents();
-                component.onRooted(() => {
-                    state.markDirty();
-                    component.receiveInsertEvents();
-                    component.event.subscribe(['insert', 'ancestorInsert'], () => state.markDirty());
-                });
+                ComponentPerf.CallbacksOnInsertions.add(component, state.markDirty);
+                component.classes.add(Classes.HasStatesToMarkDirtyOnInsertions);
+                // component.receiveAncestorInsertEvents()
+                // component.onRooted(() => {
+                // 	state.markDirty()
+                // component.receiveInsertEvents()
+                // component.event.subscribe(['insert', 'ancestorInsert'], () => state.markDirty())
+                // })
                 return state;
             },
             get parent() {
@@ -3270,9 +3303,12 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             },
             monitorScrollEvents() {
                 descendantsListeningForScroll ??= (component.element === window ? document.documentElement : component.element).getElementsByClassName(Classes.ReceiveScrollEvents);
+                descendantRectsListeningForScroll ??= (component.element === window ? document.documentElement : component.element).getElementsByClassName(Classes.HasRect);
                 component.event.subscribe('scroll', () => {
                     for (const descendant of [...descendantsListeningForScroll])
                         descendant.component?.event.emit('ancestorScroll');
+                    for (const descendant of [...descendantRectsListeningForScroll])
+                        ComponentPerf.Rect(descendant.component)?.markDirty();
                 });
                 return component;
             },
@@ -3348,11 +3384,19 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
     function emitInsert(component) {
         if (!component)
             return;
+        ComponentPerf.Rect(component)?.markDirty();
+        for (const callback of ComponentPerf.CallbacksOnInsertions.get(component))
+            callback();
         if (component.classes.has(Classes.ReceiveInsertEvents))
             component.event.emit('insert');
         const descendantsListeningForEvent = component.element.getElementsByClassName(Classes.ReceiveAncestorInsertEvents);
         for (const descendant of descendantsListeningForEvent)
             descendant.component?.event.emit('ancestorInsert');
+        for (const descendant of component.element.getElementsByClassName(Classes.HasRect))
+            ComponentPerf.Rect(descendant.component)?.markDirty();
+        for (const descendant of component.element.getElementsByClassName(Classes.HasStatesToMarkDirtyOnInsertions))
+            for (const callback of ComponentPerf.CallbacksOnInsertions.get(descendant.component))
+                callback();
         let cursor = component.element.parentElement;
         while (cursor) {
             if (cursor.classList.contains(Classes.ReceiveDescendantInsertEvents))
@@ -4118,7 +4162,7 @@ define("kitsui/utility/Task", ["require", "exports", "kitsui/utility/Time"], fun
 define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "kitsui/component/Dialog", "kitsui/utility/FocusListener", "kitsui/utility/HoverListener", "kitsui/utility/InputBus", "kitsui/utility/Mouse", "kitsui/utility/Objects", "kitsui/utility/State", "kitsui/utility/Task", "kitsui/utility/Vector2", "kitsui/utility/Viewport"], function (require, exports, Component_5, Dialog_1, FocusListener_2, HoverListener_1, InputBus_1, Mouse_3, Objects_3, State_13, Task_1, Vector2_1, Viewport_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Component_5 = __importDefault(Component_5);
+    Component_5 = __importStar(Component_5);
     Dialog_1 = __importDefault(Dialog_1);
     FocusListener_2 = __importDefault(FocusListener_2);
     HoverListener_1 = __importDefault(HoverListener_1);
@@ -4209,9 +4253,10 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop);
                     popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft);
                 });
-                component.getStateForClosest(Dialog_1.default).use(popover, getDialog => {
-                    popover.appendTo(getDialog() ?? document.body);
-                });
+                if (!popoverIn)
+                    component.getStateForClosest(Dialog_1.default)
+                        .map(popover, dialog => dialog ?? document.body)
+                        .use(popover, parent => popover.appendTo(parent));
                 let touchTimeout;
                 let touchStart;
                 let longpressed = false;
@@ -4317,9 +4362,10 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                         else
                             popover.hide();
                     });
-                    component.receiveInsertEvents();
-                    component.receiveAncestorInsertEvents();
-                    component.event.subscribe(['insert', 'ancestorInsert'], updatePopoverParent);
+                    Component_5.ComponentPerf.CallbacksOnInsertions.add(component, updatePopoverParent);
+                    // component.receiveInsertEvents()
+                    // component.receiveAncestorInsertEvents()
+                    // component.event.subscribe(['insert', 'ancestorInsert'], updatePopoverParent)
                 }
                 popover.popoverHasFocus.subscribe(component, (hasFocused, oldValue) => {
                     if (hasFocused)

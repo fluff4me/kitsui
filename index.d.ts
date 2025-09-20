@@ -890,6 +890,21 @@ declare module "kitsui/Component" {
     }
     interface Component<ELEMENT extends HTMLElement = HTMLElement> extends BaseComponent<ELEMENT>, ComponentExtensions<ELEMENT> {
     }
+    const SYMBOL_RECT_STATE: unique symbol;
+    const SYMBOL_CALLBACKS_ON_INSERTIONS: unique symbol;
+    export namespace ComponentPerf {
+        interface Rect extends Component {
+            [SYMBOL_RECT_STATE]?: State.JIT<DOMRect>;
+        }
+        function Rect(component?: Component): State.JIT<DOMRect> | undefined;
+        interface CallbacksOnInsertions extends Component {
+            [SYMBOL_CALLBACKS_ON_INSERTIONS]?: (() => unknown)[];
+        }
+        namespace CallbacksOnInsertions {
+            function add(component: Component, callback: () => unknown): void;
+            function get(component?: Component): (() => unknown)[];
+        }
+    }
     function Component<TYPE extends keyof HTMLElementTagNameMap>(type: TYPE): Component<HTMLElementTagNameMap[TYPE]>;
     function Component(): Component<HTMLSpanElement>;
     function Component(type?: keyof HTMLElementTagNameMap): Component;
