@@ -236,6 +236,7 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
             },
             subscribeManual: subscriber => {
                 result[SYMBOL_SUBSCRIBERS].push(subscriber);
+                checkTooMany();
                 return () => result.unsubscribe(subscriber);
             },
             unsubscribe: subscriber => {
@@ -316,6 +317,7 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
             },
         };
         result.asMutable = result;
+        let loggedTooMany = false;
         return result; // Objects.stringify.disable(result)
         function setValue(value) {
             if (comparator !== false && (result[SYMBOL_VALUE] === value || comparator?.(result[SYMBOL_VALUE], value)))
@@ -332,6 +334,12 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
             (0, Objects_1.DefineProperty)(result, 'falsy', not);
             return not;
         }
+        function checkTooMany() {
+            if (!loggedTooMany && result[SYMBOL_SUBSCRIBERS].length > 1000) {
+                loggedTooMany = true;
+                console.warn('State has over 1000 subscribers! Potential memory leak?', result);
+            }
+        }
     }
     (function (State) {
         let Owner;
@@ -343,6 +351,13 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                 return undefined;
             }
             Owner.getRemovedState = getRemovedState;
+            function getCombined(...owners) {
+                const combinedOwner = create();
+                for (const owner of owners)
+                    owner.removed.match(combinedOwner, true, () => combinedOwner.remove());
+                return combinedOwner;
+            }
+            Owner.getCombined = getCombined;
             function create() {
                 const removed = State(false);
                 return {
@@ -4253,6 +4268,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop);
                     popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft);
                 });
+                const combinedOwner = State_13.default.Owner.getCombined(component, popover);
                 if (!popoverIn)
                     component.getStateForClosest(Dialog_1.default)
                         .map(popover, dialog => dialog ?? document.body)
@@ -4265,7 +4281,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     touchStart = undefined;
                     clearTimeout(touchTimeout);
                 }
-                component.event.until(popover, event => event
+                component.event.until(combinedOwner, event => event
                     .subscribe('touchstart', event => {
                     touchStart = Vector2_1.default.fromClient(event.touches[0]);
                     if (event.touches.length > 1)
@@ -4339,7 +4355,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                         event.preventDefault();
                     cancelLongpress();
                 }));
-                const hostHoveredOrFocusedForLongEnough = component.hoveredOrFocused.delay(popover, hoveredOrFocused => {
+                const hostHoveredOrFocusedForLongEnough = component.hoveredOrFocused.delay(combinedOwner, hoveredOrFocused => {
                     if (!hoveredOrFocused)
                         return 0; // no delay for mouseoff or blur
                     return popover.getDelay();
@@ -4348,7 +4364,8 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     hostHoveredOrFocusedForLongEnough.subscribe(component, updatePopoverState);
                 component.clickState = false;
                 if (!component.popover) {
-                    component.event.subscribe('click', async (event) => {
+                    component.event.until(combinedOwner, event => event
+                        .subscribe('click', async (event) => {
                         if (popoverEvent === 'hover/longpress')
                             return;
                         const closestHandlesMouseEvents = event.target.component?.closest(InputBus_1.HandlesMouseEvents);
@@ -4361,13 +4378,13 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                             await showPopoverClick();
                         else
                             popover.hide();
-                    });
+                    }));
                     Component_5.ComponentPerf.CallbacksOnInsertions.add(component, updatePopoverParent);
                     // component.receiveInsertEvents()
                     // component.receiveAncestorInsertEvents()
                     // component.event.subscribe(['insert', 'ancestorInsert'], updatePopoverParent)
                 }
-                popover.popoverHasFocus.subscribe(component, (hasFocused, oldValue) => {
+                popover.popoverHasFocus.subscribe(combinedOwner, (hasFocused, oldValue) => {
                     if (hasFocused)
                         return;
                     component.clickState = false;

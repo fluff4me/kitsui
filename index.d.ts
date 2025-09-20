@@ -91,6 +91,7 @@ declare module "kitsui/utility/State" {
         export namespace Owner {
             function getRemovedState(ownerIn: Owner): State<boolean>;
             function getRemovedState(ownerIn?: unknown): State<boolean> | undefined;
+            function getCombined(...owners: Owner[]): Owner;
             interface Removable extends Owner {
                 remove(): void;
             }
