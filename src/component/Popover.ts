@@ -1,4 +1,4 @@
-import Component from 'Component'
+import Component, { ComponentPerf } from 'Component'
 import Dialog from 'component/Dialog'
 import FocusListener from 'utility/FocusListener'
 import HoverListener from 'utility/HoverListener'
@@ -130,9 +130,10 @@ Component.extend(component => {
 					popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft)
 				})
 
-			component.getStateForClosest(Dialog).use(popover, getDialog => {
-				popover.appendTo(getDialog() ?? document.body)
-			})
+			if (!popoverIn)
+				component.getStateForClosest(Dialog)
+					.map(popover, dialog => dialog ?? document.body)
+					.use(popover, parent => popover.appendTo(parent))
 
 			let touchTimeout: number | undefined
 			let touchStart: Vector2 | undefined
@@ -258,9 +259,10 @@ Component.extend(component => {
 						popover.hide()
 				})
 
-				component.receiveInsertEvents()
-				component.receiveAncestorInsertEvents()
-				component.event.subscribe(['insert', 'ancestorInsert'], updatePopoverParent)
+				ComponentPerf.CallbacksOnInsertions.add(component, updatePopoverParent)
+				// component.receiveInsertEvents()
+				// component.receiveAncestorInsertEvents()
+				// component.event.subscribe(['insert', 'ancestorInsert'], updatePopoverParent)
 			}
 
 			popover.popoverHasFocus.subscribe(component, (hasFocused, oldValue) => {
