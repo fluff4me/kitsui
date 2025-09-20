@@ -130,6 +130,8 @@ Component.extend(component => {
 					popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft)
 				})
 
+			const combinedOwner = State.Owner.getCombined(component, popover)
+
 			if (!popoverIn)
 				component.getStateForClosest(Dialog)
 					.map(popover, dialog => dialog ?? document.body)
@@ -143,7 +145,7 @@ Component.extend(component => {
 				touchStart = undefined
 				clearTimeout(touchTimeout)
 			}
-			component.event.until(popover, event => event
+			component.event.until(combinedOwner, event => event
 				.subscribe('touchstart', event => {
 					touchStart = Vector2.fromClient(event.touches[0])
 					if (event.touches.length > 1)
@@ -228,7 +230,7 @@ Component.extend(component => {
 				})
 			)
 
-			const hostHoveredOrFocusedForLongEnough = component.hoveredOrFocused.delay(popover, hoveredOrFocused => {
+			const hostHoveredOrFocusedForLongEnough = component.hoveredOrFocused.delay(combinedOwner, hoveredOrFocused => {
 				if (!hoveredOrFocused)
 					return 0 // no delay for mouseoff or blur
 
@@ -240,24 +242,26 @@ Component.extend(component => {
 
 			component.clickState = false
 			if (!component.popover) {
-				component.event.subscribe('click', async event => {
-					if (popoverEvent === 'hover/longpress')
-						return
+				component.event.until(combinedOwner, event => event
+					.subscribe('click', async event => {
+						if (popoverEvent === 'hover/longpress')
+							return
 
-					const closestHandlesMouseEvents = (event.target as HTMLElement).component?.closest(HandlesMouseEvents)
-					if (closestHandlesMouseEvents && closestHandlesMouseEvents?.element !== component.element && component.element.contains(closestHandlesMouseEvents.element))
-						return
+						const closestHandlesMouseEvents = (event.target as HTMLElement).component?.closest(HandlesMouseEvents)
+						if (closestHandlesMouseEvents && closestHandlesMouseEvents?.element !== component.element && component.element.contains(closestHandlesMouseEvents.element))
+							return
 
-					component.clickState = !component.clickState
+						component.clickState = !component.clickState
 
-					event.stopPropagation()
-					event.preventDefault()
+						event.stopPropagation()
+						event.preventDefault()
 
-					if (component.clickState)
-						await showPopoverClick()
-					else
-						popover.hide()
-				})
+						if (component.clickState)
+							await showPopoverClick()
+						else
+							popover.hide()
+					})
+				)
 
 				ComponentPerf.CallbacksOnInsertions.add(component, updatePopoverParent)
 				// component.receiveInsertEvents()
@@ -265,7 +269,7 @@ Component.extend(component => {
 				// component.event.subscribe(['insert', 'ancestorInsert'], updatePopoverParent)
 			}
 
-			popover.popoverHasFocus.subscribe(component, (hasFocused, oldValue) => {
+			popover.popoverHasFocus.subscribe(combinedOwner, (hasFocused, oldValue) => {
 				if (hasFocused)
 					return
 

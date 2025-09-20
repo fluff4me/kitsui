@@ -155,6 +155,7 @@ function State<T> (defaultValue: T, comparator?: State.ComparatorFunction<T>): S
 		},
 		subscribeManual: subscriber => {
 			result[SYMBOL_SUBSCRIBERS].push(subscriber as never)
+			checkTooMany()
 			return () => result.unsubscribe(subscriber)
 		},
 		unsubscribe: subscriber => {
@@ -243,6 +244,7 @@ function State<T> (defaultValue: T, comparator?: State.ComparatorFunction<T>): S
 		},
 	}
 	result.asMutable = result
+	let loggedTooMany = false
 	return result // Objects.stringify.disable(result)
 
 	function setValue (value: T) {
@@ -262,6 +264,13 @@ function State<T> (defaultValue: T, comparator?: State.ComparatorFunction<T>): S
 		DefineProperty(result, 'falsy', not)
 		return not
 	}
+
+	function checkTooMany () {
+		if (!loggedTooMany && result[SYMBOL_SUBSCRIBERS].length > 1000) {
+			loggedTooMany = true
+			console.warn('State has over 1000 subscribers! Potential memory leak?', result)
+		}
+	}
 }
 
 namespace State {
@@ -280,6 +289,13 @@ namespace State {
 				return state
 
 			return undefined
+		}
+
+		export function getCombined (...owners: Owner[]): Owner {
+			const combinedOwner = create()
+			for (const owner of owners)
+				owner.removed.match(combinedOwner, true, () => combinedOwner.remove())
+			return combinedOwner
 		}
 
 		export interface Removable extends Owner {
