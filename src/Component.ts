@@ -267,6 +267,12 @@ export namespace ComponentPerf {
 		return (component as Rect | undefined)?.[SYMBOL_RECT_STATE]
 	}
 
+	export namespace Rect {
+		export function assign (component: Component, rectState: State.JIT<DOMRect>): void {
+			(component as Rect)[SYMBOL_RECT_STATE] = rectState
+		}
+	}
+
 	export interface CallbacksOnInsertions extends Component {
 		[SYMBOL_CALLBACKS_ON_INSERTIONS]?: (() => unknown)[]
 	}
@@ -524,6 +530,8 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		},
 		get rect (): State.JIT<DOMRect> {
 			const rectState = State.JIT(() => component.element.getBoundingClientRect())
+			ComponentPerf.Rect.assign(component, rectState)
+
 			const oldMarkDirty = rectState.markDirty
 			rectState.markDirty = () => {
 				oldMarkDirty()
