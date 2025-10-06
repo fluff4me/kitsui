@@ -2822,6 +2822,12 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             return component?.[SYMBOL_RECT_STATE];
         }
         ComponentPerf.Rect = Rect;
+        (function (Rect) {
+            function assign(component, rectState) {
+                component[SYMBOL_RECT_STATE] = rectState;
+            }
+            Rect.assign = assign;
+        })(Rect = ComponentPerf.Rect || (ComponentPerf.Rect = {}));
         let CallbacksOnInsertions;
         (function (CallbacksOnInsertions) {
             function add(component, callback) {
@@ -3039,6 +3045,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             },
             get rect() {
                 const rectState = State_10.default.JIT(() => component.element.getBoundingClientRect());
+                ComponentPerf.Rect.assign(component, rectState);
                 const oldMarkDirty = rectState.markDirty;
                 rectState.markDirty = () => {
                     oldMarkDirty();

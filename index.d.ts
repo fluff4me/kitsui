@@ -898,6 +898,9 @@ declare module "kitsui/Component" {
             [SYMBOL_RECT_STATE]?: State.JIT<DOMRect>;
         }
         function Rect(component?: Component): State.JIT<DOMRect> | undefined;
+        namespace Rect {
+            function assign(component: Component, rectState: State.JIT<DOMRect>): void;
+        }
         interface CallbacksOnInsertions extends Component {
             [SYMBOL_CALLBACKS_ON_INSERTIONS]?: (() => unknown)[];
         }
