@@ -1263,6 +1263,7 @@ declare module "kitsui/utility/AbortablePromise" {
     }
     namespace AbortablePromise {
         function asyncFunction<A extends any[], R>(asyncFunction: (signal: AbortSignal, ...args: A) => Promise<R>): (...args: A) => AbortablePromise<R>;
+        function throttled<A extends any[], R>(asyncFunction: (signal: AbortSignal, ...args: A) => Promise<R>): (...args: A) => AbortablePromise<R>;
     }
     export default AbortablePromise;
 }

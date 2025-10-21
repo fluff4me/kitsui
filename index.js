@@ -4771,6 +4771,19 @@ define("kitsui/utility/AbortablePromise", ["require", "exports"], function (requ
             return (...args) => new AbortablePromise((resolve, reject, signal) => void asyncFunction(signal, ...args).then(resolve, reject));
         }
         AbortablePromise.asyncFunction = asyncFunction;
+        function throttled(asyncFunction) {
+            let abort;
+            return (...args) => {
+                abort?.();
+                const promise = new AbortablePromise((resolve, reject, signal) => void asyncFunction(signal, ...args).then(resolve, reject).finally(() => {
+                    if (abort === promise.abort)
+                        abort = undefined;
+                }));
+                abort = () => promise.abort();
+                return promise;
+            };
+        }
+        AbortablePromise.throttled = throttled;
     })(AbortablePromise || (AbortablePromise = {}));
     exports.default = AbortablePromise;
 });
