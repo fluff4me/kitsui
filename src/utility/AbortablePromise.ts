@@ -36,7 +36,23 @@ class AbortablePromise<T> extends Promise<T> {
 namespace AbortablePromise {
 	export function asyncFunction<A extends any[], R> (asyncFunction: (signal: AbortSignal, ...args: A) => Promise<R>): (...args: A) => AbortablePromise<R> {
 		return (...args: A) => new AbortablePromise<R>((resolve, reject, signal) =>
-			void asyncFunction(signal, ...args).then(resolve, reject))
+			void asyncFunction(signal, ...args).then(resolve, reject)
+		)
+	}
+
+	export function throttled<A extends any[], R> (asyncFunction: (signal: AbortSignal, ...args: A) => Promise<R>): (...args: A) => AbortablePromise<R> {
+		let abort: (() => void) | undefined
+		return (...args: A) => {
+			abort?.()
+			const promise = new AbortablePromise<R>((resolve, reject, signal) =>
+				void asyncFunction(signal, ...args).then(resolve, reject).finally(() => {
+					if (abort === promise.abort)
+						abort = undefined
+				})
+			)
+			abort = () => promise.abort()
+			return promise
+		}
 	}
 }
 
