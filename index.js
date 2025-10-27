@@ -566,7 +566,7 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
             const progress = state.mapManual(state => state.progress);
             let abortController;
             let promise;
-            from.use(owner, async (from) => {
+            from.use(owner, from => {
                 abortController?.abort();
                 const lastValue = state.value.value;
                 state.value = {
@@ -577,20 +577,24 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                     progress: undefined,
                 };
                 abortController = new AbortController();
-                promise = Promise.resolve(generator(from, abortController.signal, (progress, details) => {
-                    (0, Objects_1.mutable)(state.value).progress = { progress, details };
-                    state.emit();
-                }));
-                const { value, error } = await promise.then(value => ({ value, error: undefined }), error => ({ error: new Error('Async state rejection:', { cause: error }), value: undefined }));
-                if (abortController.signal.aborted)
-                    return;
-                state.value = {
-                    settled: true,
-                    value,
-                    lastValue,
-                    error,
-                    progress: undefined,
-                };
+                // eslint-disable-next-line @typescript-eslint/no-misused-promises, no-async-promise-executor
+                promise = new Promise(async (resolve, reject) => {
+                    const promise = Promise.resolve(generator(from, abortController.signal, (progress, details) => {
+                        (0, Objects_1.mutable)(state.value).progress = { progress, details };
+                        state.emit();
+                    }));
+                    const { value, error } = await promise.then(value => ({ value, error: undefined }), error => ({ error: new Error('Async state rejection:', { cause: error }), value: undefined }));
+                    promise.then(resolve, reject);
+                    if (abortController?.signal.aborted)
+                        return;
+                    state.value = {
+                        settled: true,
+                        value,
+                        lastValue,
+                        error,
+                        progress: undefined,
+                    };
+                });
             });
             const result = Object.assign(value, {
                 settled,
