@@ -613,7 +613,7 @@ namespace State {
 		let abortController: AbortController | undefined
 		let promise: Promise<T> | undefined
 
-		from.use(owner, async from => {
+		from.use(owner, from => {
 			abortController?.abort()
 
 			const lastValue = state.value.value
@@ -625,25 +625,31 @@ namespace State {
 				progress: undefined,
 			}
 			abortController = new AbortController()
-			promise = Promise.resolve(generator(from, abortController.signal, (progress, details) => {
-				mutable(state.value).progress = { progress, details }
-				state.emit()
-			}))
-			const { value, error } = await promise.then(
-				value => ({ value, error: undefined }),
-				error => ({ error: new Error('Async state rejection:', { cause: error }), value: undefined }),
-			)
+			// eslint-disable-next-line @typescript-eslint/no-misused-promises, no-async-promise-executor
+			promise = new Promise<T>(async (resolve, reject) => {
+				const promise = Promise.resolve(generator(from, abortController!.signal, (progress, details) => {
+					mutable(state.value).progress = { progress, details }
+					state.emit()
+				}))
 
-			if (abortController.signal.aborted)
-				return
+				const { value, error } = await promise.then(
+					value => ({ value, error: undefined }),
+					error => ({ error: new Error('Async state rejection:', { cause: error }), value: undefined }),
+				)
 
-			state.value = {
-				settled: true,
-				value,
-				lastValue,
-				error,
-				progress: undefined,
-			} as AsyncState<T, D>
+				promise.then(resolve, reject)
+
+				if (abortController?.signal.aborted)
+					return
+
+				state.value = {
+					settled: true,
+					value,
+					lastValue,
+					error,
+					progress: undefined,
+				} as AsyncState<T, D>
+			})
 		})
 
 		const result: AsyncBase<T, D> = Object.assign(
