@@ -22,6 +22,7 @@ export interface LoadingExtensions extends Loading.LoadedSlotExtensions {
 	readonly errorIcon: Component
 	readonly errorText: Component
 	readonly loaded: State<boolean>
+	showForever (): this
 	set<T> (state: State.Async<T, StringApplicatorSource>, initialiser: (slot: Loading.LoadedSlot, value: T) => unknown): this
 	set<T> (
 		load: (signal: AbortSignal, setProgress: (progress: number | null, details?: StringApplicatorSource) => void) => Promise<T>,
@@ -69,6 +70,9 @@ const Loading = Component((component): Loading => {
 			refresh () {
 				refresh?.()
 				return this
+			},
+			showForever () {
+				return this.set(State.Async(State.Owner.create(), async () => { await new Promise(resolve => { }) }), () => { })
 			},
 			set (stateIn, initialiser) {
 				owner?.remove(); owner = State.Owner.create()
