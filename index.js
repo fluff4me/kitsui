@@ -3875,6 +3875,9 @@ define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "k
                 refresh?.();
                 return this;
             },
+            showForever() {
+                return this.set(State_12.default.Async(State_12.default.Owner.create(), async () => { await new Promise(resolve => { }); }), () => { });
+            },
             set(stateIn, initialiser) {
                 owner?.remove();
                 owner = State_12.default.Owner.create();

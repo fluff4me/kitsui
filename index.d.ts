@@ -1077,6 +1077,7 @@ declare module "kitsui/component/Loading" {
         readonly errorIcon: Component;
         readonly errorText: Component;
         readonly loaded: State<boolean>;
+        showForever(): this;
         set<T>(state: State.Async<T, StringApplicatorSource>, initialiser: (slot: Loading.LoadedSlot, value: T) => unknown): this;
         set<T>(load: (signal: AbortSignal, setProgress: (progress: number | null, details?: StringApplicatorSource) => void) => Promise<T>, initialiser: (slot: Loading.LoadedSlot, value: T) => unknown): this;
         onSet(handler: OnSetHandler<this>): this;
