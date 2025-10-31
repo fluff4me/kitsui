@@ -3492,6 +3492,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         }
         Component.wrap = wrap;
         Component.SYMBOL_COMPONENT_TYPE_BRAND = Symbol('COMPONENT_TYPE_BRAND');
+        const SYMBOL_EXTENSIONS_APPLIED = Symbol('EXTENSIONS_APPLIED');
         const defaultBuilder = (type) => Component(type);
         function Builder(initialOrBuilder, builder) {
             let name = getBuilderName();
@@ -3548,10 +3549,11 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             });
             return resultBuilder;
             function applyExtensions(component) {
-                if (!component)
+                if (!component || SYMBOL_EXTENSIONS_APPLIED in component)
                     return component;
                 for (const extension of extensions)
                     Object.assign(component, extension(component));
+                Object.defineProperty(component, SYMBOL_EXTENSIONS_APPLIED, { value: true });
                 return component;
             }
             function completeComponent(component) {
