@@ -1057,6 +1057,8 @@ namespace Component {
 		extend<T> (extensionProvider: (component: BUILD_COMPONENT & T) => Omit<T, typeof SYMBOL_COMPONENT_BRAND>): BUILD_COMPONENT & T
 	}
 
+	const SYMBOL_EXTENSIONS_APPLIED = Symbol('EXTENSIONS_APPLIED')
+
 	const defaultBuilder = (type?: keyof HTMLElementTagNameMap) => Component(type)
 	export function Builder<PARAMS extends any[], COMPONENT extends Component> (builder: (component: Component, ...params: PARAMS) => COMPONENT): Builder<PARAMS, COMPONENT>
 	export function Builder<PARAMS extends any[], COMPONENT extends Component> (builder: (component: Component, ...params: PARAMS) => Promise<COMPONENT>): BuilderAsync<PARAMS, COMPONENT>
@@ -1130,12 +1132,13 @@ namespace Component {
 		return resultBuilder
 
 		function applyExtensions (component: Component) {
-			if (!component)
+			if (!component || SYMBOL_EXTENSIONS_APPLIED in component)
 				return component
 
 			for (const extension of extensions)
 				Object.assign(component, extension(component))
 
+			Object.defineProperty(component, SYMBOL_EXTENSIONS_APPLIED, { value: true })
 			return component
 		}
 
