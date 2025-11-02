@@ -2846,6 +2846,20 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         })(CallbacksOnInsertions = ComponentPerf.CallbacksOnInsertions || (ComponentPerf.CallbacksOnInsertions = {}));
     })(ComponentPerf || (exports.ComponentPerf = ComponentPerf = {}));
     const componentExtensionsRegistry = [];
+    let componentLeakDetectors = [];
+    const timeUntilLeakWarning = 10000;
+    setInterval(() => {
+        const now = Date.now();
+        const leakedComponents = componentLeakDetectors.filter(detector => true
+            && now - detector.built > timeUntilLeakWarning
+            && !detector.component.rooted.value
+            && !detector.component.removed.value
+            && !detector.component.hasOwner()
+            && !detector.component.getAncestorComponents().some(ancestor => ancestor.hasOwner()));
+        if (leakedComponents.length)
+            console.warn('Leaked components:', ...leakedComponents.map(detector => detector.component));
+        componentLeakDetectors = componentLeakDetectors.filter(detector => now - detector.built <= timeUntilLeakWarning);
+    }, 100);
     function Component(type, builder) {
         if (typeof type === 'function' || typeof builder === 'function')
             return Component.Builder(type, builder);
@@ -2861,20 +2875,33 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         let descendantRectsListeningForScroll;
         const jitTweaks = new Map();
         const nojit = {};
+        const rooted = (0, State_10.default)(false);
+        const removed = (0, State_10.default)(false);
         let component = {
             supers: (0, State_10.default)([]),
             isComponent: true,
             isInsertionDestination: true,
             element: document.createElement(type),
-            removed: (0, State_10.default)(false),
-            rooted: (0, State_10.default)(false),
+            get removed() {
+                componentLeakDetectors.push({
+                    built: Date.now(),
+                    component,
+                });
+                return (0, Objects_2.DefineProperty)(component, 'removed', removed);
+            },
+            rooted,
             nojit: nojit,
             get tagName() {
                 return component.element.tagName;
             },
             setOwner: newOwner => {
                 unuseOwnerRemove?.();
-                unuseOwnerRemove = State_10.default.Owner.getRemovedState(newOwner)?.use(component, removed => removed && component.remove());
+                if (!newOwner)
+                    return component;
+                const removedState = State_10.default.Owner.getRemovedState(newOwner);
+                unuseOwnerRemove = removedState?.use(component, removed => removed && component.remove());
+                if (!removedState)
+                    component.remove();
                 return component;
             },
             hasOwner: () => !!unuseOwnerRemove,
@@ -3166,6 +3193,14 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
             },
             append(...contents) {
+                if (component.removed.value) {
+                    for (let content of contents) {
+                        content = Component.get(content) ?? content;
+                        if (Component.is(content))
+                            content.remove();
+                    }
+                    return component;
+                }
                 const elements = contents.filter(Arrays_5.Truthy).map(Component.element);
                 component.element.append(...elements);
                 for (const element of elements)
@@ -3175,6 +3210,14 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
             },
             prepend(...contents) {
+                if (component.removed.value) {
+                    for (let content of contents) {
+                        content = Component.get(content) ?? content;
+                        if (Component.is(content))
+                            content.remove();
+                    }
+                    return component;
+                }
                 const elements = contents.filter(Arrays_5.Truthy).map(Component.element);
                 component.element.prepend(...elements);
                 for (const element of elements)
@@ -3184,6 +3227,14 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
             },
             insert(direction, sibling, ...contents) {
+                if (component.removed.value) {
+                    for (let content of contents) {
+                        content = Component.get(content) ?? content;
+                        if (Component.is(content))
+                            content.remove();
+                    }
+                    return component;
+                }
                 const siblingElement = sibling ? Component.element(sibling) : null;
                 const elements = contents.filter(Arrays_5.Truthy).map(Component.element);
                 if (direction === 'before')
@@ -3488,6 +3539,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         function wrap(element) {
             const component = Component();
             (0, Objects_2.mutable)(component).element = element;
+            component.rooted.asMutable?.setValue(element === window || element === document || document.contains(element));
             return component;
         }
         Component.wrap = wrap;
@@ -3611,7 +3663,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         function get(element) {
             if (!element || (typeof element !== 'object' && typeof element !== 'function'))
                 return undefined;
-            return ELEMENT_TO_COMPONENT_MAP.get(element);
+            return is(element) ? element : ELEMENT_TO_COMPONENT_MAP.get(element);
         }
         Component.get = get;
         // const STACK_FILE_NAME_REGEX = /\(http.*?(\w+)\.ts:\d+:\d+\)/
@@ -3628,6 +3680,9 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         let indexjsText;
         let lines;
         function getBuilderName() {
+            let moduleName = '__moduleName' in self ? self.__moduleName : undefined;
+            if (moduleName)
+                return addKebabCase(moduleName.slice(moduleName.lastIndexOf('/') + 1));
             if (!lines) {
                 indexjsText ??= document.currentScript?.text ?? selfScript.value;
                 if (!indexjsText)
@@ -3653,7 +3708,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             if (varName)
                 return addKebabCase(varName);
             const sliceUntilLine = indexjsText.slice(0, indexjsText.indexOf(lineText));
-            const moduleName = sliceUntilLine.match(LAST_MODULE_DEF_REGEX)?.[1];
+            moduleName = sliceUntilLine.match(LAST_MODULE_DEF_REGEX)?.[1];
             if (!moduleName)
                 return undefined;
             return addKebabCase(moduleName);
@@ -3883,51 +3938,56 @@ define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "k
             set(stateIn, initialiser) {
                 owner?.remove();
                 owner = State_12.default.Owner.create();
-                loaded.value = false;
-                const state = typeof stateIn !== 'function' ? stateIn : State_12.default.Async(owner, stateIn);
-                refresh = state.refresh;
-                updateDisplays();
-                state.settled.subscribe(owner, updateDisplays);
-                state.progress.subscribe(owner, updateDisplays);
-                state.state.use(owner, state => {
-                    if (!state.settled) {
-                        clearContents();
-                        loading.append(spinner, progressBar, messageText);
-                        return;
-                    }
-                    if (state.error) {
-                        clearContents();
-                        loading.append(errorIcon, errorText);
-                        return;
-                    }
-                    let loadHandlerIndex = 0;
-                    function runNextLoadHandler() {
-                        const loadHandler = onLoadHandlers[loadHandlerIndex];
-                        if (!loadHandler) {
+                const thisSetOwner = owner;
+                loading.rooted.match(thisSetOwner, true, () => {
+                    const owner = thisSetOwner;
+                    loaded.value = false;
+                    const state = typeof stateIn !== 'function' ? stateIn : State_12.default.Async(owner, stateIn);
+                    refresh = state.refresh;
+                    updateDisplays();
+                    state.settled.subscribe(owner, updateDisplays);
+                    state.progress.subscribe(owner, updateDisplays);
+                    state.state.use(owner, state => {
+                        if (!state.settled) {
                             clearContents();
-                            loaded.value = true;
-                            initialiser(loading, state.value);
+                            loading.append(spinner, progressBar, messageText);
                             return;
                         }
-                        loadHandlerIndex++;
-                        return loadHandler(loading, runNextLoadHandler);
+                        if (state.error) {
+                            clearContents();
+                            loading.append(errorIcon, errorText);
+                            return;
+                        }
+                        let loadHandlerIndex = 0;
+                        function runNextLoadHandler() {
+                            const loadHandler = onLoadHandlers[loadHandlerIndex];
+                            if (!loadHandler) {
+                                clearContents();
+                                loaded.value = true;
+                                initialiser(loading, state.value);
+                                return;
+                            }
+                            loadHandlerIndex++;
+                            return loadHandler(loading, runNextLoadHandler);
+                        }
+                        runNextLoadHandler();
+                    });
+                    for (const handler of onSetHandlers)
+                        handler(loading, owner, state);
+                    return;
+                    function clearContents() {
+                        storage.append(spinner, progressBar, messageText, errorIcon, errorText);
+                        loading.removeContents();
                     }
-                    runNextLoadHandler();
+                    function updateDisplays() {
+                        loading.style.bind(state.settled.value, style.LoadingLoaded);
+                        messageText.text.set(state.progress.value?.details);
+                        progressBar
+                            .style.bind(state.progress.value?.progress === null, style.ProgressBarProgressUnknown)
+                            .style.setVariable('progress', state.progress.value?.progress ?? 1);
+                    }
                 });
-                for (const handler of onSetHandlers)
-                    handler(loading, owner, state);
                 return loading;
-                function clearContents() {
-                    storage.append(spinner, progressBar, messageText, errorIcon, errorText);
-                    loading.removeContents();
-                }
-                function updateDisplays() {
-                    loading.style.bind(state.settled.value, style.LoadingLoaded);
-                    messageText.text.set(state.progress.value?.details);
-                    progressBar
-                        .style.bind(state.progress.value?.progress === null, style.ProgressBarProgressUnknown)
-                        .style.setVariable('progress', state.progress.value?.progress ?? 1);
-                }
             },
             onSet(handler) {
                 onSetHandlers.push(handler);
@@ -4705,20 +4765,38 @@ define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsu
                 return component?.element.children.length ?? 0;
             },
             append(...contents) {
-                if (closed.value)
+                if (closed.value) {
+                    for (let content of contents) {
+                        content = content && 'component' in content ? content.component : content;
+                        if (content && 'remove' in content)
+                            content.remove();
+                    }
                     return result;
+                }
                 component?.append(...contents);
                 return result;
             },
             prepend(...contents) {
-                if (closed.value)
+                if (closed.value) {
+                    for (let content of contents) {
+                        content = content && 'component' in content ? content.component : content;
+                        if (content && 'remove' in content)
+                            content.remove();
+                    }
                     return result;
+                }
                 component?.prepend(...contents);
                 return result;
             },
             insert(direction, sibling, ...contents) {
-                if (closed.value)
+                if (closed.value) {
+                    for (let content of contents) {
+                        content = content && 'component' in content ? content.component : content;
+                        if (content && 'remove' in content)
+                            content.remove();
+                    }
                     return result;
+                }
                 component?.insert(direction, sibling, ...contents);
                 return result;
             },
@@ -4740,6 +4818,7 @@ define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsu
             closed.value = true;
             unuseComponentRemove?.();
             unuseComponentRemove = undefined;
+            component?.removeContents();
             component = undefined;
         }
         function onComponentRemove() {
@@ -4816,8 +4895,9 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return false;
             },
             appendWhen(state, ...contents) {
-                let temporaryHolder = (0, Component_6.default)().append(...contents);
-                Slot().appendTo(component).preserveContents().if(state, slot => {
+                const slot = Slot().appendTo(component).preserveContents();
+                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(...contents);
+                slot.if(state, slot => {
                     slot.append(...contents);
                     temporaryHolder?.remove();
                     temporaryHolder = undefined;
@@ -4825,8 +4905,9 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return component;
             },
             prependWhen(state, ...contents) {
-                let temporaryHolder = (0, Component_6.default)().append(...contents);
-                Slot().prependTo(component).preserveContents().if(state, slot => {
+                const slot = Slot().prependTo(component).preserveContents();
+                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(...contents);
+                slot.if(state, slot => {
                     slot.append(...contents);
                     temporaryHolder?.remove();
                     temporaryHolder = undefined;
@@ -4834,8 +4915,9 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return component;
             },
             insertWhen(state, direction, sibling, ...contents) {
-                let temporaryHolder = (0, Component_6.default)().append(...contents);
-                Slot().insertTo(component, direction, sibling).preserveContents().if(state, slot => {
+                const slot = Slot().insertTo(component, direction, sibling).preserveContents();
+                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(...contents);
+                slot.if(state, slot => {
                     slot.append(...contents);
                     temporaryHolder?.remove();
                     temporaryHolder = undefined;
@@ -4843,12 +4925,9 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return component;
             },
             appendToWhen(state, destination) {
-                let temporaryHolder;
-                if (component.parent) {
-                    temporaryHolder = (0, Component_6.default)();
-                    component.appendTo(temporaryHolder);
-                }
-                Slot().appendTo(destination).preserveContents().if(state, slot => {
+                const slot = Slot().appendTo(destination).preserveContents();
+                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(component);
+                slot.if(state, slot => {
                     slot.append(component);
                     temporaryHolder?.remove();
                     temporaryHolder = undefined;
@@ -4856,12 +4935,9 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return component;
             },
             prependToWhen(state, destination) {
-                let temporaryHolder;
-                if (component.parent) {
-                    temporaryHolder = (0, Component_6.default)();
-                    component.appendTo(temporaryHolder);
-                }
-                Slot().prependTo(destination).preserveContents().if(state, slot => {
+                const slot = Slot().prependTo(destination).preserveContents();
+                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(component);
+                slot.if(state, slot => {
                     slot.append(component);
                     temporaryHolder?.remove();
                     temporaryHolder = undefined;
@@ -4869,12 +4945,9 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return component;
             },
             insertToWhen(state, destination, direction, sibling) {
-                let temporaryHolder;
-                if (component.parent) {
-                    temporaryHolder = (0, Component_6.default)();
-                    component.appendTo(temporaryHolder);
-                }
-                Slot().insertTo(destination, direction, sibling).preserveContents().if(state, slot => {
+                const slot = Slot().insertTo(destination, direction, sibling).preserveContents();
+                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(component);
+                slot.if(state, slot => {
                     slot.append(component);
                     temporaryHolder?.remove();
                     temporaryHolder = undefined;
@@ -4923,6 +4996,8 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 unuseOwner = undefined;
                 unuseElses?.();
                 unuseElses = undefined;
+                if (slot.removed.value)
+                    return slot;
                 const wasArrayState = Array.isArray(state);
                 const wasObjectState = !wasArrayState && !State_15.default.is(state);
                 if (wasArrayState) {
@@ -4944,7 +5019,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                     abortTransaction = undefined;
                     contentsOwner?.remove();
                     contentsOwner = State_15.default.Owner.create();
-                    const component = (0, Component_6.default)();
+                    const component = (0, Component_6.default)().setOwner(contentsOwner);
                     const transaction = Object.assign((0, ComponentInsertionTransaction_1.default)(component, () => {
                         slot.removeContents();
                         slot.append(...component.element.children);
@@ -4972,6 +5047,8 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 unuseOwner = undefined;
                 unuseElses?.();
                 unuseElses = undefined;
+                if (slot.removed.value)
+                    return slot;
                 state.use(slot, value => {
                     abort?.();
                     abort = undefined;
@@ -5016,6 +5093,8 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             elseIf(state, initialiser) {
                 if (preserveContents)
                     throw new Error('Cannot use else when preserving contents');
+                if (slot.removed.value)
+                    return slot;
                 elses.value.elseIfs.push({ state, initialiser });
                 elses.emit();
                 return slot;
@@ -5023,6 +5102,8 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             else(initialiser) {
                 if (preserveContents)
                     throw new Error('Cannot use else when preserving contents');
+                if (slot.removed.value)
+                    return slot;
                 elses.value.else = initialiser;
                 elses.emit();
                 return slot;
@@ -5032,7 +5113,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
         function handleSlotInitialiser(initialiser) {
             contentsOwner?.remove();
             contentsOwner = State_15.default.Owner.create();
-            const component = (0, Component_6.default)();
+            const component = (0, Component_6.default)().setOwner(contentsOwner);
             const transaction = Object.assign((0, ComponentInsertionTransaction_1.default)(component, () => {
                 slot.removeContents();
                 slot.append(...component.element.children);
