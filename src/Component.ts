@@ -1256,6 +1256,10 @@ namespace Component {
 	let indexjsText!: string | undefined
 	let lines: string[] | undefined
 	function getBuilderName (): BuilderName | undefined {
+		let moduleName = '__moduleName' in self ? (self as any).__moduleName as string | undefined : undefined
+		if (moduleName)
+			return addKebabCase(moduleName.slice(moduleName.lastIndexOf('/') + 1))
+
 		if (!lines) {
 			indexjsText ??= (document.currentScript as HTMLScriptElement)?.text ?? selfScript.value
 			if (!indexjsText)
@@ -1287,7 +1291,7 @@ namespace Component {
 			return addKebabCase(varName)
 
 		const sliceUntilLine = indexjsText!.slice(0, indexjsText!.indexOf(lineText))
-		const moduleName = sliceUntilLine.match(LAST_MODULE_DEF_REGEX)?.[1]
+		moduleName = sliceUntilLine.match(LAST_MODULE_DEF_REGEX)?.[1]
 		if (!moduleName)
 			return undefined
 
