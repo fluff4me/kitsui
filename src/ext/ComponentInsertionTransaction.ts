@@ -22,22 +22,43 @@ function ComponentInsertionTransaction (component?: Component, onEnd?: (transact
 			return component?.element.children.length ?? 0
 		},
 		append (...contents) {
-			if (closed.value)
+			if (closed.value) {
+				for (let content of contents) {
+					content = content && 'component' in content ? content.component : content
+					if (content && 'remove' in content)
+						content.remove()
+				}
+
 				return result
+			}
 
 			component?.append(...contents)
 			return result
 		},
 		prepend (...contents) {
-			if (closed.value)
+			if (closed.value) {
+				for (let content of contents) {
+					content = content && 'component' in content ? content.component : content
+					if (content && 'remove' in content)
+						content.remove()
+				}
+
 				return result
+			}
 
 			component?.prepend(...contents)
 			return result
 		},
 		insert (direction, sibling, ...contents) {
-			if (closed.value)
+			if (closed.value) {
+				for (let content of contents) {
+					content = content && 'component' in content ? content.component : content
+					if (content && 'remove' in content)
+						content.remove()
+				}
+
 				return result
+			}
 
 			component?.insert(direction, sibling, ...contents)
 			return result
@@ -64,6 +85,7 @@ function ComponentInsertionTransaction (component?: Component, onEnd?: (transact
 	function close () {
 		closed.value = true
 		unuseComponentRemove?.(); unuseComponentRemove = undefined
+		component?.removeContents()
 		component = undefined
 	}
 

@@ -289,6 +289,27 @@ export namespace ComponentPerf {
 
 const componentExtensionsRegistry: ((component: Mutable<Component>) => unknown)[] = []
 
+interface ComponentLeakDetector {
+	built: number
+	component: Component
+}
+let componentLeakDetectors: ComponentLeakDetector[] = []
+const timeUntilLeakWarning = 10000
+setInterval(() => {
+	const now = Date.now()
+	const leakedComponents = componentLeakDetectors.filter(detector => true
+		&& now - detector.built > timeUntilLeakWarning
+		&& !detector.component.rooted.value
+		&& !detector.component.removed.value
+		&& !detector.component.hasOwner()
+		&& !detector.component.getAncestorComponents().some(ancestor => ancestor.hasOwner())
+	)
+	if (leakedComponents.length)
+		console.warn('Leaked components:', ...leakedComponents.map(detector => detector.component))
+
+	componentLeakDetectors = componentLeakDetectors.filter(detector => now - detector.built <= timeUntilLeakWarning)
+}, 100)
+
 function Component<TYPE extends keyof HTMLElementTagNameMap> (type: TYPE): Component<HTMLElementTagNameMap[TYPE]>
 function Component (): Component<HTMLSpanElement>
 function Component (type?: keyof HTMLElementTagNameMap): Component
@@ -321,13 +342,22 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 	const jitTweaks = new Map<string, true | Set<(value: any, component: Component) => unknown>>()
 	const nojit: Record<string, any> = {}
 
+	const rooted = State(false)
+	const removed = State(false)
+
 	let component = ({
 		supers: State([]),
 		isComponent: true,
 		isInsertionDestination: true,
 		element: document.createElement(type),
-		removed: State(false),
-		rooted: State(false),
+		get removed () {
+			componentLeakDetectors.push({
+				built: Date.now(),
+				component,
+			})
+			return DefineProperty(component, 'removed', removed)
+		},
+		rooted,
 		nojit: nojit as Component,
 
 		get tagName () {
@@ -336,7 +366,15 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 
 		setOwner: newOwner => {
 			unuseOwnerRemove?.()
-			unuseOwnerRemove = State.Owner.getRemovedState(newOwner)?.use(component, removed => removed && component.remove())
+
+			if (!newOwner)
+				return component
+
+			const removedState = State.Owner.getRemovedState(newOwner)
+			unuseOwnerRemove = removedState?.use(component, removed => removed && component.remove())
+			if (!removedState)
+				component.remove()
+
 			return component
 		},
 		hasOwner: () => !!unuseOwnerRemove,
@@ -657,6 +695,16 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			return component
 		},
 		append (...contents) {
+			if (component.removed.value) {
+				for (let content of contents) {
+					content = Component.get(content) ?? content
+					if (Component.is(content))
+						content.remove()
+				}
+
+				return component
+			}
+
 			const elements = contents.filter(Truthy).map(Component.element)
 			component.element.append(...elements)
 
@@ -668,6 +716,16 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			return component
 		},
 		prepend (...contents) {
+			if (component.removed.value) {
+				for (let content of contents) {
+					content = Component.get(content) ?? content
+					if (Component.is(content))
+						content.remove()
+				}
+
+				return component
+			}
+
 			const elements = contents.filter(Truthy).map(Component.element)
 			component.element.prepend(...elements)
 
@@ -679,6 +737,16 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			return component
 		},
 		insert (direction, sibling, ...contents) {
+			if (component.removed.value) {
+				for (let content of contents) {
+					content = Component.get(content) ?? content
+					if (Component.is(content))
+						content.remove()
+				}
+
+				return component
+			}
+
 			const siblingElement = sibling ? Component.element(sibling) : null
 			const elements = contents.filter(Truthy).map(Component.element)
 
@@ -1031,6 +1099,7 @@ namespace Component {
 	export function wrap (element: HTMLElement): Component {
 		const component = Component()
 		mutable(component).element = element
+		component.rooted.asMutable?.setValue(element === window as never || element === document as never || document.contains(element))
 		return component
 	}
 
@@ -1232,7 +1301,7 @@ namespace Component {
 		if (!element || (typeof element !== 'object' && typeof element !== 'function'))
 			return undefined
 
-		return ELEMENT_TO_COMPONENT_MAP.get(element as Element)
+		return is(element) ? element : ELEMENT_TO_COMPONENT_MAP.get(element as Element)
 	}
 
 	// const STACK_FILE_NAME_REGEX = /\(http.*?(\w+)\.ts:\d+:\d+\)/

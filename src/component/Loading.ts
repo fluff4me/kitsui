@@ -76,63 +76,69 @@ const Loading = Component((component): Loading => {
 			},
 			set (stateIn, initialiser) {
 				owner?.remove(); owner = State.Owner.create()
+				const thisSetOwner = owner
 
-				loaded.value = false
+				loading.rooted.match(thisSetOwner, true, () => {
+					const owner = thisSetOwner
+					loaded.value = false
 
-				const state = typeof stateIn !== 'function' ? stateIn : State.Async(owner, stateIn)
+					const state = typeof stateIn !== 'function' ? stateIn : State.Async(owner, stateIn)
 
-				refresh = state.refresh
+					refresh = state.refresh
 
-				updateDisplays()
-				state.settled.subscribe(owner, updateDisplays)
-				state.progress.subscribe(owner, updateDisplays)
-				state.state.use(owner, state => {
-					if (!state.settled) {
-						clearContents()
-						loading.append(spinner, progressBar, messageText)
-						return
-					}
-
-					if (state.error) {
-						clearContents()
-						loading.append(errorIcon, errorText)
-						return
-					}
-
-					let loadHandlerIndex = 0
-					function runNextLoadHandler () {
-						const loadHandler = onLoadHandlers[loadHandlerIndex]
-						if (!loadHandler) {
+					updateDisplays()
+					state.settled.subscribe(owner, updateDisplays)
+					state.progress.subscribe(owner, updateDisplays)
+					state.state.use(owner, state => {
+						if (!state.settled) {
 							clearContents()
-							loaded.value = true
-							initialiser(loading, state.value!)
+							loading.append(spinner, progressBar, messageText)
 							return
 						}
 
-						loadHandlerIndex++
-						return loadHandler(loading, runNextLoadHandler)
+						if (state.error) {
+							clearContents()
+							loading.append(errorIcon, errorText)
+							return
+						}
+
+						let loadHandlerIndex = 0
+						function runNextLoadHandler () {
+							const loadHandler = onLoadHandlers[loadHandlerIndex]
+							if (!loadHandler) {
+								clearContents()
+								loaded.value = true
+								initialiser(loading, state.value!)
+								return
+							}
+
+							loadHandlerIndex++
+							return loadHandler(loading, runNextLoadHandler)
+						}
+
+						runNextLoadHandler()
+					})
+
+					for (const handler of onSetHandlers)
+						handler(loading, owner, state)
+
+					return
+
+					function clearContents () {
+						storage.append(spinner, progressBar, messageText, errorIcon, errorText)
+						loading.removeContents()
 					}
 
-					runNextLoadHandler()
+					function updateDisplays () {
+						loading.style.bind(state.settled.value, style.LoadingLoaded)
+						messageText.text.set(state.progress.value?.details)
+						progressBar
+							.style.bind(state.progress.value?.progress === null, style.ProgressBarProgressUnknown)
+							.style.setVariable('progress', state.progress.value?.progress ?? 1)
+					}
 				})
 
-				for (const handler of onSetHandlers)
-					handler(loading, owner, state)
-
 				return loading
-
-				function clearContents () {
-					storage.append(spinner, progressBar, messageText, errorIcon, errorText)
-					loading.removeContents()
-				}
-
-				function updateDisplays () {
-					loading.style.bind(state.settled.value, style.LoadingLoaded)
-					messageText.text.set(state.progress.value?.details)
-					progressBar
-						.style.bind(state.progress.value?.progress === null, style.ProgressBarProgressUnknown)
-						.style.setVariable('progress', state.progress.value?.progress ?? 1)
-				}
 			},
 			onSet (handler) {
 				onSetHandlers.push(handler)

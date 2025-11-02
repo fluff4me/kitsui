@@ -34,72 +34,78 @@ Component.extend(component => {
 			return false
 		},
 		appendWhen (state, ...contents) {
-			let temporaryHolder: Component | undefined = Component().append(...contents)
-			Slot().appendTo(component).preserveContents().if(state, slot => {
+			const slot = Slot().appendTo(component).preserveContents()
+
+			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(...contents)
+			slot.if(state, slot => {
 				slot.append(...contents)
 				temporaryHolder?.remove()
 				temporaryHolder = undefined
 			})
+
 			return component
 		},
 		prependWhen (state, ...contents) {
-			let temporaryHolder: Component | undefined = Component().append(...contents)
-			Slot().prependTo(component).preserveContents().if(state, slot => {
+			const slot = Slot().prependTo(component).preserveContents()
+
+			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(...contents)
+			slot.if(state, slot => {
 				slot.append(...contents)
 				temporaryHolder?.remove()
 				temporaryHolder = undefined
 			})
+
 			return component
 		},
 		insertWhen (state, direction, sibling, ...contents) {
-			let temporaryHolder: Component | undefined = Component().append(...contents)
-			Slot().insertTo(component, direction, sibling).preserveContents().if(state, slot => {
+			const slot = Slot().insertTo(component, direction, sibling).preserveContents()
+
+			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(...contents)
+			slot.if(state, slot => {
 				slot.append(...contents)
 				temporaryHolder?.remove()
 				temporaryHolder = undefined
 			})
+
 			return component
 		},
 		appendToWhen (state, destination) {
-			let temporaryHolder: Component | undefined
-			if (component.parent) {
-				temporaryHolder = Component()
-				component.appendTo(temporaryHolder)
-			}
+			const slot = Slot().appendTo(destination).preserveContents()
 
-			Slot().appendTo(destination).preserveContents().if(state, slot => {
+			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(component)
+
+			slot.if(state, slot => {
 				slot.append(component)
 				temporaryHolder?.remove()
 				temporaryHolder = undefined
 			})
+
 			return component
 		},
 		prependToWhen (state, destination) {
-			let temporaryHolder: Component | undefined
-			if (component.parent) {
-				temporaryHolder = Component()
-				component.appendTo(temporaryHolder)
-			}
+			const slot = Slot().prependTo(destination).preserveContents()
 
-			Slot().prependTo(destination).preserveContents().if(state, slot => {
+			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(component)
+
+			slot.if(state, slot => {
 				slot.append(component)
 				temporaryHolder?.remove()
 				temporaryHolder = undefined
 			})
+
 			return component
 		},
 		insertToWhen (state, destination, direction, sibling) {
-			let temporaryHolder: Component | undefined
-			if (component.parent) {
-				temporaryHolder = Component()
-				component.appendTo(temporaryHolder)
-			}
+			const slot = Slot().insertTo(destination, direction, sibling).preserveContents()
 
-			Slot().insertTo(destination, direction, sibling).preserveContents().if(state, slot => {
+			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(component)
+
+			slot.if(state, slot => {
 				slot.append(component)
 				temporaryHolder?.remove()
 				temporaryHolder = undefined
 			})
+
 			return component
 		},
 	}))
@@ -177,6 +183,9 @@ const Slot = Object.assign(
 					unuseOwner?.(); unuseOwner = undefined
 					unuseElses?.(); unuseElses = undefined
 
+					if (slot.removed.value)
+						return slot
+
 					const wasArrayState = Array.isArray(state)
 					const wasObjectState = !wasArrayState && !State.is(state)
 					if (wasArrayState) {
@@ -196,7 +205,7 @@ const Slot = Object.assign(
 						abortTransaction?.(); abortTransaction = undefined
 						contentsOwner?.remove(); contentsOwner = State.Owner.create()
 
-						const component = Component()
+						const component = Component().setOwner(contentsOwner)
 						const transaction = Object.assign(
 							ComponentInsertionTransaction(component, () => {
 								slot.removeContents()
@@ -224,6 +233,9 @@ const Slot = Object.assign(
 					abortTransaction?.(); abortTransaction = undefined
 					unuseOwner?.(); unuseOwner = undefined
 					unuseElses?.(); unuseElses = undefined
+
+					if (slot.removed.value)
+						return slot
 
 					state.use(slot, value => {
 						abort?.(); abort = undefined
@@ -273,6 +285,9 @@ const Slot = Object.assign(
 					if (preserveContents)
 						throw new Error('Cannot use else when preserving contents')
 
+					if (slot.removed.value)
+						return slot
+
 					elses.value.elseIfs.push({ state, initialiser })
 					elses.emit()
 					return slot
@@ -280,6 +295,9 @@ const Slot = Object.assign(
 				else (initialiser) {
 					if (preserveContents)
 						throw new Error('Cannot use else when preserving contents')
+
+					if (slot.removed.value)
+						return slot
 
 					elses.value.else = initialiser
 					elses.emit()
@@ -291,7 +309,7 @@ const Slot = Object.assign(
 		function handleSlotInitialiser (initialiser: Slot.Initialiser) {
 			contentsOwner?.remove(); contentsOwner = State.Owner.create()
 
-			const component = Component()
+			const component = Component().setOwner(contentsOwner)
 			const transaction = Object.assign(
 				ComponentInsertionTransaction(component, () => {
 					slot.removeContents()
