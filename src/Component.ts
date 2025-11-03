@@ -1201,13 +1201,24 @@ namespace Component {
 		return resultBuilder
 
 		function applyExtensions (component: Component) {
-			if (!component || SYMBOL_EXTENSIONS_APPLIED in component)
+			if (!component)
+				return component
+
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+			const editableComponent = component as any
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+			let extensionsApplied = editableComponent[SYMBOL_EXTENSIONS_APPLIED] as unknown[] | undefined
+			if (extensionsApplied?.includes(realBuilder))
 				return component
 
 			for (const extension of extensions)
 				Object.assign(component, extension(component))
 
-			Object.defineProperty(component, SYMBOL_EXTENSIONS_APPLIED, { value: true })
+			if (!extensionsApplied)
+				Object.defineProperty(component, SYMBOL_EXTENSIONS_APPLIED, { value: extensionsApplied = [] })
+
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+			editableComponent[SYMBOL_EXTENSIONS_APPLIED].push(realBuilder)
 			return component
 		}
 
