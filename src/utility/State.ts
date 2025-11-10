@@ -309,6 +309,12 @@ namespace State {
 				remove: () => removed.value = true,
 			}
 		}
+
+		export function fromSignal (signal: AbortSignal): Owner {
+			const owner = create()
+			signal.addEventListener('abort', owner.remove)
+			return owner
+		}
 	}
 
 	export type Mutable<T> = MutableState<T>
