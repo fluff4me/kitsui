@@ -366,6 +366,12 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                 };
             }
             Owner.create = create;
+            function fromSignal(signal) {
+                const owner = create();
+                signal.addEventListener('abort', owner.remove);
+                return owner;
+            }
+            Owner.fromSignal = fromSignal;
         })(Owner = State.Owner || (State.Owner = {}));
         function is(value) {
             return typeof value === 'object' && value?.isState === true;
