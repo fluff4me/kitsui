@@ -1,4 +1,5 @@
 import type Component from 'Component'
+import type State from 'utility/State'
 
 interface ClassManipulator<HOST> {
 	has (...classes: string[]): boolean
@@ -6,6 +7,7 @@ interface ClassManipulator<HOST> {
 	add (...classes: string[]): HOST
 	remove (...classes: string[]): HOST
 	toggle (present: boolean, ...classes: string[]): HOST
+	bind (state: State<boolean>, ...classes: string[]): HOST
 	copy (component: Component): HOST
 	copy (element: HTMLElement): HOST
 }
@@ -34,6 +36,10 @@ function ClassManipulator (component: Component): ClassManipulator<Component> {
 				element = element.element
 
 			component.element.classList.add(...element.classList)
+			return component
+		},
+		bind (state, ...classes) {
+			state.use(component, present => this.toggle(!!present, ...classes))
 			return component
 		},
 	}

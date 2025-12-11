@@ -3,6 +3,7 @@ import type { SupplierOr } from 'utility/Functions'
 import Functions from 'utility/Functions'
 import type { Mutable as MakeMutable } from 'utility/Objects'
 import { DefineMagic, DefineProperty, mutable } from 'utility/Objects'
+import Timeout from 'utility/Timeout'
 
 interface State<T, E = T> {
 	readonly isState: true
@@ -35,8 +36,8 @@ interface State<T, E = T> {
 	notEquals (value: T): State.Generator<boolean>
 	coalesce<R> (right: State.Or<R>): State.Generator<Exclude<T, null | undefined> | R>
 
-	delay (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null, equals?: State.ComparatorFunction<T>): State<T>
-	delay<R> (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>
+	delay (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null, equals?: State.ComparatorFunction<T>): State.Delayed<T>
+	delay<R> (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State.Delayed<R>
 
 	asMutable?: MutableState<T>
 }
@@ -225,22 +226,29 @@ function State<T> (defaultValue: T, comparator?: State.ComparatorFunction<T>): S
 			}).observeManual(result, rightState)
 		},
 		delay (owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null | ((value: T) => State.Or<any>), equals?: State.ComparatorFunction<any>) {
-			const delayed = State(!mapper ? result.value : mapper(result.value), equals)
+			const delayedResult = State(!mapper ? result.value : mapper(result.value), equals)
 			let timeout: number | undefined
+			const isCurrentlyDelayed = State(false)
 			result.subscribe(owner, value => {
-				window.clearTimeout(timeout)
+				Timeout.clear(timeout)
 
 				const ms = Functions.resolve(delay, value)
-				if (!ms)
+				if (!ms) {
+					isCurrentlyDelayed.value = false
 					// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-					return delayed.value = !mapper ? value : mapper(value)
+					return delayedResult.value = !mapper ? value : mapper(value)
+				}
 
-				timeout = window.setTimeout(() => {
+				isCurrentlyDelayed.value = true
+				timeout = Timeout.set(() => {
+					isCurrentlyDelayed.value = false
 					// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-					delayed.value = !mapper ? value : mapper(value)
+					delayedResult.value = !mapper ? value : mapper(value)
 				}, ms)
 			})
-			return delayed
+			return Object.assign(delayedResult, {
+				delayed: isCurrentlyDelayed,
+			})
 		},
 	}
 	result.asMutable = result
@@ -325,6 +333,10 @@ namespace State {
 
 	export type Unsubscribe = () => void
 	export type ComparatorFunction<T> = false | ((a: T, b: T) => boolean)
+
+	export interface Delayed<T> extends State<T> {
+		delayed: State<boolean>
+	}
 
 	export function is<T> (value: unknown): value is State<T> {
 		return typeof value === 'object' && (value as State<T>)?.isState === true
