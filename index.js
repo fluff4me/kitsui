@@ -137,11 +137,118 @@ define("kitsui/utility/Objects", ["require", "exports"], function (require, expo
     };
     exports.DefineMagic = DefineMagic;
 });
-define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/Functions", "kitsui/utility/Objects"], function (require, exports, Arrays_1, Functions_1, Objects_1) {
+define("kitsui/utility/Timeout", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    var Timeout;
+    (function (Timeout) {
+        const timeouts = [];
+        function validateTimeouts() {
+            let i = 0;
+            for (i; i < timeouts.length && timeouts[i].until !== 0; i++)
+                // traverse active timeouts
+                continue;
+            for (i; i < timeouts.length; i++)
+                // traverse reusable timeouts
+                if (timeouts[i].until !== 0)
+                    throw new Error('Active timeout found after reusable timeouts');
+        }
+        const rAF = self.requestAnimationFrame ?? (cb => self.setTimeout(cb, 10));
+        process();
+        function process() {
+            const now = Date.now();
+            let firstRealTimeoutIndex;
+            let cbsToRun = [];
+            for (let i = timeouts.length - 1; i >= 0; i--) {
+                if (Date.now() - now > 30)
+                    // prevent blocking the main thread for too long
+                    break;
+                const timeout = timeouts[i];
+                if (timeout.until === 0)
+                    // timeouts with until = 0 are held for reuse
+                    continue;
+                if (timeout.until > now) {
+                    firstRealTimeoutIndex ??= i;
+                    continue;
+                }
+                // this timeout is ready to run
+                cbsToRun ??= [];
+                cbsToRun.push(timeout.cb);
+                firstRealTimeoutIndex = unuseTimeout(i, firstRealTimeoutIndex);
+            }
+            for (const cb of cbsToRun)
+                try {
+                    cb();
+                }
+                catch (e) {
+                    console.error('Error in Timeout callback:', e);
+                }
+            rAF(process);
+        }
+        function unuseTimeout(index, firstRealTimeoutIndex) {
+            const timeout = timeouts[index];
+            timeout.id = 0;
+            timeout.until = 0;
+            timeout.cb = undefined;
+            if (firstRealTimeoutIndex === undefined) {
+                // if it's undefined, this *was* the first real timeout, so no point in moving it
+                validateTimeouts();
+                return index - 1;
+            }
+            // swap with firstRealTimeoutIndex
+            timeouts[index] = timeouts[firstRealTimeoutIndex];
+            timeouts[firstRealTimeoutIndex] = timeout;
+            validateTimeouts();
+            // move firstRealTimeoutIndex forward since it's pointing to a completed timeout now
+            return firstRealTimeoutIndex - 1;
+        }
+        let nextTimeoutId = 1;
+        function set(cb, ms) {
+            for (const timeout of timeouts) {
+                if (timeout.until !== 0)
+                    continue;
+                // completed timeout object, reuse it
+                timeout.id = nextTimeoutId++;
+                timeout.until = Date.now() + ms;
+                timeout.cb = cb;
+                validateTimeouts();
+                return timeout.id;
+            }
+            const timeout = {
+                id: nextTimeoutId++,
+                until: Date.now() + ms,
+                cb,
+            };
+            timeouts.unshift(timeout);
+            validateTimeouts();
+            return timeout.id;
+        }
+        Timeout.set = set;
+        function clear(id) {
+            if (!id || !(id > 0))
+                return;
+            let firstRealTimeoutIndex;
+            for (let i = timeouts.length - 1; i >= 0; i--) {
+                const timeout = timeouts[i];
+                if (timeout.until === 0)
+                    continue;
+                firstRealTimeoutIndex ??= i;
+                if (timeout.id !== id)
+                    continue;
+                // found it, mark as completed
+                firstRealTimeoutIndex = unuseTimeout(i, firstRealTimeoutIndex);
+            }
+        }
+        Timeout.clear = clear;
+    })(Timeout || (Timeout = {}));
+    exports.default = Timeout;
+});
+define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "kitsui/utility/Functions", "kitsui/utility/Objects", "kitsui/utility/Timeout"], function (require, exports, Arrays_1, Functions_1, Objects_1, Timeout_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Arrays_1 = __importStar(Arrays_1);
     Functions_1 = __importDefault(Functions_1);
+    Timeout_1 = __importDefault(Timeout_1);
     // const SYMBOL_UNSUBSCRIBE = Symbol('UNSUBSCRIBE')
     // interface SubscriberFunction<T> {
     // 	(value: T, oldValue: T): unknown
@@ -300,20 +407,27 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                 }).observeManual(result, rightState);
             },
             delay(owner, delay, mapper, equals) {
-                const delayed = State(!mapper ? result.value : mapper(result.value), equals);
+                const delayedResult = State(!mapper ? result.value : mapper(result.value), equals);
                 let timeout;
+                const isCurrentlyDelayed = State(false);
                 result.subscribe(owner, value => {
-                    window.clearTimeout(timeout);
+                    Timeout_1.default.clear(timeout);
                     const ms = Functions_1.default.resolve(delay, value);
-                    if (!ms)
+                    if (!ms) {
+                        isCurrentlyDelayed.value = false;
                         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                        return delayed.value = !mapper ? value : mapper(value);
-                    timeout = window.setTimeout(() => {
+                        return delayedResult.value = !mapper ? value : mapper(value);
+                    }
+                    isCurrentlyDelayed.value = true;
+                    timeout = Timeout_1.default.set(() => {
+                        isCurrentlyDelayed.value = false;
                         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                        delayed.value = !mapper ? value : mapper(value);
+                        delayedResult.value = !mapper ? value : mapper(value);
                     }, ms);
                 });
-                return delayed;
+                return Object.assign(delayedResult, {
+                    delayed: isCurrentlyDelayed,
+                });
             },
         };
         result.asMutable = result;
@@ -2260,6 +2374,10 @@ define("kitsui/utility/ClassManipulator", ["require", "exports"], function (requ
                 if ('element' in element)
                     element = element.element;
                 component.element.classList.add(...element.classList);
+                return component;
+            },
+            bind(state, ...classes) {
+                state.use(component, present => this.toggle(!!present, ...classes));
                 return component;
             },
         };

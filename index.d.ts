@@ -41,6 +41,18 @@ declare module "kitsui/utility/Objects" {
     }
     export default Objects;
 }
+declare module "kitsui/utility/Timeout" {
+    interface Timeout {
+        id: number;
+        until: number;
+        cb: () => unknown;
+    }
+    namespace Timeout {
+        function set(cb: () => unknown, ms: number): number;
+        function clear(id?: number): void;
+    }
+    export default Timeout;
+}
 declare module "kitsui/utility/State" {
     import Arrays from "kitsui/utility/Arrays";
     import type { SupplierOr } from "kitsui/utility/Functions";
@@ -70,8 +82,8 @@ declare module "kitsui/utility/State" {
         equals(value: T): State.Generator<boolean>;
         notEquals(value: T): State.Generator<boolean>;
         coalesce<R>(right: State.Or<R>): State.Generator<Exclude<T, null | undefined> | R>;
-        delay(owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null, equals?: State.ComparatorFunction<T>): State<T>;
-        delay<R>(owner: State.Owner, delay: SupplierOr<number, [T]>, mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>;
+        delay(owner: State.Owner, delay: SupplierOr<number, [T]>, mapper?: null, equals?: State.ComparatorFunction<T>): State.Delayed<T>;
+        delay<R>(owner: State.Owner, delay: SupplierOr<number, [T]>, mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State.Delayed<R>;
         asMutable?: MutableState<T>;
     }
     interface MutableStateSimple<T> extends State<T> {
@@ -104,6 +116,9 @@ declare module "kitsui/utility/State" {
         export type MutableOr<T> = T | State.Mutable<T>;
         export type Unsubscribe = () => void;
         export type ComparatorFunction<T> = false | ((a: T, b: T) => boolean);
+        export interface Delayed<T> extends State<T> {
+            delayed: State<boolean>;
+        }
         export function is<T>(value: unknown): value is State<T>;
         export function get<T>(value: T | State.Mutable<T>): State.Mutable<T>;
         export function get<T>(value: T | State<T>): State<T>;
@@ -577,12 +592,14 @@ declare module "kitsui/utility/AttributeManipulator" {
 }
 declare module "kitsui/utility/ClassManipulator" {
     import type Component from "kitsui/Component";
+    import type State from "kitsui/utility/State";
     interface ClassManipulator<HOST> {
         has(...classes: string[]): boolean;
         some(...classes: string[]): boolean;
         add(...classes: string[]): HOST;
         remove(...classes: string[]): HOST;
         toggle(present: boolean, ...classes: string[]): HOST;
+        bind(state: State<boolean>, ...classes: string[]): HOST;
         copy(component: Component): HOST;
         copy(element: HTMLElement): HOST;
     }
