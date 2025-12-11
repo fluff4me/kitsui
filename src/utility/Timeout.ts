@@ -6,17 +6,17 @@ interface Timeout {
 namespace Timeout {
 	const timeouts: Timeout[] = []
 
-	function validateTimeouts () {
-		let i = 0
-		for (i; i < timeouts.length && timeouts[i].until !== 0; i++)
-			// traverse active timeouts
-			continue
+	// function validateTimeouts () {
+	// 	let i = 0
+	// 	for (i; i < timeouts.length && timeouts[i].until !== 0; i++)
+	// 		// traverse active timeouts
+	// 		continue
 
-		for (i; i < timeouts.length; i++)
-			// traverse reusable timeouts
-			if (timeouts[i].until !== 0)
-				throw new Error('Active timeout found after reusable timeouts')
-	}
+	// 	for (i; i < timeouts.length; i++)
+	// 		// traverse reusable timeouts
+	// 		if (timeouts[i].until !== 0)
+	// 			throw new Error('Active timeout found after reusable timeouts')
+	// }
 
 	const rAF = self.requestAnimationFrame ?? (cb => self.setTimeout(cb, 10))
 	process()
@@ -26,7 +26,7 @@ namespace Timeout {
 		let firstRealTimeoutIndex: number | undefined
 		let cbsToRun: (() => unknown)[] = []
 		for (let i = timeouts.length - 1; i >= 0; i--) {
-			if (Date.now() - now > 30)
+			if (Date.now() - now > 10)
 				// prevent blocking the main thread for too long
 				break
 
@@ -65,14 +65,14 @@ namespace Timeout {
 
 		if (firstRealTimeoutIndex === undefined) {
 			// if it's undefined, this *was* the first real timeout, so no point in moving it
-			validateTimeouts()
+			// validateTimeouts()
 			return index - 1
 		}
 
 		// swap with firstRealTimeoutIndex
 		timeouts[index] = timeouts[firstRealTimeoutIndex]
 		timeouts[firstRealTimeoutIndex] = timeout
-		validateTimeouts()
+		// validateTimeouts()
 
 		// move firstRealTimeoutIndex forward since it's pointing to a completed timeout now
 		return firstRealTimeoutIndex - 1
@@ -88,7 +88,7 @@ namespace Timeout {
 			timeout.id = nextTimeoutId++
 			timeout.until = Date.now() + ms
 			timeout.cb = cb
-			validateTimeouts()
+			// validateTimeouts()
 			return timeout.id
 		}
 
@@ -98,7 +98,7 @@ namespace Timeout {
 			cb,
 		}
 		timeouts.unshift(timeout)
-		validateTimeouts()
+		// validateTimeouts()
 		return timeout.id
 	}
 
