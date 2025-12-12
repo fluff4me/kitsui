@@ -978,6 +978,10 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                 .observeManual(...inputs.filter(Arrays_1.NonNullish));
         }
         State.MapManual = MapManual;
+        function Delayed(owner, input, delay) {
+            return Use(owner, input).delay(owner, delay ?? 10);
+        }
+        State.Delayed = Delayed;
         function Use(owner, input, userIn) {
             const user = userIn;
             const toObserve = Object.values(input).filter(Arrays_1.NonNullish);

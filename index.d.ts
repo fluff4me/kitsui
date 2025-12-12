@@ -231,6 +231,9 @@ declare module "kitsui/utility/State" {
         export function MapManual<const INPUT extends (State<unknown> | undefined)[], OUTPUT>(inputs: INPUT, outputGenerator: (...inputs: NoInfer<{
             [I in keyof INPUT]: Exclude<INPUT[I], undefined> extends State<infer INPUT> ? INPUT : undefined;
         }>) => State.Or<OUTPUT>, equals?: ComparatorFunction<NoInfer<OUTPUT>>): Generator<OUTPUT>;
+        export function Delayed<const INPUT extends Record<string, (State<unknown> | undefined)>>(owner: Owner, input: INPUT, delay?: SupplierOr<number, []>): Delayed<{
+            [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined;
+        }>;
         export function Use<const INPUT extends Record<string, (State<unknown> | undefined)>>(owner: Owner, input: INPUT): Generator<{
             [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined;
         }>;
