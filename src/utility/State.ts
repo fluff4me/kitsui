@@ -1022,6 +1022,10 @@ namespace State {
 			.observeManual(...inputs.filter(FilterNonNullish))
 	}
 
+	export function Delayed<const INPUT extends Record<string, (State<unknown> | undefined)>> (owner: Owner, input: INPUT, delay?: SupplierOr<number, []>): Delayed<{ [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined }> {
+		return Use(owner, input).delay(owner, delay ?? 10)
+	}
+
 	export function Use<const INPUT extends Record<string, (State<unknown> | undefined)>> (owner: Owner, input: INPUT): Generator<{ [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined }>
 	export function Use<const INPUT extends Record<string, (State<unknown> | undefined)>> (owner: Owner, input: INPUT, user: { [KEY in keyof INPUT]: INPUT[KEY] extends State<infer INPUT> ? INPUT : INPUT[KEY] extends State<infer INPUT> | undefined ? INPUT | undefined : undefined } extends infer VALUETYPE ? (value: VALUETYPE, oldValue?: VALUETYPE) => unknown : never): State.Unsubscribe
 	export function Use (owner: Owner, input: unknown, userIn?: any): Generator<any> | State.Unsubscribe {
