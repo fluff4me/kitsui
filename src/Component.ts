@@ -689,7 +689,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			if (direction === 'before')
 				destination.insertBefore(component.element, siblingElement)
 			else
-				destination.insertBefore(component.element, siblingElement?.nextSibling ?? null)
+				destination.insertBefore(component.element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling)
 
 			component.emitInsert()
 			return component
@@ -755,7 +755,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 					component.element.insertBefore(elements[i], siblingElement)
 			else
 				for (const element of elements)
-					component.element.insertBefore(element, siblingElement?.nextSibling ?? null)
+					component.element.insertBefore(element, !siblingElement ? component.element.firstChild : siblingElement?.nextSibling)
 
 			for (const element of elements)
 				(element as Element).component?.emitInsert()
