@@ -3312,7 +3312,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 if (direction === 'before')
                     destination.insertBefore(component.element, siblingElement);
                 else
-                    destination.insertBefore(component.element, siblingElement?.nextSibling ?? null);
+                    destination.insertBefore(component.element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling);
                 component.emitInsert();
                 return component;
             },
@@ -3366,7 +3366,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                         component.element.insertBefore(elements[i], siblingElement);
                 else
                     for (const element of elements)
-                        component.element.insertBefore(element, siblingElement?.nextSibling ?? null);
+                        component.element.insertBefore(element, !siblingElement ? component.element.firstChild : siblingElement?.nextSibling);
                 for (const element of elements)
                     element.component?.emitInsert();
                 if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
