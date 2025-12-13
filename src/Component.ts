@@ -365,7 +365,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		},
 
 		setOwner: newOwner => {
-			unuseOwnerRemove?.()
+			unuseOwnerRemove?.(); unuseOwnerRemove = undefined
 
 			if (!newOwner)
 				return component
