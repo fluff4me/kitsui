@@ -3024,6 +3024,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             },
             setOwner: newOwner => {
                 unuseOwnerRemove?.();
+                unuseOwnerRemove = undefined;
                 if (!newOwner)
                     return component;
                 const removedState = State_10.default.Owner.getRemovedState(newOwner);
