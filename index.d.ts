@@ -119,6 +119,7 @@ declare module "kitsui/utility/State" {
         export interface Delayed<T> extends State<T> {
             delayed: State<boolean>;
         }
+        export type Type<STATE extends State<any>> = STATE extends State<infer T> ? T : never;
         export function is<T>(value: unknown): value is State<T>;
         export function get<T>(value: T | State.Mutable<T>): State.Mutable<T>;
         export function get<T>(value: T | State<T>): State<T>;
