@@ -338,6 +338,8 @@ namespace State {
 		delayed: State<boolean>
 	}
 
+	export type Type<STATE extends State<any>> = STATE extends State<infer T> ? T : never
+
 	export function is<T> (value: unknown): value is State<T> {
 		return typeof value === 'object' && (value as State<T>)?.isState === true
 	}
