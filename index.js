@@ -369,8 +369,30 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
             await(owner, value) {
                 return new Promise(resolve => result.match(owner, value, () => { resolve(result.value); }));
             },
-            map: (owner, mapper, equals) => State.Map(owner, [result], mapper, equals),
-            mapManual: (mapper, equals) => State.MapManual([result], mapper, equals),
+            map: (owner, mapper, equals) => {
+                const mappedState = State(undefined, equals);
+                result.use(owner, updateMappedState);
+                function updateMappedState(value, oldValue) {
+                    const initialMapResult = mapper(value, oldValue);
+                    if (State.is(initialMapResult))
+                        mappedState.bind(owner, initialMapResult);
+                    else
+                        mappedState.value = initialMapResult;
+                }
+                return mappedState;
+            },
+            mapManual: (mapper, equals) => {
+                const mappedState = State(undefined, equals);
+                result.useManual(updateMappedState);
+                function updateMappedState(value, oldValue) {
+                    const mapResult = mapper(value, oldValue);
+                    if (State.is(mapResult))
+                        mappedState.bindManual(mapResult);
+                    else
+                        mappedState.value = mapResult;
+                }
+                return mappedState;
+            },
             get nonNullish() {
                 return (0, Objects_1.DefineProperty)(result, 'nonNullish', State
                     .Generator(() => result.value !== undefined && result.value !== null)
@@ -2687,7 +2709,7 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
                 return styles.has(name);
             },
             getState(owner, name) {
-                return styleState.map(owner, styles => styles.has(name));
+                return styleState.map(owner, styles => styles().has(name));
             },
             remove(...names) {
                 for (const name of names)
@@ -4485,7 +4507,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                 const combinedOwner = State_13.default.Owner.getCombined(component, popover);
                 if (!popoverIn)
                     component.getStateForClosest(Dialog_1.default)
-                        .map(popover, dialog => dialog ?? document.body)
+                        .map(popover, dialog => dialog() ?? document.body)
                         .use(popover, parent => popover.appendTo(parent));
                 let touchTimeout;
                 let touchStart;
@@ -5349,6 +5371,43 @@ define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/compo
         Kit.Tooltip = Tooltip_1.default;
     })(Kit || (exports.Kit = Kit = {}));
 });
+define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function (require, exports, kitsui_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = default_1;
+    function default_1(owner, state, handler) {
+        const parts = new Map();
+        const seen = new Set();
+        const Part = (unique, value, initialiser) => {
+            if (typeof value === 'function' && !initialiser)
+                initialiser = value, value = undefined;
+            value ??= null;
+            seen.add(unique);
+            let part = parts.get(unique);
+            if (part) {
+                part.state.value = value;
+                return part.component;
+            }
+            const state = (0, kitsui_1.State)(value);
+            const component = (0, kitsui_1.Component)();
+            initialiser?.(component, state);
+            part = { state, component };
+            parts.set(unique, part);
+            return component;
+        };
+        state.use(owner, value => {
+            seen.clear();
+            handler(value, Part);
+            for (const [unique, part] of parts) {
+                if (!seen.has(unique)) {
+                    part.component.remove();
+                    parts.delete(unique);
+                }
+            }
+            seen.clear();
+        });
+    }
+});
 define("kitsui/utility/ActiveListener", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -5500,7 +5559,7 @@ define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "k
             if (measured[property])
                 return measured[property];
             return Style.properties.mapManual(properties => {
-                const value = properties.getPropertyValue(property);
+                const value = properties().getPropertyValue(property);
                 const element = document.createElement('div');
                 element.style.width = value;
                 element.style.pointerEvents = 'none';

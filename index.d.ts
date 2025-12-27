@@ -73,8 +73,8 @@ declare module "kitsui/utility/State" {
         match<R extends Arrays.Or<T>>(owner: State.Owner, value: R, then: (value: R extends (infer R)[] ? R : R) => unknown): State.Unsubscribe;
         matchManual<R extends Arrays.Or<T>>(value: R, then: (value: R extends (infer R)[] ? R : R) => unknown): State.Unsubscribe;
         await(owner: State.Owner, value: T): Promise<T>;
-        map<R>(owner: State.Owner, mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State.Generator<R>;
-        mapManual<R>(mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State.Generator<R>;
+        map<R>(owner: State.Owner, mapper: (value: E, oldValue?: E) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>;
+        mapManual<R>(mapper: (value: E, oldValue?: E) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>;
         nonNullish: State.Generator<boolean>;
         truthy: State.Generator<boolean>;
         falsy: State.Generator<boolean>;
@@ -1396,6 +1396,15 @@ declare module "kitsui" {
         type Tooltip = _Tooltip;
         const Tooltip: import("kitsui/Component").default.Builder<[], _Tooltip>;
     }
+}
+declare module "kitsui/component/Breakdown" {
+    import { Component, State } from "kitsui";
+    interface BreakdownPartConstructor {
+        (unique: unknown): Component;
+        (unique: unknown, initialiser: (component: Component) => unknown): Component;
+        <T>(unique: unknown, value: T, initialiser: (component: Component, state: State<T>) => unknown): Component;
+    }
+    export default function <T>(owner: State.Owner, state: State<T>, handler: (value: T, Part: BreakdownPartConstructor) => unknown): void;
 }
 declare module "kitsui/utility/ActiveListener" {
     import type Component from "kitsui/Component";
