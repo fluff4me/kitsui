@@ -11,7 +11,7 @@ namespace Style {
 			return measured[property]
 
 		return properties.mapManual(properties => {
-			const value = properties.getPropertyValue(property)
+			const value = properties().getPropertyValue(property)
 			const element = document.createElement('div')
 			element.style.width = value
 			element.style.pointerEvents = 'none'

@@ -26,8 +26,8 @@ interface State<T, E = T> {
 	matchManual<R extends Arrays.Or<T>> (value: R, then: (value: R extends (infer R)[] ? R : R) => unknown): State.Unsubscribe
 	await (owner: State.Owner, value: T): Promise<T>
 
-	map<R> (owner: State.Owner, mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State.Generator<R>
-	mapManual<R> (mapper: (value: T) => State.Or<R>, equals?: State.ComparatorFunction<R>): State.Generator<R>
+	map<R> (owner: State.Owner, mapper: (value: E, oldValue?: E) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>
+	mapManual<R> (mapper: (value: E, oldValue?: E) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>
 	nonNullish: State.Generator<boolean>
 	truthy: State.Generator<boolean>
 	falsy: State.Generator<boolean>
@@ -187,8 +187,30 @@ function State<T> (defaultValue: T, comparator?: State.ComparatorFunction<T>): S
 			)
 		},
 
-		map: (owner, mapper, equals) => State.Map(owner, [result], mapper, equals),
-		mapManual: (mapper, equals) => State.MapManual([result], mapper, equals),
+		map: (owner, mapper, equals) => {
+			const mappedState = State(undefined!, equals)
+			result.use(owner, updateMappedState)
+			function updateMappedState (value: T, oldValue: T | undefined) {
+				const initialMapResult = mapper(value, oldValue)
+				if (State.is(initialMapResult))
+					mappedState.bind(owner, initialMapResult)
+				else
+					mappedState.value = initialMapResult
+			}
+			return mappedState
+		},
+		mapManual: (mapper, equals) => {
+			const mappedState = State(undefined!, equals)
+			result.useManual(updateMappedState)
+			function updateMappedState (value: T, oldValue: T | undefined) {
+				const mapResult = mapper(value, oldValue)
+				if (State.is(mapResult))
+					mappedState.bindManual(mapResult)
+				else
+					mappedState.value = mapResult
+			}
+			return mappedState
+		},
 		get nonNullish () {
 			return DefineProperty(result, 'nonNullish', State
 				.Generator(() => result.value !== undefined && result.value !== null)

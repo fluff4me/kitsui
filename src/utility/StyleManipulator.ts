@@ -87,7 +87,7 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 				return styles.has(name)
 			},
 			getState (owner, name) {
-				return styleState.map(owner, styles => styles.has(name))
+				return styleState.map(owner, styles => styles().has(name))
 			},
 			remove (...names) {
 				for (const name of names)

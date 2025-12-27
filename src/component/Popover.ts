@@ -134,7 +134,7 @@ Component.extend(component => {
 
 			if (!popoverIn)
 				component.getStateForClosest(Dialog)
-					.map(popover, dialog => dialog ?? document.body)
+					.map(popover, dialog => dialog() ?? document.body)
 					.use(popover, parent => popover.appendTo(parent))
 
 			let touchTimeout: number | undefined
