@@ -11,7 +11,8 @@ interface BreakdownPartConstructor {
 	<T> (unique: unknown, value: T, initialiser: (component: Component, state: State<T>) => unknown): Component
 }
 
-export default function <T> (owner: State.Owner, state: State<T>, handler: (value: T, Part: BreakdownPartConstructor) => unknown): void {
+export default function <T> (owner: State.Owner, state: State<T>, handler: (value: T, Part: BreakdownPartConstructor, Store: Component) => unknown): void {
+	const store = Component().setOwner(owner)
 	const parts = new Map<unknown, BreakdownPart<unknown>>()
 	const seen: Set<unknown> = new Set()
 	const Part: BreakdownPartConstructor = <B> (unique: unknown, value?: B, initialiser?: (component: Component, state: State<B>) => unknown): Component => {
@@ -36,7 +37,7 @@ export default function <T> (owner: State.Owner, state: State<T>, handler: (valu
 	}
 	state.use(owner, value => {
 		seen.clear()
-		handler(value, Part)
+		handler(value, Part, store)
 		for (const [unique, part] of parts) {
 			if (!seen.has(unique)) {
 				part.component.remove()
