@@ -20,6 +20,7 @@ declare module 'Component' {
 }
 
 Component.extend(component => {
+	let slot: Slot | undefined
 	component.extend<SlotComponentExtensions>(component => ({
 		hasContent () {
 			const walker = document.createTreeWalker(component.element, NodeFilter.SHOW_TEXT)
@@ -70,42 +71,42 @@ Component.extend(component => {
 			return component
 		},
 		appendToWhen (state, destination) {
-			const slot = Slot().appendTo(destination).preserveContents()
+			const newSlot = Slot().appendTo(destination).preserveContents()
 
-			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(component)
-
-			slot.if(state, slot => {
+			let temporaryHolder: Component | undefined = Component().setOwner(newSlot).append(component)
+			newSlot.if(state, slot => {
 				slot.append(component)
 				temporaryHolder?.remove()
 				temporaryHolder = undefined
 			})
 
+			slot?.remove?.(); slot = newSlot
 			return component
 		},
 		prependToWhen (state, destination) {
-			const slot = Slot().prependTo(destination).preserveContents()
+			const newSlot = Slot().prependTo(destination).preserveContents()
 
-			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(component)
-
-			slot.if(state, slot => {
+			let temporaryHolder: Component | undefined = Component().setOwner(newSlot).append(component)
+			newSlot.if(state, slot => {
 				slot.append(component)
 				temporaryHolder?.remove()
 				temporaryHolder = undefined
 			})
 
+			slot?.remove?.(); slot = newSlot
 			return component
 		},
 		insertToWhen (state, destination, direction, sibling) {
-			const slot = Slot().insertTo(destination, direction, sibling).preserveContents()
+			const newSlot = Slot().insertTo(destination, direction, sibling).preserveContents()
 
-			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(component)
-
-			slot.if(state, slot => {
+			let temporaryHolder: Component | undefined = Component().setOwner(newSlot).append(component)
+			newSlot.if(state, slot => {
 				slot.append(component)
 				temporaryHolder?.remove()
 				temporaryHolder = undefined
 			})
 
+			slot?.remove?.(); slot = newSlot
 			return component
 		},
 	}))
