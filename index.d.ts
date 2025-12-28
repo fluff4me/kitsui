@@ -1404,7 +1404,7 @@ declare module "kitsui/component/Breakdown" {
         (unique: unknown, initialiser: (component: Component) => unknown): Component;
         <T>(unique: unknown, value: T, initialiser: (component: Component, state: State<T>) => unknown): Component;
     }
-    export default function <T>(owner: State.Owner, state: State<T>, handler: (value: T, Part: BreakdownPartConstructor) => unknown): void;
+    export default function <T>(owner: State.Owner, state: State<T>, handler: (value: T, Part: BreakdownPartConstructor, Store: Component) => unknown): void;
 }
 declare module "kitsui/utility/ActiveListener" {
     import type Component from "kitsui/Component";

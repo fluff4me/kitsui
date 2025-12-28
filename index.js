@@ -5043,6 +5043,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
     AbortablePromise_1 = __importDefault(AbortablePromise_1);
     State_15 = __importDefault(State_15);
     Component_6.default.extend(component => {
+        let slot;
         component.extend(component => ({
             hasContent() {
                 const walker = document.createTreeWalker(component.element, NodeFilter.SHOW_TEXT);
@@ -5085,33 +5086,39 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return component;
             },
             appendToWhen(state, destination) {
-                const slot = Slot().appendTo(destination).preserveContents();
-                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(component);
-                slot.if(state, slot => {
+                const newSlot = Slot().appendTo(destination).preserveContents();
+                let temporaryHolder = (0, Component_6.default)().setOwner(newSlot).append(component);
+                newSlot.if(state, slot => {
                     slot.append(component);
                     temporaryHolder?.remove();
                     temporaryHolder = undefined;
                 });
+                slot?.remove?.();
+                slot = newSlot;
                 return component;
             },
             prependToWhen(state, destination) {
-                const slot = Slot().prependTo(destination).preserveContents();
-                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(component);
-                slot.if(state, slot => {
+                const newSlot = Slot().prependTo(destination).preserveContents();
+                let temporaryHolder = (0, Component_6.default)().setOwner(newSlot).append(component);
+                newSlot.if(state, slot => {
                     slot.append(component);
                     temporaryHolder?.remove();
                     temporaryHolder = undefined;
                 });
+                slot?.remove?.();
+                slot = newSlot;
                 return component;
             },
             insertToWhen(state, destination, direction, sibling) {
-                const slot = Slot().insertTo(destination, direction, sibling).preserveContents();
-                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(component);
-                slot.if(state, slot => {
+                const newSlot = Slot().insertTo(destination, direction, sibling).preserveContents();
+                let temporaryHolder = (0, Component_6.default)().setOwner(newSlot).append(component);
+                newSlot.if(state, slot => {
                     slot.append(component);
                     temporaryHolder?.remove();
                     temporaryHolder = undefined;
                 });
+                slot?.remove?.();
+                slot = newSlot;
                 return component;
             },
         }));
@@ -5376,6 +5383,7 @@ define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function 
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = default_1;
     function default_1(owner, state, handler) {
+        const store = (0, kitsui_1.Component)().setOwner(owner);
         const parts = new Map();
         const seen = new Set();
         const Part = (unique, value, initialiser) => {
@@ -5397,7 +5405,7 @@ define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function 
         };
         state.use(owner, value => {
             seen.clear();
-            handler(value, Part);
+            handler(value, Part, store);
             for (const [unique, part] of parts) {
                 if (!seen.has(unique)) {
                     part.component.remove();
