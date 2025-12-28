@@ -393,6 +393,11 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                 }
                 return mappedState;
             },
+            get stringified() {
+                return (0, Objects_1.DefineProperty)(result, 'stringified', State
+                    .Generator(() => result.value === undefined || result.value === null ? '' : String(result.value))
+                    .observeManual(result));
+            },
             get nonNullish() {
                 return (0, Objects_1.DefineProperty)(result, 'nonNullish', State
                     .Generator(() => result.value !== undefined && result.value !== null)

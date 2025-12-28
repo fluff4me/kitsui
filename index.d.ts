@@ -75,6 +75,7 @@ declare module "kitsui/utility/State" {
         await(owner: State.Owner, value: T): Promise<T>;
         map<R>(owner: State.Owner, mapper: (value: E, oldValue?: E) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>;
         mapManual<R>(mapper: (value: E, oldValue?: E) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>;
+        stringified: State.Generator<string>;
         nonNullish: State.Generator<boolean>;
         truthy: State.Generator<boolean>;
         falsy: State.Generator<boolean>;
