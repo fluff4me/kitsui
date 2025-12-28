@@ -28,6 +28,7 @@ interface State<T, E = T> {
 
 	map<R> (owner: State.Owner, mapper: (value: E, oldValue?: E) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>
 	mapManual<R> (mapper: (value: E, oldValue?: E) => State.Or<R>, equals?: State.ComparatorFunction<R>): State<R>
+	stringified: State.Generator<string>
 	nonNullish: State.Generator<boolean>
 	truthy: State.Generator<boolean>
 	falsy: State.Generator<boolean>
@@ -210,6 +211,11 @@ function State<T> (defaultValue: T, comparator?: State.ComparatorFunction<T>): S
 					mappedState.value = mapResult
 			}
 			return mappedState
+		},
+		get stringified () {
+			return DefineProperty(result, 'stringified', State
+				.Generator(() => result.value === undefined || result.value === null ? '' : String(result.value))
+				.observeManual(result))
 		},
 		get nonNullish () {
 			return DefineProperty(result, 'nonNullish', State
