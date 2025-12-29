@@ -126,8 +126,8 @@ Component.extend(component => {
 						}
 					})
 
-					popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop)
-					popover.style.bind(popover.anchor.state.mapManual(location => location?.preference?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft)
+					popover.style.bind(popover.anchor.state.mapManual((location, oldLocation) => (location?.preference ?? oldLocation?.preference)?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop)
+					popover.style.bind(popover.anchor.state.mapManual((location, oldLocation) => (location?.preference ?? oldLocation?.preference)?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft)
 				})
 
 			const combinedOwner = State.Owner.getCombined(component, popover)
