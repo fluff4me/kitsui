@@ -43,6 +43,7 @@ export interface PopoverComponentRegisteredExtensions {
 
 interface InternalPopoverExtensions {
 	clickState: boolean
+	isHoverable: boolean
 }
 
 export type PopoverInitialiser<HOST> = (popover: Popover, host: HOST) => unknown
@@ -336,7 +337,7 @@ Component.extend(component => {
 					|| (true
 						&& isShown
 						&& (false
-							|| (component.popover.isMouseWithin(true) && !shouldClearPopover())
+							|| (component.popover.isHoverable.value && component.popover.isMouseWithin(true) && !shouldClearPopover())
 							|| InputBus.isDown('F4'))
 					)
 					|| !!component.clickState
@@ -419,6 +420,7 @@ export interface PopoverExtensions {
 	readonly popoverParent: State<Popover | undefined>
 	readonly popoverHasFocus: State<'focused' | 'no-focus' | undefined>
 	readonly lastStateChangeTime: number
+	readonly isHoverable: State<boolean>
 
 	/** Sets the distance the mouse can be from the popover before it hides, if it's shown due to hover */
 	setMousePadding (padding?: number): this
@@ -433,6 +435,8 @@ export interface PopoverExtensions {
 	/** Defaults on */
 	setCloseOnInput (closeOnInput?: boolean): this
 	setCloseDueToMouseInputFilter (filter: (event: InputEvent) => boolean): this
+	/** Disallow this popover from being hoverable (to keep it open) */
+	notHoverable (): this
 
 	show (): this
 	hide (): this
@@ -457,6 +461,7 @@ const Popover = Object.assign(
 		let unbind: State.Unsubscribe | undefined
 		const visible = State(false)
 		let shouldCloseOnInput = true
+		const hoverable = State(true)
 		let inputFilter: ((event: InputEvent) => boolean) | undefined
 		// let normalStacking = false
 		const popover = component
@@ -478,6 +483,7 @@ const Popover = Object.assign(
 						: (visible.value && containsPopoverDescendant(focused)) ? 'focused'
 							: undefined
 				),
+				isHoverable: hoverable,
 
 				setCloseOnInput (closeOnInput = true) {
 					shouldCloseOnInput = closeOnInput
@@ -489,6 +495,10 @@ const Popover = Object.assign(
 				},
 				setMousePadding: padding => {
 					mousePadding = padding
+					return popover
+				},
+				notHoverable () {
+					hoverable.value = false
 					return popover
 				},
 				setDelay (ms) {
