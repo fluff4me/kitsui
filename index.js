@@ -4683,7 +4683,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                         || (true
                             && isShown
                             && (false
-                                || (component.popover.isMouseWithin(true) && !shouldClearPopover())
+                                || (component.popover.isHoverable.value && component.popover.isMouseWithin(true) && !shouldClearPopover())
                                 || InputBus_1.default.isDown('F4')))
                         || !!component.clickState;
                     ////////////////////////////////////
@@ -4756,6 +4756,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
         let unbind;
         const visible = (0, State_13.default)(false);
         let shouldCloseOnInput = true;
+        const hoverable = (0, State_13.default)(true);
         let inputFilter;
         // let normalStacking = false
         const popover = component
@@ -4775,6 +4776,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
             popoverHasFocus: FocusListener_2.default.focused.map(popover, focused => !focused ? 'no-focus'
                 : (visible.value && containsPopoverDescendant(focused)) ? 'focused'
                     : undefined),
+            isHoverable: hoverable,
             setCloseOnInput(closeOnInput = true) {
                 shouldCloseOnInput = closeOnInput;
                 return popover;
@@ -4785,6 +4787,10 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
             },
             setMousePadding: padding => {
                 mousePadding = padding;
+                return popover;
+            },
+            notHoverable() {
+                hoverable.value = false;
                 return popover;
             },
             setDelay(ms) {

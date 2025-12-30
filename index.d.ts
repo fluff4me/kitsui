@@ -1229,6 +1229,7 @@ declare module "kitsui/component/Popover" {
         readonly popoverParent: State<Popover | undefined>;
         readonly popoverHasFocus: State<'focused' | 'no-focus' | undefined>;
         readonly lastStateChangeTime: number;
+        readonly isHoverable: State<boolean>;
         /** Sets the distance the mouse can be from the popover before it hides, if it's shown due to hover */
         setMousePadding(padding?: number): this;
         /** Sets the delay until this popover will show (only in hover mode) */
@@ -1239,6 +1240,8 @@ declare module "kitsui/component/Popover" {
         /** Defaults on */
         setCloseOnInput(closeOnInput?: boolean): this;
         setCloseDueToMouseInputFilter(filter: (event: InputEvent) => boolean): this;
+        /** Disallow this popover from being hoverable (to keep it open) */
+        notHoverable(): this;
         show(): this;
         hide(): this;
         toggle(shown?: boolean): this;
