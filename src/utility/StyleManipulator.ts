@@ -16,7 +16,7 @@ export type ComponentNameType<PREFIX extends string> = keyof { [KEY in Component
 interface StyleManipulatorFunctions<HOST> {
 	get (): ComponentName[]
 	has (name: ComponentName): boolean
-	getState (owner: State.Owner, name: ComponentName): State<boolean> | undefined
+	getState (owner: State.Owner, name: ComponentName): State<boolean>
 	remove (...names: ComponentName[]): HOST
 	toggle (...names: ComponentName[]): HOST
 	toggle (enabled: boolean, ...names: ComponentName[]): HOST
