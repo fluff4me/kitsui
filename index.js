@@ -513,6 +513,12 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                 return owner;
             }
             Owner.fromSignal = fromSignal;
+            function fromState(state) {
+                const owner = create();
+                state.match(owner, true, () => owner.remove());
+                return owner;
+            }
+            Owner.fromState = fromState;
         })(Owner = State.Owner || (State.Owner = {}));
         function is(value) {
             return typeof value === 'object' && value?.isState === true;

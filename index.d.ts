@@ -110,6 +110,7 @@ declare module "kitsui/utility/State" {
             }
             function create(): Owner.Removable;
             function fromSignal(signal: AbortSignal): Owner;
+            function fromState(state: State<boolean>): Owner;
         }
         export type Mutable<T> = MutableState<T>;
         export type MutableSetOnly<T> = MutableStateSimple<T>;
