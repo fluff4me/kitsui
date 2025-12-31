@@ -351,6 +351,12 @@ namespace State {
 			signal.addEventListener('abort', owner.remove)
 			return owner
 		}
+
+		export function fromState (state: State<boolean>): Owner {
+			const owner = create()
+			state.match(owner, true, () => owner.remove())
+			return owner
+		}
 	}
 
 	export type Mutable<T> = MutableState<T>
