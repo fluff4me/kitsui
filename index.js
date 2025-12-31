@@ -5420,9 +5420,20 @@ define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function 
             parts.set(unique, part);
             return component;
         };
-        state.use(owner, value => {
+        let controller;
+        state.use(owner, async (value) => {
             seen.clear();
-            handler(value, Part, store);
+            controller?.abort();
+            controller = new AbortController();
+            const signal = controller.signal;
+            const InstancePart = (unique, value, initialiser) => {
+                if (signal.aborted)
+                    return (0, kitsui_1.Component)().tweak(c => c.remove());
+                return Part(unique, value, initialiser);
+            };
+            await handler(value, InstancePart, store);
+            if (signal.aborted)
+                return;
             for (const [unique, part] of parts) {
                 if (!seen.has(unique)) {
                     part.component.remove();
