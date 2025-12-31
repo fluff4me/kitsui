@@ -35,9 +35,23 @@ export default function <T> (owner: State.Owner, state: State<T>, handler: (valu
 		parts.set(unique, part)
 		return component
 	}
-	state.use(owner, value => {
+	let controller: AbortController | undefined
+	state.use(owner, async value => {
 		seen.clear()
-		handler(value, Part, store)
+		controller?.abort()
+
+		controller = new AbortController()
+		const signal = controller.signal
+		const InstancePart: BreakdownPartConstructor = <B> (unique: unknown, value?: B, initialiser?: (component: Component, state: State<B>) => unknown): Component => {
+			if (signal.aborted)
+				return Component().tweak(c => c.remove())
+
+			return Part<B>(unique, value!, initialiser!)
+		}
+		await handler(value, InstancePart, store)
+		if (signal.aborted)
+			return
+
 		for (const [unique, part] of parts) {
 			if (!seen.has(unique)) {
 				part.component.remove()
