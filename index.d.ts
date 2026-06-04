@@ -623,6 +623,19 @@ declare module "kitsui/utility/EventManipulator" {
     type EventParameters<HOST, EVENTS, EVENT extends keyof EVENTS> = EVENTS[EVENT] extends (...params: infer PARAMS) => unknown ? PARAMS extends [infer EVENT extends Event, ...infer PARAMS] ? [EVENT & EventExtensions<HOST>, ...PARAMS] : [Event & EventExtensions<HOST>, ...PARAMS] : never;
     type EventParametersEmit<EVENTS, EVENT extends keyof EVENTS> = EVENTS[EVENT] extends (...params: infer PARAMS) => unknown ? PARAMS extends [Event, ...infer PARAMS] ? PARAMS : PARAMS : never;
     type EventResult<EVENTS, EVENT extends keyof EVENTS> = EVENTS[EVENT] extends (...params: any[]) => infer RESULT ? RESULT : never;
+    export interface EventDispatchImmediate<RESULT> {
+        readonly deferred: false;
+        readonly result: RESULT[];
+        readonly defaultPrevented: boolean;
+        readonly stoppedPropagation: boolean | 'immediate';
+    }
+    export interface EventDispatchDeferred<RESULT> {
+        readonly deferred: true;
+        readonly result: Promise<RESULT[]>;
+        readonly defaultPrevented: false;
+        readonly stoppedPropagation: false;
+    }
+    export type EventDispatchResult<RESULT> = EventDispatchImmediate<RESULT> | EventDispatchDeferred<RESULT>;
     export type EventHandler<HOST, EVENTS, EVENT extends keyof EVENTS> = (...params: EventParameters<HOST, EVENTS, EVENT>) => EventResult<EVENTS, EVENT>;
     type ResolveEvent<EVENT extends Arrays.Or<PropertyKey>> = EVENT extends PropertyKey[] ? EVENT[number] : EVENT;
     interface EventManipulatorSubscribe<HOST, EVENTS extends Record<string, any>> {
@@ -636,14 +649,8 @@ declare module "kitsui/utility/EventManipulator" {
         subscribePassive<EVENT extends Arrays.Or<keyof EVENTS>>(event: EVENT, handler: EventHandler<HOST, EVENTS, ResolveEvent<EVENT> & keyof EVENTS>): this;
     }
     interface EventManipulator<HOST, EVENTS extends Record<string, any>> extends EventManipulatorSubscribe<HOST, EVENTS> {
-        emit<EVENT extends keyof EVENTS>(event: EVENT, ...params: EventParametersEmit<EVENTS, EVENT>): EventResult<EVENTS, EVENT>[] & {
-            defaultPrevented: boolean;
-            stoppedPropagation: boolean | 'immediate';
-        };
-        bubble<EVENT extends keyof EVENTS>(event: EVENT, ...params: EventParametersEmit<EVENTS, EVENT>): EventResult<EVENTS, EVENT>[] & {
-            defaultPrevented: boolean;
-            stoppedPropagation: boolean | 'immediate';
-        };
+        emit<EVENT extends keyof EVENTS>(event: EVENT, ...params: EventParametersEmit<EVENTS, EVENT>): EventDispatchResult<EventResult<EVENTS, EVENT>>;
+        bubble<EVENT extends keyof EVENTS>(event: EVENT, ...params: EventParametersEmit<EVENTS, EVENT>): EventDispatchResult<EventResult<EVENTS, EVENT>>;
         unsubscribe<EVENT extends Arrays.Or<keyof EVENTS>>(event: EVENT, handler: EventHandler<HOST, EVENTS, ResolveEvent<EVENT> & keyof EVENTS>): HOST;
         until(owner: State.Owner, initialiser: (until: EventManipulatorUntilSubscribe<HOST, EVENTS>) => unknown): HOST;
     }
@@ -783,6 +790,7 @@ declare module "kitsui/Component" {
         readonly style: StyleManipulator<this>;
         readonly anchor: AnchorManipulator<this>;
         readonly nojit: Partial<this>;
+        readonly __dom: ComponentDomController;
         readonly hovered: State<boolean>;
         readonly hoveredTime: State<number | undefined>;
         readonly focused: State<boolean>;
@@ -802,7 +810,8 @@ declare module "kitsui/Component" {
         readonly name: State<string | undefined>;
         readonly rect: State.JIT<DOMRect>;
         readonly tagName: Uppercase<keyof HTMLElementTagNameMap>;
-        readonly element: ELEMENT;
+        readonly childCount: number;
+        readonly element?: ELEMENT;
         readonly fullType: string;
         /** Causes this element to be removed when its owner is removed */
         setOwner(owner: State.Owner | undefined): this;
@@ -901,6 +910,7 @@ declare module "kitsui/Component" {
         emitInsert(): this;
         monitorScrollEvents(): this;
         onRooted(callback: (component: this) => unknown): this;
+        onRealise(callback: (component: this) => unknown): this;
         onRemove(owner: Component, callback: (component: this) => unknown): this;
         onRemoveManual(callback: (component: this) => unknown): this;
         ariaRole(role?: AriaRole): this;
@@ -932,6 +942,47 @@ declare module "kitsui/Component" {
             function add(component: Component, callback: () => unknown): void;
             function get(component?: Component): (() => unknown)[];
         }
+    }
+    export interface ComponentDomController {
+        readonly element: HTMLElement | undefined;
+        readonly realised: boolean;
+        readonly sealed: boolean;
+        readonly tagName: string;
+        tag: keyof HTMLElementTagNameMap | string;
+        requireElement(reason: string): HTMLElement;
+        realiseForInsertion(): HTMLElement;
+        adoptElement(element: HTMLElement): void;
+        assertComposable(method: string): void;
+        setAttribute(attribute: string, value?: string): void;
+        hasAttribute(attribute: string): boolean;
+        getAttribute(attribute: string): string | undefined;
+        removeAttribute(attribute: string): void;
+        prependAttribute(attribute: string, value?: string): void;
+        insertAttribute(referenceAttribute: string, direction: 'before' | 'after', attribute: string, value?: string): void;
+        getAttributes(): [string, string][];
+        addClasses(...classes: string[]): void;
+        removeClasses(...classes: string[]): void;
+        hasClasses(...classes: string[]): boolean;
+        someClasses(...classes: string[]): boolean;
+        getClasses(): string[];
+        setStyleProperty(property: string, value?: string | number | null): void;
+        getStyleProperty(property: string): string | undefined;
+        removeStyleProperty(property: string): void;
+        append(...contents: (Component | Node | Falsy)[]): Node[];
+        prepend(...contents: (Component | Node | Falsy)[]): Node[];
+        insert(direction: 'before' | 'after', sibling: Component | Element | undefined, ...contents: (Component | Node | Falsy)[]): Node[];
+        removeContents(): void;
+        getChildCount(): number;
+        getChildren(): (Component | Node)[];
+        takeChildren(): Node[];
+        addEventListener(event: PropertyKey, handler: EventListener, options?: AddEventListenerOptions): void;
+        removeEventListener(event: PropertyKey, handler: EventListener): void;
+        queueDispatch(callback: () => unknown, bubble: boolean): void;
+        flushQueuedDispatches(bubble: boolean): void;
+        onRealise(callback: () => unknown): void;
+        deferRealisation(): void;
+        flushDeferredRealisation(): void;
+        runOrQueueRealisation(callback: () => unknown): boolean;
     }
     function Component<TYPE extends keyof HTMLElementTagNameMap>(type: TYPE): Component<HTMLElementTagNameMap[TYPE]>;
     function Component(): Component<HTMLSpanElement>;
@@ -967,7 +1018,13 @@ declare module "kitsui/Component" {
         export function setStackSupplier(_stackSupplier: () => string): void;
         export function allowBuilding(): void;
         export function is(value: unknown): value is Component;
-        export function element<NODE extends Node>(from: Component | NODE): NODE;
+        export function element<NODE extends Node>(from: Component | NODE): NODE | undefined;
+        export function realise<NODE extends Node>(from: Component | NODE): NODE;
+        export function requireElement<NODE extends Node>(from: Component | NODE, reason?: string): NODE;
+        export function hasElement(component: Component): boolean;
+        export function isRealised(component: Component): boolean;
+        export const isRealized: typeof isRealised;
+        export function getDomController(component: Component): ComponentDomController;
         export function wrap(element: HTMLElement): Component;
         export const SYMBOL_COMPONENT_TYPE_BRAND: unique symbol;
         export type BuilderLike<PARAMS extends any[] = any[], COMPONENT extends Component = Component> = Builder<PARAMS, COMPONENT> | Extension<PARAMS, COMPONENT>;
@@ -1263,7 +1320,7 @@ declare module "kitsui/component/Popover" {
     export default Popover;
 }
 declare module "kitsui/ext/ComponentInsertionTransaction" {
-    import type Component from "kitsui/Component";
+    import Component from "kitsui/Component";
     import type { ComponentInsertionDestination } from "kitsui/Component";
     import State from "kitsui/utility/State";
     interface ComponentInsertionTransaction extends ComponentInsertionDestination {

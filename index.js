@@ -1964,10 +1964,13 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
                     // this.surface.classes.add(`aligned-${this.currentAlignment}`)
                 }
                 // this.surface.classes.toggle(location.padX, "pad-x")
-                host.element.style.left = location.xPosSide === 'left' ? `${location.x}px` : 'auto';
-                host.element.style.right = location.xPosSide === 'right' ? `${location.x}px` : 'auto';
-                host.element.style.top = location.yPosSide === 'top' ? `${location.y}px` : 'auto';
-                host.element.style.bottom = location.yPosSide === 'bottom' ? `${location.y}px` : 'auto';
+                const element = host.element;
+                if (!element)
+                    return host;
+                element.style.left = location.xPosSide === 'left' ? `${location.x}px` : 'auto';
+                element.style.right = location.xPosSide === 'right' ? `${location.x}px` : 'auto';
+                element.style.top = location.yPosSide === 'top' ? `${location.y}px` : 'auto';
+                element.style.bottom = location.yPosSide === 'bottom' ? `${location.y}px` : 'auto';
                 host.rect.markDirty();
                 if (!rendered) {
                     const id = ++renderId;
@@ -1994,11 +1997,14 @@ define("kitsui/utility/AnchorManipulator", ["require", "exports", "kitsui/utilit
             }
             else {
                 ref = selector.startsWith('>>')
-                    ? from?.element.querySelector(selector.slice(2))?.component
-                    : from?.element.closest(selector)?.component;
+                    ? from?.element?.querySelector(selector.slice(2))?.component
+                    : from?.element?.closest(selector)?.component;
                 if (ref) {
-                    if (getComputedStyle(ref.element).display === 'contents') {
-                        const children = ref.element.children;
+                    const refElement = ref.element;
+                    if (!refElement)
+                        return undefined;
+                    if (getComputedStyle(refElement).display === 'contents') {
+                        const children = refElement.children;
                         if (!children.length)
                             console.warn('Anchor ref has display: contents and no children');
                         else {
@@ -2193,6 +2199,7 @@ define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/uti
     Maps_1 = __importDefault(Maps_1);
     State_6 = __importDefault(State_6);
     function AttributeManipulator(component) {
+        const dom = component.__dom;
         let removed = false;
         let translationHandlers;
         const unuseAttributeMap = new Map();
@@ -2205,72 +2212,44 @@ define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/uti
         });
         const result = {
             has(attribute) {
-                return component.element.hasAttribute(attribute);
+                return dom.hasAttribute(attribute);
             },
             get(attribute) {
-                return Maps_1.default.compute(attributeStates, attribute, () => (0, State_6.default)(component.element.getAttribute(attribute) ?? undefined));
+                return Maps_1.default.compute(attributeStates, attribute, () => (0, State_6.default)(dom.getAttribute(attribute) ?? undefined));
             },
             append(...attributes) {
                 for (const attribute of attributes) {
                     translationHandlers?.[attribute]?.unuse?.();
                     delete translationHandlers?.[attribute];
-                    component.element.setAttribute(attribute, '');
+                    dom.setAttribute(attribute, '');
                     attributeStates.get(attribute)?.asMutable?.setValue('');
                 }
                 return component;
             },
             prepend(...attributes) {
-                const oldAttributes = {};
-                for (const attribute of [...component.element.attributes]) {
-                    oldAttributes[attribute.name] = attribute.value;
-                    component.element.removeAttribute(attribute.name);
-                }
+                const oldAttributes = Object.fromEntries(dom.getAttributes());
                 for (const attribute of attributes) {
                     const value = oldAttributes[attribute] ?? '';
-                    component.element.setAttribute(attribute, value);
+                    dom.prependAttribute(attribute, value);
                     attributeStates.get(attribute)?.asMutable?.setValue(value);
                 }
-                for (const name of Object.keys(oldAttributes))
-                    component.element.setAttribute(name, oldAttributes[name]);
                 return component;
             },
             insertBefore(referenceAttribute, ...attributes) {
-                const oldAttributes = {};
-                for (const attribute of [...component.element.attributes]) {
-                    oldAttributes[attribute.name] = attribute.value;
-                    component.element.removeAttribute(attribute.name);
-                }
-                for (const attribute of Object.keys(oldAttributes)) {
-                    if (attribute === referenceAttribute)
-                        for (const attribute of attributes) {
-                            const value = oldAttributes[attribute] ?? '';
-                            component.element.setAttribute(attribute, value);
-                            attributeStates.get(attribute)?.asMutable?.setValue(value);
-                        }
-                    component.element.setAttribute(attribute, oldAttributes[attribute]);
+                const oldAttributes = Object.fromEntries(dom.getAttributes());
+                for (const attribute of attributes) {
+                    const value = oldAttributes[attribute] ?? '';
+                    dom.insertAttribute(referenceAttribute, 'before', attribute, value);
+                    attributeStates.get(attribute)?.asMutable?.setValue(value);
                 }
                 return component;
             },
             insertAfter(referenceAttribute, ...attributes) {
-                const oldAttributes = {};
-                for (const attribute of [...component.element.attributes]) {
-                    oldAttributes[attribute.name] = attribute.value;
-                    component.element.removeAttribute(attribute.name);
-                }
-                if (!(referenceAttribute in oldAttributes))
-                    for (const attribute of attributes) {
-                        const value = oldAttributes[attribute] ?? '';
-                        component.element.setAttribute(attribute, value);
-                        attributeStates.get(attribute)?.asMutable?.setValue(value);
-                    }
-                for (const attribute of Object.keys(oldAttributes)) {
-                    component.element.setAttribute(attribute, oldAttributes[attribute]);
-                    if (attribute === referenceAttribute)
-                        for (const attribute of attributes) {
-                            const value = oldAttributes[attribute] ?? '';
-                            component.element.setAttribute(attribute, value);
-                            attributeStates.get(attribute)?.asMutable?.setValue(value);
-                        }
+                const oldAttributes = Object.fromEntries(dom.getAttributes());
+                for (const attribute of attributes) {
+                    const value = oldAttributes[attribute] ?? '';
+                    dom.insertAttribute(referenceAttribute, 'after', attribute, value);
+                    attributeStates.get(attribute)?.asMutable?.setValue(value);
                 }
                 return component;
             },
@@ -2278,11 +2257,11 @@ define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/uti
                 translationHandlers?.[attribute]?.unuse?.();
                 delete translationHandlers?.[attribute];
                 if (value === undefined) {
-                    component.element.removeAttribute(attribute);
+                    dom.removeAttribute(attribute);
                     attributeStates.get(attribute)?.asMutable?.setValue(undefined);
                 }
                 else {
-                    component.element.setAttribute(attribute, value);
+                    dom.setAttribute(attribute, value);
                     attributeStates.get(attribute)?.asMutable?.setValue(value);
                 }
                 return component;
@@ -2293,11 +2272,11 @@ define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/uti
                     unuseAttributeMap.get(attribute)?.();
                     unuseAttributeMap.set(attribute, state.use(component, value => {
                         if (value === undefined) {
-                            component.element.removeAttribute(attribute);
+                            dom.removeAttribute(attribute);
                             attributeStates.get(attribute)?.asMutable?.setValue(undefined);
                         }
                         else {
-                            component.element.setAttribute(attribute, value);
+                            dom.setAttribute(attribute, value);
                             attributeStates.get(attribute)?.asMutable?.setValue(value);
                         }
                     }));
@@ -2308,15 +2287,15 @@ define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/uti
                     unuseAttributeMap.set(attribute, state.use(component, active => {
                         if (active) {
                             value ??= '';
-                            component.element.setAttribute(attribute, value);
+                            dom.setAttribute(attribute, value);
                             attributeStates.get(attribute)?.asMutable?.setValue(value);
                         }
                         else if (orElse !== undefined) {
-                            component.element.setAttribute(attribute, orElse);
+                            dom.setAttribute(attribute, orElse);
                             attributeStates.get(attribute)?.asMutable?.setValue(orElse);
                         }
                         else {
-                            component.element.removeAttribute(attribute);
+                            dom.removeAttribute(attribute);
                             attributeStates.get(attribute)?.asMutable?.setValue(undefined);
                         }
                     }));
@@ -2324,17 +2303,17 @@ define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/uti
                 return component;
             },
             compute(attribute, supplier) {
-                if (component.element.hasAttribute(attribute))
+                if (dom.hasAttribute(attribute))
                     return component;
                 translationHandlers?.[attribute]?.unuse?.();
                 delete translationHandlers?.[attribute];
                 const value = supplier(component);
                 if (value === undefined) {
-                    component.element.removeAttribute(attribute);
+                    dom.removeAttribute(attribute);
                     attributeStates.get(attribute)?.asMutable?.setValue(undefined);
                 }
                 else {
-                    component.element.setAttribute(attribute, value);
+                    dom.setAttribute(attribute, value);
                     attributeStates.get(attribute)?.asMutable?.setValue(value);
                 }
                 return component;
@@ -2352,7 +2331,7 @@ define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/uti
                     if (!registration)
                         return;
                     const value = StringApplicator_1.StringApplicatorSource.toString(source ?? '');
-                    component.element.setAttribute(attribute, value);
+                    dom.setAttribute(attribute, value);
                     attributeStates.get(attribute)?.asMutable?.setValue(value);
                 }, source);
                 translationHandlers ??= {};
@@ -2363,7 +2342,7 @@ define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/uti
                 for (const attribute of attributes) {
                     translationHandlers?.[attribute]?.unuse?.();
                     delete translationHandlers?.[attribute];
-                    component.element.removeAttribute(attribute);
+                    dom.removeAttribute(attribute);
                     attributeStates.get(attribute)?.asMutable?.setValue(undefined);
                 }
                 return component;
@@ -2372,11 +2351,12 @@ define("kitsui/utility/AttributeManipulator", ["require", "exports", "kitsui/uti
                 return this[present ? 'set' : 'remove'](attribute, value);
             },
             copy(element) {
-                if ('element' in element)
-                    element = element.element;
-                for (const attribute of element.attributes) {
-                    component.element.setAttribute(attribute.name, attribute.value);
-                    attributeStates.get(attribute.name)?.asMutable?.setValue(attribute.value);
+                const attributes = 'isComponent' in element
+                    ? element.__dom.getAttributes()
+                    : [...element.attributes].map(attribute => [attribute.name, attribute.value]);
+                for (const [name, value] of attributes) {
+                    dom.setAttribute(name, value);
+                    attributeStates.get(name)?.asMutable?.setValue(value);
                 }
                 return component;
             },
@@ -2389,28 +2369,30 @@ define("kitsui/utility/ClassManipulator", ["require", "exports"], function (requ
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     function ClassManipulator(component) {
+        const dom = component.__dom;
         return {
             has(...classes) {
-                return classes.every(className => component.element.classList.contains(className));
+                return dom.hasClasses(...classes);
             },
             some(...classes) {
-                return classes.some(className => component.element.classList.contains(className));
+                return dom.someClasses(...classes);
             },
             add(...classes) {
-                component.element.classList.add(...classes);
+                dom.addClasses(...classes);
                 return component;
             },
             remove(...classes) {
-                component.element.classList.remove(...classes);
+                dom.removeClasses(...classes);
                 return component;
             },
             toggle(present, ...classes) {
                 return this[present ? 'add' : 'remove'](...classes);
             },
             copy(element) {
-                if ('element' in element)
-                    element = element.element;
-                component.element.classList.add(...element.classList);
+                const classes = 'isComponent' in element
+                    ? element.__dom.getClasses()
+                    : [...element.classList];
+                dom.addClasses(...classes);
                 return component;
             },
             bind(state, ...classes) {
@@ -2434,46 +2416,13 @@ define("kitsui/utility/EventManipulator", ["require", "exports", "kitsui/utility
         const elementHost = isComponent(host)
             ? host
             : { element: document.createElement('span') };
+        const dom = isComponent(host) ? host.__dom : undefined;
         const manipulator = {
             emit(event, ...params) {
-                const detail = { result: [], params };
-                let stoppedPropagation = false;
-                let preventedDefault = false;
-                const eventObject = Object.assign(new CustomEvent(event, { detail }), {
-                    preventDefault() {
-                        Event.prototype.preventDefault.call(this);
-                        preventedDefault ||= true;
-                    },
-                    stopPropagation() {
-                        stoppedPropagation ||= true;
-                    },
-                    stopImmediatePropagation() {
-                        stoppedPropagation = 'immediate';
-                    },
-                });
-                elementHost.element.dispatchEvent(eventObject);
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-                return Object.assign(detail.result, { defaultPrevented: eventObject.defaultPrevented || preventedDefault, stoppedPropagation });
+                return dispatch(event, params, false);
             },
             bubble(event, ...params) {
-                const detail = { result: [], params };
-                let stoppedPropagation = false;
-                let preventedDefault = false;
-                const eventObject = Object.assign(new CustomEvent(event, { detail, bubbles: true }), {
-                    preventDefault() {
-                        Event.prototype.preventDefault.call(this);
-                        preventedDefault ||= true;
-                    },
-                    stopPropagation() {
-                        stoppedPropagation ||= true;
-                    },
-                    stopImmediatePropagation() {
-                        stoppedPropagation = 'immediate';
-                    },
-                });
-                elementHost.element.dispatchEvent(eventObject);
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-                return Object.assign(detail.result, { defaultPrevented: eventObject.defaultPrevented || preventedDefault, stoppedPropagation });
+                return dispatch(event, params, true);
             },
             subscribe(events, handler) {
                 return subscribe(handler, events);
@@ -2490,7 +2439,10 @@ define("kitsui/utility/EventManipulator", ["require", "exports", "kitsui/utility
                     return host;
                 delete handler[SYMBOL_REGISTERED_FUNCTION];
                 for (const event of Arrays_3.default.resolve(events))
-                    elementHost.element.removeEventListener(event, realHandler);
+                    if (dom)
+                        dom.removeEventListener(event, realHandler);
+                    else
+                        elementHost.element.removeEventListener(event, realHandler);
                 return host;
             },
             until(owner, initialiser) {
@@ -2515,6 +2467,65 @@ define("kitsui/utility/EventManipulator", ["require", "exports", "kitsui/utility
             },
         };
         return manipulator;
+        function dispatch(event, params, bubble) {
+            const run = () => {
+                const detail = { result: [], params };
+                let stoppedPropagation = false;
+                let preventedDefault = false;
+                const eventObject = Object.assign(new CustomEvent(event, { detail, bubbles: bubble }), {
+                    preventDefault() {
+                        Event.prototype.preventDefault.call(this);
+                        preventedDefault ||= true;
+                    },
+                    stopPropagation() {
+                        Event.prototype.stopPropagation.call(this);
+                        stoppedPropagation ||= true;
+                    },
+                    stopImmediatePropagation() {
+                        Event.prototype.stopImmediatePropagation.call(this);
+                        stoppedPropagation = 'immediate';
+                    },
+                });
+                const element = dom?.element ?? elementHost.element;
+                element.dispatchEvent(eventObject);
+                return {
+                    deferred: false,
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                    result: detail.result,
+                    defaultPrevented: eventObject.defaultPrevented || preventedDefault,
+                    stoppedPropagation,
+                };
+            };
+            if (dom && !dom.element) {
+                let resolveResult;
+                const result = new Promise(resolve => resolveResult = resolve);
+                let resolved = false;
+                const resolveOnce = (result) => {
+                    if (resolved)
+                        return;
+                    resolved = true;
+                    resolveResult(result);
+                };
+                let unuseRemoved;
+                dom.queueDispatch(() => {
+                    unuseRemoved?.();
+                    resolveOnce(run().result);
+                }, bubble);
+                if (isComponent(host))
+                    unuseRemoved = host.removed.matchManual(true, () => {
+                        unuseRemoved?.();
+                        resolveOnce([]);
+                    });
+                const deferredResult = {
+                    deferred: true,
+                    result,
+                    defaultPrevented: false,
+                    stoppedPropagation: false,
+                };
+                return deferredResult;
+            }
+            return run();
+        }
         function subscribe(handler, events, options) {
             if (handler[SYMBOL_REGISTERED_FUNCTION]) {
                 console.error(`Can't register handler for event(s) ${Arrays_3.default.resolve(events).join(', ')}, already used for other events`, handler);
@@ -2532,7 +2543,10 @@ define("kitsui/utility/EventManipulator", ["require", "exports", "kitsui/utility
             };
             Object.assign(handler, { [SYMBOL_REGISTERED_FUNCTION]: realHandler });
             for (const event of Arrays_3.default.resolve(events))
-                elementHost.element.addEventListener(event, realHandler, options);
+                if (dom)
+                    dom.addEventListener(event, realHandler, options);
+                else
+                    elementHost.element.addEventListener(event, realHandler, options);
             return host;
         }
     }
@@ -2695,6 +2709,7 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
     State_9 = __importDefault(State_9);
     exports.style = (0, State_9.default)({});
     function StyleManipulator(component) {
+        const dom = component.__dom;
         const styles = new Set();
         const currentClasses = [];
         // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
@@ -2814,7 +2829,7 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
             },
             refresh: () => updateClasses(),
             hasProperty(property) {
-                return component.element.style.getPropertyValue(property) !== '';
+                return !!dom.getStyleProperty(property);
             },
             setProperty(property, value) {
                 unbindPropertyState[property]?.();
@@ -2854,12 +2869,12 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
             },
             removeProperties(...properties) {
                 for (const property of properties)
-                    component.element.style.removeProperty(property);
+                    dom.removeStyleProperty(property);
                 return component;
             },
             removeVariables(...variables) {
                 for (const variable of variables)
-                    component.element.style.removeProperty(`--${variable}`);
+                    dom.removeStyleProperty(`--${variable}`);
                 return component;
             },
         });
@@ -2883,17 +2898,14 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
             const toAdd = stylesArray.flatMap(component => exports.style.value[component]).filter(Arrays_4.NonNullish);
             const toRemove = currentClasses.filter(cls => !toAdd.includes(cls));
             if (toRemove)
-                component.element.classList.remove(...toRemove);
-            component.element.classList.add(...toAdd);
+                dom.removeClasses(...toRemove);
+            dom.addClasses(...toAdd);
             currentClasses.push(...toAdd);
             styleState.markDirty();
             return component;
         }
         function setProperty(property, value) {
-            if (value === undefined || value === null)
-                component.element.style.removeProperty(property);
-            else
-                component.element.style.setProperty(property, `${value}`);
+            dom.setStyleProperty(property, value);
         }
     }
     exports.default = StyleManipulator;
@@ -3007,6 +3019,10 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         })(CallbacksOnInsertions = ComponentPerf.CallbacksOnInsertions || (ComponentPerf.CallbacksOnInsertions = {}));
     })(ComponentPerf || (exports.ComponentPerf = ComponentPerf = {}));
     const componentExtensionsRegistry = [];
+    const virtualParentDetach = new WeakMap();
+    function getDom(component) {
+        return component.__dom;
+    }
     let componentLeakDetectors = [];
     const timeUntilLeakWarning = 10000;
     setInterval(() => {
@@ -3025,6 +3041,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         if (typeof type === 'function' || typeof builder === 'function')
             return Component.Builder(type, builder);
         type ??= 'span';
+        type = type;
         if (!canBuildComponents)
             throw new Error('Components cannot be built yet');
         let unuseIdState;
@@ -3038,11 +3055,15 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         const nojit = {};
         const rooted = (0, State_10.default)(false);
         const removed = (0, State_10.default)(false);
+        const dom = createDomController();
         let component = {
             supers: (0, State_10.default)([]),
             isComponent: true,
             isInsertionDestination: true,
-            element: document.createElement(type),
+            __dom: dom,
+            get element() {
+                return dom.element;
+            },
             get removed() {
                 componentLeakDetectors.push({
                     built: Date.now(),
@@ -3053,7 +3074,10 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             rooted,
             nojit: nojit,
             get tagName() {
-                return component.element.tagName;
+                return dom.tagName;
+            },
+            get childCount() {
+                return dom.getChildCount();
             },
             setOwner: newOwner => {
                 unuseOwnerRemove?.();
@@ -3068,19 +3092,24 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             },
             hasOwner: () => !!unuseOwnerRemove,
             replaceElement: (newElement, keepContent) => {
-                if (typeof newElement === 'string' && newElement.toUpperCase() === component.element.tagName.toUpperCase())
+                dom.assertComposable('replaceElement');
+                if (typeof newElement === 'string' && newElement.toUpperCase() === dom.tagName.toUpperCase())
                     return component; // already correct tag type
+                if (!dom.realised && typeof newElement === 'string') {
+                    dom.tag = newElement;
+                    return component;
+                }
                 if (typeof newElement === 'string')
                     newElement = document.createElement(newElement);
-                const oldElement = component.element;
+                const oldElement = dom.requireElement('replace element');
                 if (!keepContent) {
                     Component.removeContents(newElement);
-                    newElement.replaceChildren(...component.element.childNodes);
+                    newElement.replaceChildren(...oldElement.childNodes);
                 }
-                if (component.element.parentNode)
-                    component.element.replaceWith(newElement);
-                component.element = newElement;
-                type = component.element.tagName;
+                if (oldElement.parentNode)
+                    oldElement.replaceWith(newElement);
+                dom.adoptElement(newElement);
+                type = dom.tagName;
                 ELEMENT_TO_COMPONENT_MAP.delete(oldElement);
                 ELEMENT_TO_COMPONENT_MAP.set(newElement, component);
                 component.attributes.copy(oldElement);
@@ -3091,6 +3120,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             as: (builder) => !builder || component.supers.value.includes(builder) ? component : undefined,
             cast: () => component,
             and(builder, ...params) {
+                dom.assertComposable('and');
                 if (component.is(builder))
                     return component;
                 const result = builder.from(component, ...params);
@@ -3111,7 +3141,9 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-return
                 return component;
             },
-            extend: extension => Object.assign(component, extension(component)),
+            extend: extension => {
+                return Object.assign(component, extension(component));
+            },
             override: (property, provider) => {
                 const original = component[property];
                 component[property] = provider(component, original);
@@ -3237,14 +3269,17 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 [SYMBOL_RECT_STATE]: undefined,
             },
             get rect() {
-                const rectState = State_10.default.JIT(() => component.element.getBoundingClientRect());
+                const rectState = State_10.default.JIT(() => dom.element?.getBoundingClientRect() ?? new DOMRect());
                 ComponentPerf.Rect.assign(component, rectState);
                 const oldMarkDirty = rectState.markDirty;
                 rectState.markDirty = () => {
                     oldMarkDirty();
-                    for (const descendant of this.element.getElementsByClassName(Classes.HasRect))
+                    const element = dom.element;
+                    if (!element)
+                        return rectState;
+                    for (const descendant of element.getElementsByClassName(Classes.HasRect))
                         ComponentPerf.Rect(descendant.component)?.markDirty();
-                    for (const descendant of this.element.getElementsByClassName(Classes.ReceiveAncestorRectDirtyEvents))
+                    for (const descendant of element.getElementsByClassName(Classes.ReceiveAncestorRectDirtyEvents))
                         descendant.component?.event.emit('ancestorRectDirty');
                     return rectState;
                 };
@@ -3274,11 +3309,11 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
                 function setId(id) {
                     if (id) {
-                        component.element.setAttribute('id', id);
+                        dom.setAttribute('id', id);
                         component.id.asMutable?.setValue(id);
                     }
                     else {
-                        component.element.removeAttribute('id');
+                        dom.removeAttribute('id');
                         component.id.asMutable?.setValue(undefined);
                     }
                 }
@@ -3298,11 +3333,11 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 function setName(name) {
                     if (name) {
                         name = name.replace(/[^\w-]+/g, '-').toLowerCase();
-                        component.element.setAttribute('name', name);
+                        dom.setAttribute('name', name);
                         component.name.asMutable?.setValue(name);
                     }
                     else {
-                        component.element.removeAttribute('name');
+                        dom.removeAttribute('name');
                         component.name.asMutable?.setValue(undefined);
                     }
                 }
@@ -3311,11 +3346,14 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
             },
             remove() {
+                virtualParentDetach.get(component)?.();
                 component.removeContents();
                 component.removed.asMutable?.setValue(true);
                 component.rooted.asMutable?.setValue(false);
-                component.element.component = undefined;
-                component.element.remove();
+                if (dom.element) {
+                    dom.element.component = undefined;
+                    dom.element.remove();
+                }
                 emitRemove(component);
                 if (component.classes.has(Classes.ReceiveRootedEvents))
                     component.event.emit('unroot');
@@ -3331,26 +3369,44 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 unuseNameState = undefined;
             },
             appendTo(destination) {
-                destination.append(component.element);
+                if (ComponentInsertionDestination.is(destination)) {
+                    destination.append(component);
+                    return component;
+                }
+                if (dom.runOrQueueRealisation(() => component.appendTo(destination)))
+                    return component;
+                const element = dom.realiseForInsertion();
+                destination.append(element);
                 component.emitInsert();
                 return component;
             },
             prependTo(destination) {
-                destination.prepend(component.element);
+                if (ComponentInsertionDestination.is(destination)) {
+                    destination.prepend(component);
+                    return component;
+                }
+                if (dom.runOrQueueRealisation(() => component.prependTo(destination)))
+                    return component;
+                const element = dom.realiseForInsertion();
+                destination.prepend(element);
                 component.emitInsert();
                 return component;
             },
             insertTo(destination, direction, sibling) {
                 if (ComponentInsertionDestination.is(destination)) {
                     destination.insert(direction, sibling, component);
-                    component.emitInsert();
+                    if (!Component.is(destination) || Component.hasElement(destination))
+                        component.emitInsert();
                     return component;
                 }
-                const siblingElement = sibling ? Component.element(sibling) : null;
+                if (dom.runOrQueueRealisation(() => component.insertTo(destination, direction, sibling)))
+                    return component;
+                const siblingElement = sibling ? Component.requireElement(sibling, 'insert relative to sibling') : null;
+                const element = dom.realiseForInsertion();
                 if (direction === 'before')
-                    destination.insertBefore(component.element, siblingElement);
+                    destination.insertBefore(element, siblingElement);
                 else
-                    destination.insertBefore(component.element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling);
+                    destination.insertBefore(element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling);
                 component.emitInsert();
                 return component;
             },
@@ -3363,8 +3419,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     }
                     return component;
                 }
-                const elements = contents.filter(Arrays_5.Truthy).map(Component.element);
-                component.element.append(...elements);
+                const elements = dom.append(...contents);
                 for (const element of elements)
                     element.component?.emitInsert();
                 if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
@@ -3380,8 +3435,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     }
                     return component;
                 }
-                const elements = contents.filter(Arrays_5.Truthy).map(Component.element);
-                component.element.prepend(...elements);
+                const elements = dom.prepend(...contents);
                 for (const element of elements)
                     element.component?.emitInsert();
                 if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
@@ -3397,14 +3451,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     }
                     return component;
                 }
-                const siblingElement = sibling ? Component.element(sibling) : null;
-                const elements = contents.filter(Arrays_5.Truthy).map(Component.element);
-                if (direction === 'before')
-                    for (let i = elements.length - 1; i >= 0; i--)
-                        component.element.insertBefore(elements[i], siblingElement);
-                else
-                    for (const element of elements)
-                        component.element.insertBefore(element, !siblingElement ? component.element.firstChild : siblingElement?.nextSibling);
+                const elements = dom.insert(direction, sibling, ...contents);
                 for (const element of elements)
                     element.component?.emitInsert();
                 if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
@@ -3412,7 +3459,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
             },
             removeContents() {
-                Component.removeContents(component.element);
+                dom.removeContents();
                 return component;
             },
             closest(builder) {
@@ -3431,24 +3478,24 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return state;
             },
             get parent() {
-                return component.element.parentElement?.component;
+                return dom.element?.parentElement?.component;
             },
             get previousSibling() {
-                return component.element.previousElementSibling?.component;
+                return dom.element?.previousElementSibling?.component;
             },
             getPreviousSibling(builder) {
                 const [sibling] = component.getPreviousSiblings(builder);
                 return sibling;
             },
             get nextSibling() {
-                return component.element.nextElementSibling?.component;
+                return dom.element?.nextElementSibling?.component;
             },
             getNextSibling(builder) {
                 const [sibling] = component.getNextSiblings(builder);
                 return sibling;
             },
             *getAncestorComponents(builder) {
-                let cursor = component.element;
+                let cursor = dom.element;
                 while (cursor) {
                     cursor = cursor.parentElement;
                     const component = cursor?.component;
@@ -3457,25 +3504,27 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 }
             },
             *getChildren(builder) {
-                for (const child of component.element.children) {
+                for (const child of dom.element?.children ?? []) {
                     const component = child.component;
                     if (component?.is(builder))
                         yield component;
                 }
             },
             *getSiblings(builder) {
-                const parent = component.element.parentElement;
+                const element = dom.element;
+                const parent = element?.parentElement;
                 for (const child of parent?.children ?? [])
-                    if (child !== component.element) {
+                    if (child !== element) {
                         const component = child.component;
                         if (component?.is(builder))
                             yield component;
                     }
             },
             *getPreviousSiblings(builder) {
-                const parent = component.element.parentElement;
+                const element = dom.element;
+                const parent = element?.parentElement;
                 for (const child of parent?.children ?? []) {
-                    if (child === component.element)
+                    if (child === element)
                         break;
                     const childComponent = child.component;
                     if (childComponent?.is(builder))
@@ -3483,15 +3532,17 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 }
             },
             *getNextSiblings(builder) {
-                let cursor = component.element;
-                while ((cursor = cursor.nextElementSibling)) {
+                let cursor = dom.element;
+                while ((cursor = cursor?.nextElementSibling)) {
                     const component = cursor.component;
                     if (component?.is(builder))
                         yield component;
                 }
             },
             *getDescendants(builder) {
-                const walker = document.createTreeWalker(component.element, NodeFilter.SHOW_ELEMENT);
+                if (!dom.element)
+                    return;
+                const walker = document.createTreeWalker(dom.element, NodeFilter.SHOW_ELEMENT);
                 let node;
                 while ((node = walker.nextNode())) {
                     const component = node.component;
@@ -3505,34 +3556,34 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             },
             contains(elementOrComponent) {
                 const descendant = Component.is(elementOrComponent) ? elementOrComponent.element : elementOrComponent;
-                return descendant === undefined || descendant === null ? false : component.element.contains(descendant);
+                return descendant === undefined || descendant === null ? false : !!dom.element?.contains(descendant);
             },
             receiveRootedEvents() {
-                component.element.classList.add(Classes.ReceiveRootedEvents);
+                dom.addClasses(Classes.ReceiveRootedEvents);
                 return component;
             },
             receiveAncestorInsertEvents: () => {
-                component.element.classList.add(Classes.ReceiveAncestorInsertEvents);
+                dom.addClasses(Classes.ReceiveAncestorInsertEvents);
                 return component;
             },
             receiveDescendantInsertEvents: () => {
-                component.element.classList.add(Classes.ReceiveDescendantInsertEvents);
+                dom.addClasses(Classes.ReceiveDescendantInsertEvents);
                 return component;
             },
             receiveDescendantRemoveEvents: () => {
-                component.element.classList.add(Classes.ReceiveDescendantRemoveEvents);
+                dom.addClasses(Classes.ReceiveDescendantRemoveEvents);
                 return component;
             },
             receiveAncestorScrollEvents() {
-                component.element.classList.add(Classes.ReceiveScrollEvents);
+                dom.addClasses(Classes.ReceiveScrollEvents);
                 return component;
             },
             receiveChildrenInsertEvents() {
-                component.element.classList.add(Classes.ReceiveChildrenInsertEvents);
+                dom.addClasses(Classes.ReceiveChildrenInsertEvents);
                 return component;
             },
             receiveInsertEvents() {
-                component.element.classList.add(Classes.ReceiveInsertEvents);
+                dom.addClasses(Classes.ReceiveInsertEvents);
                 return component;
             },
             emitInsert: () => {
@@ -3541,8 +3592,16 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return component;
             },
             monitorScrollEvents() {
-                descendantsListeningForScroll ??= (component.element === window ? document.documentElement : component.element).getElementsByClassName(Classes.ReceiveScrollEvents);
-                descendantRectsListeningForScroll ??= (component.element === window ? document.documentElement : component.element).getElementsByClassName(Classes.HasRect);
+                const element = dom.element;
+                if (!element) {
+                    dom.onRealise(() => component.monitorScrollEvents());
+                    return component;
+                }
+                if (descendantsListeningForScroll)
+                    // already monitoring
+                    return component;
+                descendantsListeningForScroll ??= (element === window ? document.documentElement : element).getElementsByClassName(Classes.ReceiveScrollEvents);
+                descendantRectsListeningForScroll ??= (element === window ? document.documentElement : element).getElementsByClassName(Classes.HasRect);
                 component.event.subscribe('scroll', () => {
                     for (const descendant of [...descendantsListeningForScroll])
                         descendant.component?.event.emit('ancestorScroll');
@@ -3553,6 +3612,10 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             },
             onRooted(callback) {
                 component.rooted.matchManual(true, () => callback(component));
+                return component;
+            },
+            onRealise(callback) {
+                dom.onRealise(() => callback(component));
                 return component;
             },
             onRemove(owner, callback) {
@@ -3593,21 +3656,23 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             },
             tabIndex: index => {
                 if (index === undefined)
-                    component.element.removeAttribute('tabindex');
+                    dom.removeAttribute('tabindex');
                 else if (index === 'programmatic')
-                    component.element.setAttribute('tabindex', '-1');
+                    dom.setAttribute('tabindex', '-1');
                 else if (index === 'auto')
-                    component.element.setAttribute('tabindex', '0');
+                    dom.setAttribute('tabindex', '0');
                 else
-                    component.element.setAttribute('tabindex', `${index}`);
+                    dom.setAttribute('tabindex', `${index}`);
                 return component;
             },
             focus: () => {
-                FocusListener_1.default.focus(component.element);
+                if (dom.element)
+                    FocusListener_1.default.focus(dom.element);
                 return component;
             },
             blur: () => {
-                FocusListener_1.default.blur(component.element);
+                if (dom.element)
+                    FocusListener_1.default.blur(dom.element);
                 return component;
             },
         };
@@ -3617,26 +3682,342 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             extension(component);
         if (!Component.is(component))
             throw new Error('This should never happen');
-        component.element.component = component;
         return component;
+        function createDomController() {
+            let element;
+            let realised = false;
+            let sealed = false;
+            let tag = type;
+            const attributes = new Map();
+            const attributeOrder = [];
+            const classes = new Set();
+            const styles = new Map();
+            const children = [];
+            const listeners = [];
+            const queuedEmits = [];
+            const queuedBubbles = [];
+            const onRealiseCallbacks = [];
+            const queuedRealisations = [];
+            let deferringRealisation = false;
+            const controller = {
+                get element() { return element; },
+                get realised() { return realised; },
+                get sealed() { return sealed; },
+                get tagName() { return (element?.tagName ?? tag.toString()).toUpperCase(); },
+                get tag() { return tag; },
+                set tag(value) {
+                    this.assertComposable('change element type');
+                    if (realised)
+                        throw new Error('Cannot change a realised component tag');
+                    tag = value;
+                },
+                requireElement(reason) {
+                    if (!element)
+                        throw new Error(`Component has no realised element${reason ? `: ${reason}` : ''}`);
+                    return element;
+                },
+                realiseForInsertion() {
+                    virtualParentDetach.get(component)?.();
+                    if (element) {
+                        sealed = true;
+                        return element;
+                    }
+                    element = document.createElement(tag);
+                    realised = true;
+                    element.component = component;
+                    for (const attribute of attributeOrder) {
+                        const value = attributes.get(attribute);
+                        if (value !== undefined)
+                            element.setAttribute(attribute, value);
+                    }
+                    element.classList.add(...classes);
+                    for (const [property, value] of styles)
+                        element.style.setProperty(property, value);
+                    for (const listener of listeners)
+                        element.addEventListener(listener.event, listener.handler, listener.options);
+                    for (const callback of onRealiseCallbacks.splice(0, Infinity))
+                        callback();
+                    const pendingChildren = children.splice(0, Infinity);
+                    const childNodes = pendingChildren.map(nodeForInsertion);
+                    element.append(...childNodes);
+                    for (const child of pendingChildren)
+                        if (Component.is(child))
+                            child.emitInsert();
+                    this.flushQueuedDispatches(false);
+                    sealed = true;
+                    return element;
+                },
+                adoptElement(newElement) {
+                    element = newElement;
+                    realised = true;
+                    tag = newElement.tagName?.toLowerCase() ?? 'window';
+                    element.component = component;
+                    for (const listener of listeners)
+                        element.addEventListener(listener.event, listener.handler, listener.options);
+                },
+                assertComposable(method) {
+                    if (sealed)
+                        throw new Error(`Cannot ${method} after a component has been appended`);
+                },
+                setAttribute(attribute, value = '') {
+                    ensureAttributeOrder(attribute);
+                    if (value === undefined) {
+                        this.removeAttribute(attribute);
+                        return;
+                    }
+                    attributes.set(attribute, value);
+                    element?.setAttribute(attribute, value);
+                },
+                hasAttribute(attribute) {
+                    return element?.hasAttribute(attribute) ?? attributes.has(attribute);
+                },
+                getAttribute(attribute) {
+                    return element?.getAttribute(attribute) ?? attributes.get(attribute);
+                },
+                removeAttribute(attribute) {
+                    attributes.delete(attribute);
+                    removeAttributeOrder(attribute);
+                    element?.removeAttribute(attribute);
+                },
+                prependAttribute(attribute, value = '') {
+                    removeAttributeOrder(attribute);
+                    attributeOrder.unshift(attribute);
+                    attributes.set(attribute, value);
+                    if (element) {
+                        const oldAttributes = [...element.attributes].map(attribute => [attribute.name, attribute.value]);
+                        for (const attribute of oldAttributes)
+                            element.removeAttribute(attribute[0]);
+                        for (const attribute of attributeOrder) {
+                            const value = attributes.get(attribute);
+                            if (value !== undefined)
+                                element.setAttribute(attribute, value);
+                        }
+                    }
+                },
+                insertAttribute(referenceAttribute, direction, attribute, value = '') {
+                    removeAttributeOrder(attribute);
+                    const index = attributeOrder.indexOf(referenceAttribute);
+                    attributeOrder.splice(index === -1 ? direction === 'before' ? 0 : attributeOrder.length : index + (direction === 'after' ? 1 : 0), 0, attribute);
+                    attributes.set(attribute, value);
+                    if (element) {
+                        for (const attribute of [...element.attributes])
+                            element.removeAttribute(attribute.name);
+                        for (const attribute of attributeOrder) {
+                            const value = attributes.get(attribute);
+                            if (value !== undefined)
+                                element.setAttribute(attribute, value);
+                        }
+                    }
+                },
+                getAttributes() {
+                    return attributeOrder
+                        .map(attribute => [attribute, attributes.get(attribute)])
+                        .filter((entry) => entry[1] !== undefined);
+                },
+                addClasses(...classNames) {
+                    for (const className of classNames)
+                        classes.add(className);
+                    element?.classList.add(...classNames);
+                },
+                removeClasses(...classNames) {
+                    for (const className of classNames)
+                        classes.delete(className);
+                    element?.classList.remove(...classNames);
+                },
+                hasClasses(...classNames) {
+                    return classNames.every(className => element?.classList.contains(className) ?? classes.has(className));
+                },
+                someClasses(...classNames) {
+                    return classNames.some(className => element?.classList.contains(className) ?? classes.has(className));
+                },
+                getClasses() {
+                    return element ? [...element.classList] : [...classes];
+                },
+                setStyleProperty(property, value) {
+                    if (value === undefined || value === null) {
+                        this.removeStyleProperty(property);
+                        return;
+                    }
+                    const stringValue = `${value}`;
+                    styles.set(property, stringValue);
+                    element?.style.setProperty(property, stringValue);
+                },
+                getStyleProperty(property) {
+                    return element?.style.getPropertyValue(property) || styles.get(property);
+                },
+                removeStyleProperty(property) {
+                    styles.delete(property);
+                    element?.style.removeProperty(property);
+                },
+                append(...contents) {
+                    if (!element) {
+                        children.push(...prepareVirtualChildren(contents));
+                        return [];
+                    }
+                    const nodes = contents.filter(Arrays_5.Truthy).map(nodeForInsertion);
+                    element.append(...nodes);
+                    return nodes;
+                },
+                prepend(...contents) {
+                    if (!element) {
+                        children.unshift(...prepareVirtualChildren(contents));
+                        return [];
+                    }
+                    const nodes = contents.filter(Arrays_5.Truthy).map(nodeForInsertion);
+                    element.prepend(...nodes);
+                    return nodes;
+                },
+                insert(direction, sibling, ...contents) {
+                    if (!element) {
+                        const siblingIndex = indexOfVirtualChild(sibling);
+                        const index = siblingIndex === -1 ? direction === 'before' ? 0 : children.length : siblingIndex + (direction === 'after' ? 1 : 0);
+                        children.splice(index, 0, ...prepareVirtualChildren(contents));
+                        return [];
+                    }
+                    const nodes = contents.filter(Arrays_5.Truthy).map(nodeForInsertion);
+                    const siblingElement = sibling ? Component.requireElement(sibling, 'insert child relative to sibling') : null;
+                    if (direction === 'before')
+                        for (let i = nodes.length - 1; i >= 0; i--)
+                            element.insertBefore(nodes[i], siblingElement);
+                    else {
+                        let previousNode = siblingElement;
+                        for (const node of nodes) {
+                            element.insertBefore(node, !previousNode ? element.firstChild : previousNode.nextSibling);
+                            previousNode = node;
+                        }
+                    }
+                    return nodes;
+                },
+                removeContents() {
+                    if (element) {
+                        Component.removeContents(element);
+                        return;
+                    }
+                    for (const child of children)
+                        if (Component.is(child))
+                            child.remove();
+                    children.splice(0, Infinity);
+                },
+                getChildCount() {
+                    return element?.childNodes.length ?? children.length;
+                },
+                getChildren() {
+                    return element ? [...element.childNodes] : [...children];
+                },
+                takeChildren() {
+                    if (element)
+                        return [...element.childNodes];
+                    const transferred = children.splice(0, Infinity);
+                    for (const child of transferred)
+                        if (Component.is(child))
+                            virtualParentDetach.delete(child);
+                    return transferred.map(nodeForInsertion);
+                },
+                addEventListener(event, handler, options) {
+                    listeners.push({ event, handler, options });
+                    element?.addEventListener(event, handler, options);
+                },
+                removeEventListener(event, handler) {
+                    for (let i = listeners.length - 1; i >= 0; i--)
+                        if (listeners[i].event === event && listeners[i].handler === handler)
+                            listeners.splice(i, 1);
+                    element?.removeEventListener(event, handler);
+                },
+                queueDispatch(callback, bubble) {
+                    ;
+                    (bubble ? queuedBubbles : queuedEmits).push(callback);
+                },
+                flushQueuedDispatches(bubble) {
+                    const queue = bubble ? queuedBubbles : queuedEmits;
+                    for (const callback of queue.splice(0, Infinity))
+                        callback();
+                },
+                onRealise(callback) {
+                    if (element)
+                        callback();
+                    else
+                        onRealiseCallbacks.push(callback);
+                },
+                deferRealisation() {
+                    deferringRealisation = true;
+                },
+                flushDeferredRealisation() {
+                    deferringRealisation = false;
+                    for (const callback of queuedRealisations.splice(0, Infinity))
+                        callback();
+                },
+                runOrQueueRealisation(callback) {
+                    if (!deferringRealisation)
+                        return false;
+                    queuedRealisations.push(callback);
+                    return true;
+                },
+            };
+            return controller;
+            function ensureAttributeOrder(attribute) {
+                if (!attributeOrder.includes(attribute))
+                    attributeOrder.push(attribute);
+            }
+            function removeAttributeOrder(attribute) {
+                const index = attributeOrder.indexOf(attribute);
+                if (index !== -1)
+                    attributeOrder.splice(index, 1);
+            }
+            function indexOfVirtualChild(sibling) {
+                if (!sibling)
+                    return -1;
+                const siblingComponent = Component.get(sibling);
+                return children.findIndex(child => true
+                    && (child === sibling
+                        || child === siblingComponent
+                        || (Component.is(child) && child.element === sibling)));
+            }
+            function nodeForInsertion(content) {
+                if (Component.is(content))
+                    virtualParentDetach.get(content)?.();
+                return Component.is(content) ? getDom(content).realiseForInsertion() : content;
+            }
+            function prepareVirtualChildren(contents) {
+                return contents.filter(Arrays_5.Truthy).map(content => {
+                    if (Component.is(content)) {
+                        virtualParentDetach.get(content)?.();
+                        content.element?.remove();
+                        virtualParentDetach.set(content, () => {
+                            const index = children.indexOf(content);
+                            if (index !== -1)
+                                children.splice(index, 1);
+                            virtualParentDetach.delete(content);
+                        });
+                    }
+                    else {
+                        content.parentNode?.removeChild(content);
+                    }
+                    return content;
+                });
+            }
+        }
     }
     function emitInsert(component) {
         if (!component)
+            return;
+        getDom(component).flushQueuedDispatches(true);
+        const element = component.element;
+        if (!element)
             return;
         ComponentPerf.Rect(component)?.markDirty();
         for (const callback of ComponentPerf.CallbacksOnInsertions.get(component))
             callback();
         if (component.classes.has(Classes.ReceiveInsertEvents))
             component.event.emit('insert');
-        const descendantsListeningForEvent = component.element.getElementsByClassName(Classes.ReceiveAncestorInsertEvents);
+        const descendantsListeningForEvent = element.getElementsByClassName(Classes.ReceiveAncestorInsertEvents);
         for (const descendant of descendantsListeningForEvent)
             descendant.component?.event.emit('ancestorInsert');
-        for (const descendant of component.element.getElementsByClassName(Classes.HasRect))
+        for (const descendant of element.getElementsByClassName(Classes.HasRect))
             ComponentPerf.Rect(descendant.component)?.markDirty();
-        for (const descendant of component.element.getElementsByClassName(Classes.HasStatesToMarkDirtyOnInsertions))
+        for (const descendant of element.getElementsByClassName(Classes.HasStatesToMarkDirtyOnInsertions))
             for (const callback of ComponentPerf.CallbacksOnInsertions.get(descendant.component))
                 callback();
-        let cursor = component.element.parentElement;
+        let cursor = element.parentElement;
         while (cursor) {
             if (cursor.classList.contains(Classes.ReceiveDescendantInsertEvents))
                 cursor.component?.event.emit('descendantInsert');
@@ -3645,13 +4026,16 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
     }
     function updateRooted(component) {
         if (component) {
-            const rooted = document.documentElement.contains(component.element);
+            const element = component.element;
+            if (!element)
+                return;
+            const rooted = document.documentElement.contains(element);
             if (component.rooted.value === rooted)
                 return;
             component.rooted.asMutable?.setValue(rooted);
             if (component.classes.has(Classes.ReceiveRootedEvents))
                 component.event.emit(rooted ? 'root' : 'unroot');
-            for (const descendant of component.element.querySelectorAll('*')) {
+            for (const descendant of element.querySelectorAll('*')) {
                 const component = descendant.component;
                 if (component) {
                     component.rooted.asMutable?.setValue(rooted);
@@ -3664,7 +4048,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
     function emitRemove(component) {
         if (!component)
             return;
-        let cursor = component.element.parentElement;
+        let cursor = component.element?.parentElement;
         while (cursor) {
             if (cursor.classList.contains(Classes.ReceiveDescendantRemoveEvents))
                 cursor.component?.event.emit('descendantRemove');
@@ -3698,9 +4082,32 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             return is(from) ? from.element : from;
         }
         Component.element = element;
+        function realise(from) {
+            return is(from) ? getDom(from).realiseForInsertion() : from;
+        }
+        Component.realise = realise;
+        function requireElement(from, reason = 'element required') {
+            if (!is(from))
+                return from;
+            return getDom(from).requireElement(reason);
+        }
+        Component.requireElement = requireElement;
+        function hasElement(component) {
+            return !!getDom(component).element;
+        }
+        Component.hasElement = hasElement;
+        function isRealised(component) {
+            return getDom(component).realised;
+        }
+        Component.isRealised = isRealised;
+        Component.isRealized = isRealised;
+        function getDomController(component) {
+            return getDom(component);
+        }
+        Component.getDomController = getDomController;
         function wrap(element) {
             const component = Component();
-            (0, Objects_2.mutable)(component).element = element;
+            getDom(component).adoptElement(element);
             component.rooted.asMutable?.setValue(element === window || element === document || document.contains(element));
             return component;
         }
@@ -3727,11 +4134,13 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return applyExtensions(result);
             };
             const simpleBuilder = (...params) => {
+                const initialComponent = initialBuilder(type);
+                getDom(initialComponent).deferRealisation();
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-                const component = realBuilder(undefined, ...params);
+                const component = realBuilder(initialComponent, ...params);
                 if (component instanceof Promise)
-                    return component.then(applyExtensions).then(completeComponent);
-                return completeComponent(applyExtensions(component));
+                    return component.then(applyExtensions).then(component => completeComponent(component, initialComponent));
+                return completeComponent(applyExtensions(component), initialComponent);
             };
             Object.defineProperty(builder, 'name', { value: name, configurable: true });
             Object.defineProperty(builder, Symbol.toStringTag, { value: name, configurable: true });
@@ -3779,13 +4188,13 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 editableComponent[SYMBOL_EXTENSIONS_APPLIED].push(realBuilder);
                 return component;
             }
-            function completeComponent(component) {
+            function completeComponent(component, initialComponent) {
                 if (!component)
                     return component;
                 if (name) {
                     component[Symbol.toStringTag] ??= name.toString();
                     const tagName = `:${name.kebabcase}`;
-                    if (component.element.tagName === 'SPAN') {
+                    if (getDom(component).tagName === 'SPAN') {
                         component.replaceElement(tagName);
                     }
                     else {
@@ -3794,6 +4203,9 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 }
                 component.supers.value.push(simpleBuilder);
                 component.supers.emit();
+                if (initialComponent && initialComponent !== component)
+                    getDom(initialComponent).flushDeferredRealisation();
+                getDom(component).flushDeferredRealisation();
                 return component;
             }
             async function ensureOriginalComponentNotSubscriptionOwner(original) {
@@ -3896,7 +4308,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         }
         Component.removeContents = removeContents;
         function closest(builder, element) {
-            let cursor = is(element) ? element.element : element ?? null;
+            let cursor = is(element) ? element.element ?? null : element ?? null;
             while (cursor) {
                 const component = cursor?.component;
                 if (component?.is(builder))
@@ -3907,7 +4319,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         Component.closest = closest;
         function findAll(builder, element) {
             const components = [];
-            const cursor = is(element) ? element.element : element ?? null;
+            const cursor = is(element) ? element.element ?? null : element ?? null;
             if (cursor) {
                 const walker = document.createTreeWalker(cursor, NodeFilter.SHOW_ELEMENT);
                 let node;
@@ -3979,7 +4391,7 @@ define("kitsui/component/Dialog", ["require", "exports", "kitsui/Component", "ki
                     return dialog;
                 unbind?.();
                 addOpenDialog(dialog);
-                dialog.element[modal ? 'showModal' : 'show']();
+                dialog.element?.[modal ? 'showModal' : 'show']();
                 opened.value = true;
                 willOpen.value = false;
                 return dialog;
@@ -3990,7 +4402,7 @@ define("kitsui/component/Dialog", ["require", "exports", "kitsui/Component", "ki
                     return dialog;
                 unbind?.();
                 removeOpenDialog(dialog);
-                dialog.element.close();
+                dialog.element?.close();
                 opened.value = false;
                 willClose.value = false;
                 return dialog;
@@ -4003,11 +4415,11 @@ define("kitsui/component/Dialog", ["require", "exports", "kitsui/Component", "ki
                 unbind?.();
                 if (open) {
                     addOpenDialog(dialog);
-                    dialog.element[modal ? 'showModal' : 'show']();
+                    dialog.element?.[modal ? 'showModal' : 'show']();
                 }
                 else {
                     removeOpenDialog(dialog);
-                    dialog.element.close();
+                    dialog.element?.close();
                 }
                 opened.value = open ?? !opened.value;
                 dialog[willChangeStateName].asMutable?.setValue(false);
@@ -4020,11 +4432,11 @@ define("kitsui/component/Dialog", ["require", "exports", "kitsui/Component", "ki
                     dialog[willChangeStateName].asMutable?.setValue(true);
                     if (open) {
                         addOpenDialog(dialog);
-                        dialog.element[modal ? 'showModal' : 'show']();
+                        dialog.element?.[modal ? 'showModal' : 'show']();
                     }
                     else {
                         removeOpenDialog(dialog);
-                        dialog.element.close();
+                        dialog.element?.close();
                     }
                     opened.value = open;
                     dialog[willChangeStateName].asMutable?.setValue(false);
@@ -4081,6 +4493,7 @@ define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "k
         const loading = component.addStyleTargets(LoadingStyleTargets);
         const style = loading.styleTargets;
         const storage = (0, Component_3.default)().setOwner(component);
+        Component_3.default.getDomController(storage).realiseForInsertion();
         const spinner = (0, Component_3.default)().style(style.Spinner);
         const progressBar = (0, Component_3.default)().style(style.ProgressBar);
         const messageText = (0, Component_3.default)().style(style.MessageText);
@@ -4488,12 +4901,12 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     .setOwner(component)
                     .setCloseDueToMouseInputFilter(event => {
                     const hovered = HoverListener_1.default.hovered() ?? null;
-                    if (component.element.contains(hovered))
+                    if (component.element?.contains(hovered))
                         return false;
                     return true;
                 })
                     .event.subscribe('toggle', e => {
-                    if (!popover.element.matches(':popover-open')) {
+                    if (!popover.element?.matches(':popover-open')) {
                         isShown = false;
                         component.clickState = false;
                         Mouse_3.default.offMove(updatePopoverState);
@@ -4616,7 +5029,9 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                         if (popoverEvent === 'hover/longpress')
                             return;
                         const closestHandlesMouseEvents = event.target.component?.closest(InputBus_1.HandlesMouseEvents);
-                        if (closestHandlesMouseEvents && closestHandlesMouseEvents?.element !== component.element && component.element.contains(closestHandlesMouseEvents.element))
+                        const hostElement = component.element;
+                        const closestElement = closestHandlesMouseEvents?.element;
+                        if (hostElement && closestHandlesMouseEvents && closestElement && closestElement !== hostElement && hostElement.contains(closestElement))
                             return;
                         component.clickState = !component.clickState;
                         event.stopPropagation();
@@ -4733,12 +5148,16 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     if (!component.popover)
                         return false;
                     const hovered = HoverListener_1.default.hovered() ?? null;
-                    if (component.element.contains(hovered) || component.popover.element.contains(hovered))
+                    const hostElement = component.element;
+                    const popoverElement = component.popover.element;
+                    if (!hostElement || !popoverElement)
+                        return false;
+                    if (hostElement.contains(hovered) || popoverElement.contains(hovered))
                         return false;
                     const clearsPopover = hovered?.closest('[data-clear-popover]');
                     if (!clearsPopover)
                         return false;
-                    const clearsPopoverContainsHost = clearsPopover.contains(component.element);
+                    const clearsPopoverContainsHost = clearsPopover.contains(hostElement);
                     if (clearsPopoverContainsHost)
                         return false;
                     const clearsPopoverWithinPopover = clearsPopover.component?.closest(Popover);
@@ -4886,7 +5305,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                 popover
                     // .style.remove('popover--normal-stacking--hidden')
                     .attributes.set('popover', 'manual')
-                    .element.togglePopover(shown);
+                    .tweak(popover => popover.element?.togglePopover(shown));
             (0, Objects_3.mutable)(popover).lastStateChangeTime = Date.now();
         }
         function onInputDown(_, event) {
@@ -4899,7 +5318,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
             if (popover.rooted.value)
                 popover
                     .attributes.set('popover', 'manual')
-                    .element.togglePopover(false);
+                    .tweak(popover => popover.element?.togglePopover(false));
             popover.visible.asMutable?.setValue(false);
             (0, Objects_3.mutable)(popover).lastStateChangeTime = Date.now();
         }
@@ -4907,7 +5326,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
             if (!descendant)
                 return false;
             const node = Component_5.default.is(descendant) ? descendant.element : descendant;
-            if (popover.element.contains(node))
+            if (node && popover.element?.contains(node))
                 return true;
             for (const child of popover.popoverChildren.value)
                 if (child === descendant)
@@ -4927,9 +5346,10 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
     });
     exports.default = Popover;
 });
-define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_14) {
+define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_6, State_14) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    Component_6 = __importDefault(Component_6);
     State_14 = __importDefault(State_14);
     function ComponentInsertionTransaction(component, onEnd) {
         let unuseComponentRemove = component?.removed.useManual(removed => removed && onComponentRemove());
@@ -4939,7 +5359,7 @@ define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsu
             isInsertionDestination: true,
             closed,
             get size() {
-                return component?.element.children.length ?? 0;
+                return component ? Component_6.default.getDomController(component).getChildren().length : 0;
             },
             append(...contents) {
                 if (closed.value) {
@@ -5052,21 +5472,24 @@ define("kitsui/utility/AbortablePromise", ["require", "exports"], function (requ
     })(AbortablePromise || (AbortablePromise = {}));
     exports.default = AbortablePromise;
 });
-define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kitsui/ext/ComponentInsertionTransaction", "kitsui/utility/AbortablePromise", "kitsui/utility/State"], function (require, exports, Component_6, ComponentInsertionTransaction_1, AbortablePromise_1, State_15) {
+define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kitsui/ext/ComponentInsertionTransaction", "kitsui/utility/AbortablePromise", "kitsui/utility/State"], function (require, exports, Component_7, ComponentInsertionTransaction_1, AbortablePromise_1, State_15) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Component_6 = __importStar(Component_6);
+    Component_7 = __importStar(Component_7);
     ComponentInsertionTransaction_1 = __importDefault(ComponentInsertionTransaction_1);
     AbortablePromise_1 = __importDefault(AbortablePromise_1);
     State_15 = __importDefault(State_15);
-    Component_6.default.extend(component => {
+    Component_7.default.extend(component => {
         let slot;
         component.extend(component => ({
             hasContent() {
-                const walker = document.createTreeWalker(component.element, NodeFilter.SHOW_TEXT);
-                while (walker.nextNode())
-                    if (walker.currentNode.textContent?.trim())
-                        return true;
+                const element = component.element;
+                if (element) {
+                    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+                    while (walker.nextNode())
+                        if (walker.currentNode.textContent?.trim())
+                            return true;
+                }
                 for (const child of component.getDescendants())
                     if (!child.is(Slot))
                         return true;
@@ -5074,40 +5497,40 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             appendWhen(state, ...contents) {
                 const slot = Slot().appendTo(component).preserveContents();
-                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(...contents);
+                let temporaryHolder = (0, Component_7.default)().setOwner(slot).append(...contents);
                 slot.if(state, slot => {
                     slot.append(...contents);
-                    temporaryHolder?.remove();
+                    releaseTemporaryHolder(temporaryHolder);
                     temporaryHolder = undefined;
                 });
                 return component;
             },
             prependWhen(state, ...contents) {
                 const slot = Slot().prependTo(component).preserveContents();
-                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(...contents);
+                let temporaryHolder = (0, Component_7.default)().setOwner(slot).append(...contents);
                 slot.if(state, slot => {
                     slot.append(...contents);
-                    temporaryHolder?.remove();
+                    releaseTemporaryHolder(temporaryHolder);
                     temporaryHolder = undefined;
                 });
                 return component;
             },
             insertWhen(state, direction, sibling, ...contents) {
                 const slot = Slot().insertTo(component, direction, sibling).preserveContents();
-                let temporaryHolder = (0, Component_6.default)().setOwner(slot).append(...contents);
+                let temporaryHolder = (0, Component_7.default)().setOwner(slot).append(...contents);
                 slot.if(state, slot => {
                     slot.append(...contents);
-                    temporaryHolder?.remove();
+                    releaseTemporaryHolder(temporaryHolder);
                     temporaryHolder = undefined;
                 });
                 return component;
             },
             appendToWhen(state, destination) {
                 const newSlot = Slot().appendTo(destination).preserveContents();
-                let temporaryHolder = (0, Component_6.default)().setOwner(newSlot).append(component);
+                let temporaryHolder = (0, Component_7.default)().setOwner(newSlot).append(component);
                 newSlot.if(state, slot => {
                     slot.append(component);
-                    temporaryHolder?.remove();
+                    releaseTemporaryHolder(temporaryHolder);
                     temporaryHolder = undefined;
                 });
                 slot?.remove?.();
@@ -5116,10 +5539,10 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             prependToWhen(state, destination) {
                 const newSlot = Slot().prependTo(destination).preserveContents();
-                let temporaryHolder = (0, Component_6.default)().setOwner(newSlot).append(component);
+                let temporaryHolder = (0, Component_7.default)().setOwner(newSlot).append(component);
                 newSlot.if(state, slot => {
                     slot.append(component);
-                    temporaryHolder?.remove();
+                    releaseTemporaryHolder(temporaryHolder);
                     temporaryHolder = undefined;
                 });
                 slot?.remove?.();
@@ -5128,10 +5551,10 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             insertToWhen(state, destination, direction, sibling) {
                 const newSlot = Slot().insertTo(destination, direction, sibling).preserveContents();
-                let temporaryHolder = (0, Component_6.default)().setOwner(newSlot).append(component);
+                let temporaryHolder = (0, Component_7.default)().setOwner(newSlot).append(component);
                 newSlot.if(state, slot => {
                     slot.append(component);
-                    temporaryHolder?.remove();
+                    releaseTemporaryHolder(temporaryHolder);
                     temporaryHolder = undefined;
                 });
                 slot?.remove?.();
@@ -5139,8 +5562,14 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 return component;
             },
         }));
+        function releaseTemporaryHolder(temporaryHolder) {
+            if (!temporaryHolder)
+                return;
+            Component_7.default.getDomController(temporaryHolder).takeChildren();
+            temporaryHolder.remove();
+        }
     });
-    const Slot = Object.assign(Component_6.default.Builder((slot) => {
+    const Slot = Object.assign(Component_7.default.Builder((slot) => {
         let unuse;
         let cleanup;
         let abort;
@@ -5203,10 +5632,10 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                     abortTransaction = undefined;
                     contentsOwner?.remove();
                     contentsOwner = State_15.default.Owner.create();
-                    const component = (0, Component_6.default)().setOwner(contentsOwner);
+                    const component = (0, Component_7.default)().setOwner(contentsOwner);
                     const transaction = Object.assign((0, ComponentInsertionTransaction_1.default)(component, () => {
                         slot.removeContents();
-                        slot.append(...component.element.children);
+                        slot.append(...Component_7.default.getDomController(component).takeChildren());
                         inserted = true;
                         component.remove();
                     }), {
@@ -5297,10 +5726,10 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
         function handleSlotInitialiser(initialiser) {
             contentsOwner?.remove();
             contentsOwner = State_15.default.Owner.create();
-            const component = (0, Component_6.default)().setOwner(contentsOwner);
+            const component = (0, Component_7.default)().setOwner(contentsOwner);
             const transaction = Object.assign((0, ComponentInsertionTransaction_1.default)(component, () => {
                 slot.removeContents();
-                slot.append(...component.element.children);
+                slot.append(...Component_7.default.getDomController(component).takeChildren());
                 inserted = true;
                 component.remove();
             }), {
@@ -5323,13 +5752,13 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 result = undefined;
             transaction.close();
             abortTransaction = undefined;
-            if (Component_6.default.is(result)) {
+            if (Component_7.default.is(result)) {
                 result.appendTo(slot);
                 inserted = true;
                 cleanup = undefined;
                 return;
             }
-            if (Component_6.ComponentInsertionDestination.is(result)) {
+            if (Component_7.ComponentInsertionDestination.is(result)) {
                 cleanup = undefined;
                 return;
             }
@@ -5340,16 +5769,16 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
     });
     exports.default = Slot;
 });
-define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "kitsui/component/Popover"], function (require, exports, Component_7, Popover_1) {
+define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "kitsui/component/Popover"], function (require, exports, Component_8, Popover_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Component_7 = __importDefault(Component_7);
+    Component_8 = __importDefault(Component_8);
     Popover_1 = __importDefault(Popover_1);
     var TooltipStyleTargets;
     (function (TooltipStyleTargets) {
         TooltipStyleTargets[TooltipStyleTargets["Tooltip"] = 0] = "Tooltip";
     })(TooltipStyleTargets || (TooltipStyleTargets = {}));
-    const Tooltip = (0, Component_7.default)((component) => {
+    const Tooltip = (0, Component_8.default)((component) => {
         const tooltip = component.and(Popover_1.default)
             .setDelay(200)
             .setMousePadding(0)
@@ -5360,10 +5789,10 @@ define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "k
             .anchor.add('aligned right', 'off bottom')
             .anchor.add('aligned right', 'off top');
     });
-    Component_7.default.extend(component => {
+    Component_8.default.extend(component => {
         component.extend((component) => ({
             setTooltip(initialiserOrTooltip) {
-                if (Component_7.default.is(initialiserOrTooltip))
+                if (Component_8.default.is(initialiserOrTooltip))
                     return component.setPopover('hover/longpress', initialiserOrTooltip);
                 const initialiser = initialiserOrTooltip;
                 return component.setPopover('hover/longpress', (popover, host) => initialiser(popover.and(Tooltip), host));
@@ -5372,7 +5801,7 @@ define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "k
     });
     exports.default = Tooltip;
 });
-define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/component/Label", "kitsui/component/Loading", "kitsui/component/Popover", "kitsui/component/Slot", "kitsui/component/Tooltip", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Dialog_2, Label_1, Loading_1, Popover_2, Slot_1, Tooltip_1, Component_8, State_16) {
+define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/component/Label", "kitsui/component/Loading", "kitsui/component/Popover", "kitsui/component/Slot", "kitsui/component/Tooltip", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Dialog_2, Label_1, Loading_1, Popover_2, Slot_1, Tooltip_1, Component_9, State_16) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Kit = exports.State = exports.Component = void 0;
@@ -5382,7 +5811,7 @@ define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/compo
     Popover_2 = __importDefault(Popover_2);
     Slot_1 = __importDefault(Slot_1);
     Tooltip_1 = __importDefault(Tooltip_1);
-    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_8).default; } });
+    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_9).default; } });
     Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_16).default; } });
     var Kit;
     (function (Kit) {
@@ -5401,6 +5830,7 @@ define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function 
     exports.default = default_1;
     function default_1(owner, state, handler) {
         const store = (0, kitsui_1.Component)().setOwner(owner);
+        kitsui_1.Component.getDomController(store).realiseForInsertion();
         const parts = new Map();
         const seen = new Set();
         const Part = (unique, value, initialiser) => {
