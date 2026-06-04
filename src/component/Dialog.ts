@@ -77,7 +77,7 @@ const Dialog = Object.assign(
 
 				unbind?.()
 				addOpenDialog(dialog)
-				dialog.element[modal ? 'showModal' : 'show']()
+				dialog.element?.[modal ? 'showModal' : 'show']()
 				opened.value = true
 				willOpen.value = false
 				return dialog
@@ -89,7 +89,7 @@ const Dialog = Object.assign(
 
 				unbind?.()
 				removeOpenDialog(dialog)
-				dialog.element.close()
+				dialog.element?.close()
 				opened.value = false
 				willClose.value = false
 				return dialog
@@ -103,11 +103,11 @@ const Dialog = Object.assign(
 				unbind?.()
 				if (open) {
 					addOpenDialog(dialog)
-					dialog.element[modal ? 'showModal' : 'show']()
+					dialog.element?.[modal ? 'showModal' : 'show']()
 				}
 				else {
 					removeOpenDialog(dialog)
-					dialog.element.close()
+					dialog.element?.close()
 				}
 
 				opened.value = open ?? !opened.value
@@ -122,11 +122,11 @@ const Dialog = Object.assign(
 
 					if (open) {
 						addOpenDialog(dialog)
-						dialog.element[modal ? 'showModal' : 'show']()
+						dialog.element?.[modal ? 'showModal' : 'show']()
 					}
 					else {
 						removeOpenDialog(dialog)
-						dialog.element.close()
+						dialog.element?.close()
 					}
 
 					opened.value = open

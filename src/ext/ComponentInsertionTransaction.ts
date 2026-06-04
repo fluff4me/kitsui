@@ -1,4 +1,4 @@
-import type Component from 'Component'
+import Component from 'Component'
 import type { ComponentInsertionDestination } from 'Component'
 import type { Mutable } from 'utility/Objects'
 import State from 'utility/State'
@@ -19,7 +19,7 @@ function ComponentInsertionTransaction (component?: Component, onEnd?: (transact
 		isInsertionDestination: true,
 		closed,
 		get size () {
-			return component?.element.children.length ?? 0
+			return component ? Component.getDomController(component).getChildren().length : 0
 		},
 		append (...contents) {
 			if (closed.value) {

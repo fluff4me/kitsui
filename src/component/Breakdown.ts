@@ -13,6 +13,7 @@ interface BreakdownPartConstructor {
 
 export default function <T> (owner: State.Owner, state: State<T>, handler: (value: T, Part: BreakdownPartConstructor, Store: Component) => unknown): void {
 	const store = Component().setOwner(owner)
+	Component.getDomController(store).realiseForInsertion()
 	const parts = new Map<unknown, BreakdownPart<unknown>>()
 	const seen: Set<unknown> = new Set()
 	const Part: BreakdownPartConstructor = <B> (unique: unknown, value?: B, initialiser?: (component: Component, state: State<B>) => unknown): Component => {

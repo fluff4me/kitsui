@@ -468,10 +468,14 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 			}
 
 			// this.surface.classes.toggle(location.padX, "pad-x")
-			host.element.style.left = location.xPosSide === 'left' ? `${location.x}px` : 'auto'
-			host.element.style.right = location.xPosSide === 'right' ? `${location.x}px` : 'auto'
-			host.element.style.top = location.yPosSide === 'top' ? `${location.y}px` : 'auto'
-			host.element.style.bottom = location.yPosSide === 'bottom' ? `${location.y}px` : 'auto'
+			const element = host.element
+			if (!element)
+				return host
+
+			element.style.left = location.xPosSide === 'left' ? `${location.x}px` : 'auto'
+			element.style.right = location.xPosSide === 'right' ? `${location.x}px` : 'auto'
+			element.style.top = location.yPosSide === 'top' ? `${location.y}px` : 'auto'
+			element.style.bottom = location.yPosSide === 'bottom' ? `${location.y}px` : 'auto'
 			host.rect.markDirty()
 			if (!rendered) {
 				const id = ++renderId
@@ -504,12 +508,16 @@ function AnchorManipulator<HOST extends Component> (host: HOST): AnchorManipulat
 		}
 		else {
 			ref = selector.startsWith('>>')
-				? from?.element.querySelector(selector.slice(2))?.component
-				: from?.element.closest(selector)?.component
+				? from?.element?.querySelector(selector.slice(2))?.component
+				: from?.element?.closest(selector)?.component
 
 			if (ref) {
-				if (getComputedStyle(ref.element).display === 'contents') {
-					const children = ref.element.children
+				const refElement = ref.element
+				if (!refElement)
+					return undefined
+
+				if (getComputedStyle(refElement).display === 'contents') {
+					const children = refElement.children
 					if (!children.length)
 						console.warn('Anchor ref has display: contents and no children')
 					else {

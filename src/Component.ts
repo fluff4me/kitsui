@@ -101,6 +101,7 @@ interface BaseComponent<ELEMENT extends HTMLElement = HTMLElement> extends Compo
 	readonly style: StyleManipulator<this>
 	readonly anchor: AnchorManipulator<this>
 	readonly nojit: Partial<this>
+	readonly __dom: ComponentDomController
 
 	readonly hovered: State<boolean>
 	readonly hoveredTime: State<number | undefined>
@@ -121,8 +122,9 @@ interface BaseComponent<ELEMENT extends HTMLElement = HTMLElement> extends Compo
 	readonly name: State<string | undefined>
 	readonly rect: State.JIT<DOMRect>
 	readonly tagName: Uppercase<keyof HTMLElementTagNameMap>
+	readonly childCount: number
 
-	readonly element: ELEMENT
+	readonly element?: ELEMENT
 
 	readonly fullType: string
 
@@ -226,6 +228,7 @@ interface BaseComponent<ELEMENT extends HTMLElement = HTMLElement> extends Compo
 	monitorScrollEvents (): this
 
 	onRooted (callback: (component: this) => unknown): this
+	onRealise (callback: (component: this) => unknown): this
 	onRemove (owner: Component, callback: (component: this) => unknown): this
 	onRemoveManual (callback: (component: this) => unknown): this
 
@@ -293,6 +296,64 @@ interface ComponentLeakDetector {
 	built: number
 	component: Component
 }
+
+interface PendingEventListener {
+	event: PropertyKey
+	handler: EventListener
+	options?: AddEventListenerOptions
+}
+
+export interface ComponentDomController {
+	readonly element: HTMLElement | undefined
+	readonly realised: boolean
+	readonly sealed: boolean
+	readonly tagName: string
+	tag: keyof HTMLElementTagNameMap | string
+	requireElement (reason: string): HTMLElement
+	realiseForInsertion (): HTMLElement
+	adoptElement (element: HTMLElement): void
+	assertComposable (method: string): void
+	setAttribute (attribute: string, value?: string): void
+	hasAttribute (attribute: string): boolean
+	getAttribute (attribute: string): string | undefined
+	removeAttribute (attribute: string): void
+	prependAttribute (attribute: string, value?: string): void
+	insertAttribute (referenceAttribute: string, direction: 'before' | 'after', attribute: string, value?: string): void
+	getAttributes (): [string, string][]
+	addClasses (...classes: string[]): void
+	removeClasses (...classes: string[]): void
+	hasClasses (...classes: string[]): boolean
+	someClasses (...classes: string[]): boolean
+	getClasses (): string[]
+	setStyleProperty (property: string, value?: string | number | null): void
+	getStyleProperty (property: string): string | undefined
+	removeStyleProperty (property: string): void
+	append (...contents: (Component | Node | Falsy)[]): Node[]
+	prepend (...contents: (Component | Node | Falsy)[]): Node[]
+	insert (direction: 'before' | 'after', sibling: Component | Element | undefined, ...contents: (Component | Node | Falsy)[]): Node[]
+	removeContents (): void
+	getChildCount (): number
+	getChildren (): (Component | Node)[]
+	takeChildren (): Node[]
+	addEventListener (event: PropertyKey, handler: EventListener, options?: AddEventListenerOptions): void
+	removeEventListener (event: PropertyKey, handler: EventListener): void
+	queueDispatch (callback: () => unknown, bubble: boolean): void
+	flushQueuedDispatches (bubble: boolean): void
+	onRealise (callback: () => unknown): void
+	deferRealisation (): void
+	flushDeferredRealisation (): void
+	runOrQueueRealisation (callback: () => unknown): boolean
+}
+
+interface ComponentDomHost {
+	__dom: ComponentDomController
+}
+
+const virtualParentDetach = new WeakMap<Component, () => void>()
+
+function getDom (component: Component): ComponentDomController {
+	return (component as Component & ComponentDomHost).__dom
+}
 let componentLeakDetectors: ComponentLeakDetector[] = []
 const timeUntilLeakWarning = 10000
 setInterval(() => {
@@ -326,6 +387,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		return Component.Builder(type as keyof HTMLElementTagNameMap, builder as AnyFunction)
 
 	type ??= 'span'
+	type = type
 
 	if (!canBuildComponents)
 		throw new Error('Components cannot be built yet')
@@ -345,11 +407,15 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 	const rooted = State(false)
 	const removed = State(false)
 
+	const dom = createDomController()
 	let component = ({
 		supers: State([]),
 		isComponent: true,
 		isInsertionDestination: true,
-		element: document.createElement(type),
+		__dom: dom,
+		get element () {
+			return dom.element
+		},
 		get removed () {
 			componentLeakDetectors.push({
 				built: Date.now(),
@@ -361,7 +427,10 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		nojit: nojit as Component,
 
 		get tagName () {
-			return component.element.tagName as Uppercase<keyof HTMLElementTagNameMap>
+			return dom.tagName as Uppercase<keyof HTMLElementTagNameMap>
+		},
+		get childCount () {
+			return dom.getChildCount()
 		},
 
 		setOwner: newOwner => {
@@ -380,24 +449,30 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		hasOwner: () => !!unuseOwnerRemove,
 
 		replaceElement: (newElement: HTMLElement | keyof HTMLElementTagNameMap, keepContent?: boolean) => {
-			if (typeof newElement === 'string' && newElement.toUpperCase() === component.element.tagName.toUpperCase())
+			dom.assertComposable('replaceElement')
+			if (typeof newElement === 'string' && newElement.toUpperCase() === dom.tagName.toUpperCase())
 				return component // already correct tag type
+
+			if (!dom.realised && typeof newElement === 'string') {
+				dom.tag = newElement
+				return component
+			}
 
 			if (typeof newElement === 'string')
 				newElement = document.createElement(newElement)
 
-			const oldElement = component.element
+			const oldElement = dom.requireElement('replace element')
 
 			if (!keepContent) {
 				Component.removeContents(newElement)
-				newElement.replaceChildren(...component.element.childNodes)
+				newElement.replaceChildren(...oldElement.childNodes)
 			}
 
-			if (component.element.parentNode)
-				component.element.replaceWith(newElement)
+			if (oldElement.parentNode)
+				oldElement.replaceWith(newElement)
 
-			component.element = newElement
-			type = component.element.tagName as keyof HTMLElementTagNameMap
+			dom.adoptElement(newElement)
+			type = dom.tagName as keyof HTMLElementTagNameMap
 
 			ELEMENT_TO_COMPONENT_MAP.delete(oldElement)
 			ELEMENT_TO_COMPONENT_MAP.set(newElement, component)
@@ -411,6 +486,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		as: (builder): any => !builder || component.supers.value.includes(builder) ? component : undefined,
 		cast: (): any => component,
 		and<PARAMS extends any[], COMPONENT extends Component> (builder: Component.Builder<PARAMS, COMPONENT> | Component.BuilderAsync<PARAMS, COMPONENT> | Component.Extension<PARAMS, COMPONENT> | Component.ExtensionAsync<PARAMS, COMPONENT>, ...params: PARAMS) {
+			dom.assertComposable('and')
 			if (component.is(builder as never))
 				return component
 
@@ -433,7 +509,9 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 			return component as any
 		},
-		extend: extension => Object.assign(component, extension(component as never)) as never,
+		extend: extension => {
+			return Object.assign(component, extension(component as never)) as never
+		},
 		override: (property, provider) => {
 			const original = component[property]
 			component[property] = provider(component, original)
@@ -567,15 +645,19 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			[SYMBOL_RECT_STATE]: undefined as State.JIT<DOMRect> | undefined,
 		},
 		get rect (): State.JIT<DOMRect> {
-			const rectState = State.JIT(() => component.element.getBoundingClientRect())
+			const rectState = State.JIT(() => dom.element?.getBoundingClientRect() ?? new DOMRect())
 			ComponentPerf.Rect.assign(component, rectState)
 
 			const oldMarkDirty = rectState.markDirty
 			rectState.markDirty = () => {
 				oldMarkDirty()
-				for (const descendant of this.element.getElementsByClassName(Classes.HasRect))
+				const element = dom.element
+				if (!element)
+					return rectState
+
+				for (const descendant of element.getElementsByClassName(Classes.HasRect))
 					ComponentPerf.Rect(descendant.component)?.markDirty()
-				for (const descendant of this.element.getElementsByClassName(Classes.ReceiveAncestorRectDirtyEvents))
+				for (const descendant of element.getElementsByClassName(Classes.ReceiveAncestorRectDirtyEvents))
 					descendant.component?.event.emit('ancestorRectDirty')
 				return rectState
 			}
@@ -610,11 +692,11 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 
 			function setId (id?: string) {
 				if (id) {
-					component.element.setAttribute('id', id)
+					dom.setAttribute('id', id)
 					component.id.asMutable?.setValue(id)
 				}
 				else {
-					component.element.removeAttribute('id')
+					dom.removeAttribute('id')
 					component.id.asMutable?.setValue(undefined)
 				}
 			}
@@ -636,11 +718,11 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			function setName (name?: string) {
 				if (name) {
 					name = name.replace(/[^\w-]+/g, '-').toLowerCase()
-					component.element.setAttribute('name', name)
+					dom.setAttribute('name', name)
 					component.name.asMutable?.setValue(name)
 				}
 				else {
-					component.element.removeAttribute('name')
+					dom.removeAttribute('name')
 					component.name.asMutable?.setValue(undefined)
 				}
 			}
@@ -651,13 +733,16 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		},
 
 		remove () {
+			virtualParentDetach.get(component)?.()
 			component.removeContents()
 
 			component.removed.asMutable?.setValue(true)
 			component.rooted.asMutable?.setValue(false)
 
-			component.element.component = undefined
-			component.element.remove()
+			if (dom.element) {
+				dom.element.component = undefined
+				dom.element.remove()
+			}
 
 			emitRemove(component)
 			if (component.classes.has(Classes.ReceiveRootedEvents))
@@ -669,27 +754,48 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			unuseNameState?.(); unuseNameState = undefined
 		},
 		appendTo (destination) {
-			destination.append(component.element)
+			if (ComponentInsertionDestination.is(destination)) {
+				destination.append(component)
+				return component
+			}
+			if (dom.runOrQueueRealisation(() => component.appendTo(destination)))
+				return component
+
+			const element = dom.realiseForInsertion()
+			destination.append(element)
 			component.emitInsert()
 			return component
 		},
 		prependTo (destination) {
-			destination.prepend(component.element)
+			if (ComponentInsertionDestination.is(destination)) {
+				destination.prepend(component)
+				return component
+			}
+			if (dom.runOrQueueRealisation(() => component.prependTo(destination)))
+				return component
+
+			const element = dom.realiseForInsertion()
+			destination.prepend(element)
 			component.emitInsert()
 			return component
 		},
 		insertTo (destination, direction, sibling) {
 			if (ComponentInsertionDestination.is(destination)) {
 				destination.insert(direction, sibling, component)
-				component.emitInsert()
+				if (!Component.is(destination) || Component.hasElement(destination))
+					component.emitInsert()
 				return component
 			}
 
-			const siblingElement = sibling ? Component.element(sibling) : null
+			if (dom.runOrQueueRealisation(() => component.insertTo(destination, direction, sibling)))
+				return component
+
+			const siblingElement = sibling ? Component.requireElement(sibling, 'insert relative to sibling') : null
+			const element = dom.realiseForInsertion()
 			if (direction === 'before')
-				destination.insertBefore(component.element, siblingElement)
+				destination.insertBefore(element, siblingElement)
 			else
-				destination.insertBefore(component.element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling)
+				destination.insertBefore(element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling)
 
 			component.emitInsert()
 			return component
@@ -705,8 +811,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				return component
 			}
 
-			const elements = contents.filter(Truthy).map(Component.element)
-			component.element.append(...elements)
+			const elements = dom.append(...contents)
 
 			for (const element of elements)
 				(element as Element).component?.emitInsert()
@@ -726,8 +831,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				return component
 			}
 
-			const elements = contents.filter(Truthy).map(Component.element)
-			component.element.prepend(...elements)
+			const elements = dom.prepend(...contents)
 
 			for (const element of elements)
 				(element as Element).component?.emitInsert()
@@ -747,15 +851,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				return component
 			}
 
-			const siblingElement = sibling ? Component.element(sibling) : null
-			const elements = contents.filter(Truthy).map(Component.element)
-
-			if (direction === 'before')
-				for (let i = elements.length - 1; i >= 0; i--)
-					component.element.insertBefore(elements[i], siblingElement)
-			else
-				for (const element of elements)
-					component.element.insertBefore(element, !siblingElement ? component.element.firstChild : siblingElement?.nextSibling)
+			const elements = dom.insert(direction, sibling, ...contents)
 
 			for (const element of elements)
 				(element as Element).component?.emitInsert()
@@ -765,7 +861,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			return component
 		},
 		removeContents () {
-			Component.removeContents(component.element)
+			dom.removeContents()
 			return component
 		},
 
@@ -786,24 +882,24 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		},
 
 		get parent () {
-			return component.element.parentElement?.component
+			return dom.element?.parentElement?.component
 		},
 		get previousSibling () {
-			return component.element.previousElementSibling?.component
+			return dom.element?.previousElementSibling?.component
 		},
 		getPreviousSibling (builder) {
 			const [sibling] = component.getPreviousSiblings(builder)
 			return sibling
 		},
 		get nextSibling () {
-			return component.element.nextElementSibling?.component
+			return dom.element?.nextElementSibling?.component
 		},
 		getNextSibling (builder) {
 			const [sibling] = component.getNextSiblings(builder)
 			return sibling
 		},
 		*getAncestorComponents (builder?: Component.BuilderLike) {
-			let cursor: HTMLElement | null = component.element
+			let cursor: HTMLElement | null | undefined = dom.element
 			while (cursor) {
 				cursor = cursor.parentElement
 				const component = cursor?.component
@@ -812,25 +908,27 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			}
 		},
 		*getChildren (builder?: Component.BuilderLike) {
-			for (const child of component.element.children) {
+			for (const child of dom.element?.children ?? []) {
 				const component = child.component
 				if (component?.is(builder))
 					yield component
 			}
 		},
 		*getSiblings (builder?: Component.BuilderLike) {
-			const parent = component.element.parentElement
+			const element = dom.element
+			const parent = element?.parentElement
 			for (const child of parent?.children ?? [])
-				if (child !== component.element) {
+				if (child !== element) {
 					const component = child.component
 					if (component?.is(builder))
 						yield component
 				}
 		},
 		*getPreviousSiblings (builder?: Component.BuilderLike) {
-			const parent = component.element.parentElement
+			const element = dom.element
+			const parent = element?.parentElement
 			for (const child of parent?.children ?? []) {
-				if (child === component.element)
+				if (child === element)
 					break
 
 				const childComponent = child.component
@@ -839,15 +937,18 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			}
 		},
 		*getNextSiblings (builder?: Component.BuilderLike) {
-			let cursor: Element | null = component.element
-			while ((cursor = cursor.nextElementSibling)) {
+			let cursor: Element | null | undefined = dom.element
+			while ((cursor = cursor?.nextElementSibling)) {
 				const component = cursor.component
 				if (component?.is(builder))
 					yield component
 			}
 		},
 		*getDescendants (builder?: Component.BuilderLike) {
-			const walker = document.createTreeWalker(component.element, NodeFilter.SHOW_ELEMENT)
+			if (!dom.element)
+				return
+
+			const walker = document.createTreeWalker(dom.element, NodeFilter.SHOW_ELEMENT)
 			let node: Node | null
 			while ((node = walker.nextNode())) {
 				const component = node.component
@@ -861,35 +962,35 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		},
 		contains (elementOrComponent) {
 			const descendant = Component.is(elementOrComponent) ? elementOrComponent.element : elementOrComponent
-			return descendant === undefined || descendant === null ? false : component.element.contains(descendant)
+			return descendant === undefined || descendant === null ? false : !!dom.element?.contains(descendant)
 		},
 
 		receiveRootedEvents () {
-			component.element.classList.add(Classes.ReceiveRootedEvents)
+			dom.addClasses(Classes.ReceiveRootedEvents)
 			return component
 		},
 		receiveAncestorInsertEvents: () => {
-			component.element.classList.add(Classes.ReceiveAncestorInsertEvents)
+			dom.addClasses(Classes.ReceiveAncestorInsertEvents)
 			return component
 		},
 		receiveDescendantInsertEvents: () => {
-			component.element.classList.add(Classes.ReceiveDescendantInsertEvents)
+			dom.addClasses(Classes.ReceiveDescendantInsertEvents)
 			return component
 		},
 		receiveDescendantRemoveEvents: () => {
-			component.element.classList.add(Classes.ReceiveDescendantRemoveEvents)
+			dom.addClasses(Classes.ReceiveDescendantRemoveEvents)
 			return component
 		},
 		receiveAncestorScrollEvents () {
-			component.element.classList.add(Classes.ReceiveScrollEvents)
+			dom.addClasses(Classes.ReceiveScrollEvents)
 			return component
 		},
 		receiveChildrenInsertEvents () {
-			component.element.classList.add(Classes.ReceiveChildrenInsertEvents)
+			dom.addClasses(Classes.ReceiveChildrenInsertEvents)
 			return component
 		},
 		receiveInsertEvents () {
-			component.element.classList.add(Classes.ReceiveInsertEvents)
+			dom.addClasses(Classes.ReceiveInsertEvents)
 			return component
 		},
 		emitInsert: () => {
@@ -898,8 +999,18 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			return component
 		},
 		monitorScrollEvents () {
-			descendantsListeningForScroll ??= (component.element === window as any ? document.documentElement : component.element).getElementsByClassName(Classes.ReceiveScrollEvents)
-			descendantRectsListeningForScroll ??= (component.element === window as any ? document.documentElement : component.element).getElementsByClassName(Classes.HasRect)
+			const element = dom.element
+			if (!element) {
+				dom.onRealise(() => component.monitorScrollEvents())
+				return component
+			}
+
+			if (descendantsListeningForScroll)
+				// already monitoring
+				return component
+
+			descendantsListeningForScroll ??= (element === window as any ? document.documentElement : element).getElementsByClassName(Classes.ReceiveScrollEvents)
+			descendantRectsListeningForScroll ??= (element === window as any ? document.documentElement : element).getElementsByClassName(Classes.HasRect)
 			component.event.subscribe('scroll', () => {
 				for (const descendant of [...descendantsListeningForScroll!])
 					descendant.component?.event.emit('ancestorScroll')
@@ -910,6 +1021,10 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		},
 		onRooted (callback) {
 			component.rooted.matchManual(true, () => callback(component))
+			return component
+		},
+		onRealise (callback) {
+			dom.onRealise(() => callback(component))
 			return component
 		},
 		onRemove (owner, callback) {
@@ -955,22 +1070,24 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 
 		tabIndex: index => {
 			if (index === undefined)
-				component.element.removeAttribute('tabindex')
+				dom.removeAttribute('tabindex')
 			else if (index === 'programmatic')
-				component.element.setAttribute('tabindex', '-1')
+				dom.setAttribute('tabindex', '-1')
 			else if (index === 'auto')
-				component.element.setAttribute('tabindex', '0')
+				dom.setAttribute('tabindex', '0')
 			else
-				component.element.setAttribute('tabindex', `${index}`)
+				dom.setAttribute('tabindex', `${index}`)
 
 			return component
 		},
 		focus: () => {
-			FocusListener.focus(component.element)
+			if (dom.element)
+				FocusListener.focus(dom.element)
 			return component
 		},
 		blur: () => {
-			FocusListener.blur(component.element)
+			if (dom.element)
+				FocusListener.blur(dom.element)
 			return component
 		},
 	} satisfies Pick<Component, keyof BaseComponent>) as any as Mutable<Component>
@@ -984,12 +1101,343 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 	if (!Component.is(component))
 		throw new Error('This should never happen')
 
-	component.element.component = component
 	return component
+
+	function createDomController (): ComponentDomController {
+		let element: HTMLElement | undefined
+		let realised = false
+		let sealed = false
+		let tag: keyof HTMLElementTagNameMap | string = type as keyof HTMLElementTagNameMap
+		const attributes = new Map<string, string>()
+		const attributeOrder: string[] = []
+		const classes = new Set<string>()
+		const styles = new Map<string, string>()
+		const children: (Component | Node)[] = []
+		const listeners: PendingEventListener[] = []
+		const queuedEmits: (() => unknown)[] = []
+		const queuedBubbles: (() => unknown)[] = []
+		const onRealiseCallbacks: (() => unknown)[] = []
+		const queuedRealisations: (() => unknown)[] = []
+		let deferringRealisation = false
+
+		const controller: ComponentDomController = {
+			get element () { return element },
+			get realised () { return realised },
+			get sealed () { return sealed },
+			get tagName () { return (element?.tagName ?? tag.toString()).toUpperCase() },
+			get tag () { return tag },
+			set tag (value) {
+				this.assertComposable('change element type')
+				if (realised)
+					throw new Error('Cannot change a realised component tag')
+				tag = value
+			},
+			requireElement (reason) {
+				if (!element)
+					throw new Error(`Component has no realised element${reason ? `: ${reason}` : ''}`)
+				return element
+			},
+			realiseForInsertion () {
+				virtualParentDetach.get(component)?.()
+				if (element) {
+					sealed = true
+					return element
+				}
+
+				element = document.createElement(tag)
+				realised = true
+				element.component = component
+
+				for (const attribute of attributeOrder) {
+					const value = attributes.get(attribute)
+					if (value !== undefined)
+						element.setAttribute(attribute, value)
+				}
+				element.classList.add(...classes)
+				for (const [property, value] of styles)
+					element.style.setProperty(property, value)
+				for (const listener of listeners)
+					element.addEventListener(listener.event as keyof HTMLElementEventMap, listener.handler, listener.options)
+				for (const callback of onRealiseCallbacks.splice(0, Infinity))
+					callback()
+
+				const pendingChildren = children.splice(0, Infinity)
+				const childNodes = pendingChildren.map(nodeForInsertion)
+				element.append(...childNodes)
+				for (const child of pendingChildren)
+					if (Component.is(child))
+						child.emitInsert()
+
+				this.flushQueuedDispatches(false)
+				sealed = true
+				return element
+			},
+			adoptElement (newElement) {
+				element = newElement
+				realised = true
+				tag = newElement.tagName?.toLowerCase() ?? 'window'
+				element.component = component
+				for (const listener of listeners)
+					element.addEventListener(listener.event as keyof HTMLElementEventMap, listener.handler, listener.options)
+			},
+			assertComposable (method) {
+				if (sealed)
+					throw new Error(`Cannot ${method} after a component has been appended`)
+			},
+			setAttribute (attribute, value = '') {
+				ensureAttributeOrder(attribute)
+				if (value === undefined) {
+					this.removeAttribute(attribute)
+					return
+				}
+				attributes.set(attribute, value)
+				element?.setAttribute(attribute, value)
+			},
+			hasAttribute (attribute) {
+				return element?.hasAttribute(attribute) ?? attributes.has(attribute)
+			},
+			getAttribute (attribute) {
+				return element?.getAttribute(attribute) ?? attributes.get(attribute)
+			},
+			removeAttribute (attribute) {
+				attributes.delete(attribute)
+				removeAttributeOrder(attribute)
+				element?.removeAttribute(attribute)
+			},
+			prependAttribute (attribute, value = '') {
+				removeAttributeOrder(attribute)
+				attributeOrder.unshift(attribute)
+				attributes.set(attribute, value)
+				if (element) {
+					const oldAttributes = [...element.attributes].map(attribute => [attribute.name, attribute.value] as const)
+					for (const attribute of oldAttributes)
+						element.removeAttribute(attribute[0])
+					for (const attribute of attributeOrder) {
+						const value = attributes.get(attribute)
+						if (value !== undefined)
+							element.setAttribute(attribute, value)
+					}
+				}
+			},
+			insertAttribute (referenceAttribute, direction, attribute, value = '') {
+				removeAttributeOrder(attribute)
+				const index = attributeOrder.indexOf(referenceAttribute)
+				attributeOrder.splice(index === -1 ? direction === 'before' ? 0 : attributeOrder.length : index + (direction === 'after' ? 1 : 0), 0, attribute)
+				attributes.set(attribute, value)
+				if (element) {
+					for (const attribute of [...element.attributes])
+						element.removeAttribute(attribute.name)
+					for (const attribute of attributeOrder) {
+						const value = attributes.get(attribute)
+						if (value !== undefined)
+							element.setAttribute(attribute, value)
+					}
+				}
+			},
+			getAttributes () {
+				return attributeOrder
+					.map(attribute => [attribute, attributes.get(attribute)] as [string, string | undefined])
+					.filter((entry): entry is [string, string] => entry[1] !== undefined)
+			},
+			addClasses (...classNames) {
+				for (const className of classNames)
+					classes.add(className)
+				element?.classList.add(...classNames)
+			},
+			removeClasses (...classNames) {
+				for (const className of classNames)
+					classes.delete(className)
+				element?.classList.remove(...classNames)
+			},
+			hasClasses (...classNames) {
+				return classNames.every(className => element?.classList.contains(className) ?? classes.has(className))
+			},
+			someClasses (...classNames) {
+				return classNames.some(className => element?.classList.contains(className) ?? classes.has(className))
+			},
+			getClasses () {
+				return element ? [...element.classList] : [...classes]
+			},
+			setStyleProperty (property, value) {
+				if (value === undefined || value === null) {
+					this.removeStyleProperty(property)
+					return
+				}
+				const stringValue = `${value}`
+				styles.set(property, stringValue)
+				element?.style.setProperty(property, stringValue)
+			},
+			getStyleProperty (property) {
+				return element?.style.getPropertyValue(property) || styles.get(property)
+			},
+			removeStyleProperty (property) {
+				styles.delete(property)
+				element?.style.removeProperty(property)
+			},
+			append (...contents) {
+				if (!element) {
+					children.push(...prepareVirtualChildren(contents))
+					return []
+				}
+
+				const nodes = contents.filter(Truthy).map(nodeForInsertion)
+				element.append(...nodes)
+				return nodes
+			},
+			prepend (...contents) {
+				if (!element) {
+					children.unshift(...prepareVirtualChildren(contents))
+					return []
+				}
+
+				const nodes = contents.filter(Truthy).map(nodeForInsertion)
+				element.prepend(...nodes)
+				return nodes
+			},
+			insert (direction, sibling, ...contents) {
+				if (!element) {
+					const siblingIndex = indexOfVirtualChild(sibling)
+					const index = siblingIndex === -1 ? direction === 'before' ? 0 : children.length : siblingIndex + (direction === 'after' ? 1 : 0)
+					children.splice(index, 0, ...prepareVirtualChildren(contents))
+					return []
+				}
+
+				const nodes = contents.filter(Truthy).map(nodeForInsertion)
+				const siblingElement = sibling ? Component.requireElement(sibling, 'insert child relative to sibling') : null
+				if (direction === 'before')
+					for (let i = nodes.length - 1; i >= 0; i--)
+						element.insertBefore(nodes[i], siblingElement)
+				else {
+					let previousNode: Node | null = siblingElement
+					for (const node of nodes) {
+						element.insertBefore(node, !previousNode ? element.firstChild : previousNode.nextSibling)
+						previousNode = node
+					}
+				}
+				return nodes
+			},
+			removeContents () {
+				if (element) {
+					Component.removeContents(element)
+					return
+				}
+
+				for (const child of children)
+					if (Component.is(child))
+						child.remove()
+				children.splice(0, Infinity)
+			},
+			getChildCount () {
+				return element?.childNodes.length ?? children.length
+			},
+			getChildren () {
+				return element ? [...element.childNodes] : [...children]
+			},
+			takeChildren () {
+				if (element)
+					return [...element.childNodes]
+
+				const transferred = children.splice(0, Infinity)
+				for (const child of transferred)
+					if (Component.is(child))
+						virtualParentDetach.delete(child)
+				return transferred.map(nodeForInsertion)
+			},
+			addEventListener (event, handler, options) {
+				listeners.push({ event, handler, options })
+				element?.addEventListener(event as keyof HTMLElementEventMap, handler, options)
+			},
+			removeEventListener (event, handler) {
+				for (let i = listeners.length - 1; i >= 0; i--)
+					if (listeners[i].event === event && listeners[i].handler === handler)
+						listeners.splice(i, 1)
+				element?.removeEventListener(event as keyof HTMLElementEventMap, handler)
+			},
+			queueDispatch (callback, bubble) {
+				; (bubble ? queuedBubbles : queuedEmits).push(callback)
+			},
+			flushQueuedDispatches (bubble) {
+				const queue = bubble ? queuedBubbles : queuedEmits
+				for (const callback of queue.splice(0, Infinity))
+					callback()
+			},
+			onRealise (callback) {
+				if (element)
+					callback()
+				else
+					onRealiseCallbacks.push(callback)
+			},
+			deferRealisation () {
+				deferringRealisation = true
+			},
+			flushDeferredRealisation () {
+				deferringRealisation = false
+				for (const callback of queuedRealisations.splice(0, Infinity))
+					callback()
+			},
+			runOrQueueRealisation (callback) {
+				if (!deferringRealisation)
+					return false
+
+				queuedRealisations.push(callback)
+				return true
+			},
+		}
+		return controller
+
+		function ensureAttributeOrder (attribute: string) {
+			if (!attributeOrder.includes(attribute))
+				attributeOrder.push(attribute)
+		}
+		function removeAttributeOrder (attribute: string) {
+			const index = attributeOrder.indexOf(attribute)
+			if (index !== -1)
+				attributeOrder.splice(index, 1)
+		}
+		function indexOfVirtualChild (sibling: Component | Element | undefined) {
+			if (!sibling)
+				return -1
+
+			const siblingComponent = Component.get(sibling)
+			return children.findIndex(child => true
+				&& (child === sibling
+					|| child === siblingComponent
+					|| (Component.is(child) && child.element === sibling)))
+		}
+		function nodeForInsertion (content: Component | Node): Node {
+			if (Component.is(content))
+				virtualParentDetach.get(content)?.()
+			return Component.is(content) ? getDom(content).realiseForInsertion() : content
+		}
+		function prepareVirtualChildren (contents: (Component | Node | Falsy)[]): (Component | Node)[] {
+			return contents.filter(Truthy).map(content => {
+				if (Component.is(content)) {
+					virtualParentDetach.get(content)?.()
+					content.element?.remove()
+					virtualParentDetach.set(content, () => {
+						const index = children.indexOf(content)
+						if (index !== -1)
+							children.splice(index, 1)
+						virtualParentDetach.delete(content)
+					})
+				}
+				else {
+					content.parentNode?.removeChild(content)
+				}
+
+				return content
+			})
+		}
+	}
 }
 
 function emitInsert (component: Component | undefined) {
 	if (!component)
+		return
+
+	getDom(component).flushQueuedDispatches(true)
+	const element = component.element
+	if (!element)
 		return
 
 	ComponentPerf.Rect(component)?.markDirty()
@@ -998,16 +1446,16 @@ function emitInsert (component: Component | undefined) {
 	if (component.classes.has(Classes.ReceiveInsertEvents))
 		component.event.emit('insert')
 
-	const descendantsListeningForEvent = component.element.getElementsByClassName(Classes.ReceiveAncestorInsertEvents)
+	const descendantsListeningForEvent = element.getElementsByClassName(Classes.ReceiveAncestorInsertEvents)
 	for (const descendant of descendantsListeningForEvent)
 		descendant.component?.event.emit('ancestorInsert')
-	for (const descendant of component.element.getElementsByClassName(Classes.HasRect))
+	for (const descendant of element.getElementsByClassName(Classes.HasRect))
 		ComponentPerf.Rect(descendant.component)?.markDirty()
-	for (const descendant of component.element.getElementsByClassName(Classes.HasStatesToMarkDirtyOnInsertions))
+	for (const descendant of element.getElementsByClassName(Classes.HasStatesToMarkDirtyOnInsertions))
 		for (const callback of ComponentPerf.CallbacksOnInsertions.get(descendant.component))
 			callback()
 
-	let cursor = component.element.parentElement
+	let cursor = element.parentElement
 	while (cursor) {
 		if (cursor.classList.contains(Classes.ReceiveDescendantInsertEvents))
 			cursor.component?.event.emit('descendantInsert')
@@ -1018,7 +1466,11 @@ function emitInsert (component: Component | undefined) {
 
 function updateRooted (component: Component | undefined) {
 	if (component) {
-		const rooted = document.documentElement.contains(component.element)
+		const element = component.element
+		if (!element)
+			return
+
+		const rooted = document.documentElement.contains(element)
 		if (component.rooted.value === rooted)
 			return
 
@@ -1026,7 +1478,7 @@ function updateRooted (component: Component | undefined) {
 		if (component.classes.has(Classes.ReceiveRootedEvents))
 			component.event.emit(rooted ? 'root' : 'unroot')
 
-		for (const descendant of component.element.querySelectorAll<Element>('*')) {
+		for (const descendant of element.querySelectorAll<Element>('*')) {
 			const component = descendant.component
 			if (component) {
 				component.rooted.asMutable?.setValue(rooted)
@@ -1041,7 +1493,7 @@ function emitRemove (component: Component | undefined) {
 	if (!component)
 		return
 
-	let cursor = component.element.parentElement
+	let cursor = component.element?.parentElement
 	while (cursor) {
 		if (cursor.classList.contains(Classes.ReceiveDescendantRemoveEvents))
 			cursor.component?.event.emit('descendantRemove')
@@ -1092,13 +1544,38 @@ namespace Component {
 		return typeof value === 'object' && !!(value as Component)?.isComponent
 	}
 
-	export function element<NODE extends Node> (from: Component | NODE): NODE {
-		return is(from) ? from.element as Node as NODE : from
+	export function element<NODE extends Node> (from: Component | NODE): NODE | undefined {
+		return is(from) ? from.element as Node as NODE | undefined : from
+	}
+
+	export function realise<NODE extends Node> (from: Component | NODE): NODE {
+		return is(from) ? getDom(from).realiseForInsertion() as Node as NODE : from
+	}
+
+	export function requireElement<NODE extends Node> (from: Component | NODE, reason = 'element required'): NODE {
+		if (!is(from))
+			return from
+
+		return getDom(from).requireElement(reason) as Node as NODE
+	}
+
+	export function hasElement (component: Component): boolean {
+		return !!getDom(component).element
+	}
+
+	export function isRealised (component: Component): boolean {
+		return getDom(component).realised
+	}
+
+	export const isRealized = isRealised
+
+	export function getDomController (component: Component): ComponentDomController {
+		return getDom(component)
 	}
 
 	export function wrap (element: HTMLElement): Component {
 		const component = Component()
-		mutable(component).element = element
+		getDom(component).adoptElement(element)
 		component.rooted.asMutable?.setValue(element === window as never || element === document as never || document.contains(element))
 		return component
 	}
@@ -1159,12 +1636,14 @@ namespace Component {
 			return applyExtensions(result)
 		}
 		const simpleBuilder = (...params: any[]) => {
+			const initialComponent = initialBuilder(type)
+			getDom(initialComponent).deferRealisation()
 			// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-			const component = realBuilder(undefined, ...params)
+			const component = realBuilder(initialComponent, ...params)
 			if (component instanceof Promise)
-				return component.then(applyExtensions).then(completeComponent)
+				return component.then(applyExtensions).then(component => completeComponent(component, initialComponent))
 
-			return completeComponent(applyExtensions(component))
+			return completeComponent(applyExtensions(component), initialComponent)
 		}
 
 		Object.defineProperty(builder, 'name', { value: name, configurable: true })
@@ -1222,14 +1701,14 @@ namespace Component {
 			return component
 		}
 
-		function completeComponent (component: Component) {
+		function completeComponent (component: Component, initialComponent?: Component) {
 			if (!component)
 				return component
 
 			if (name) {
 				(component as Component & { [Symbol.toStringTag]?: string })[Symbol.toStringTag] ??= name.toString()
 				const tagName = `:${name.kebabcase}`
-				if (component.element.tagName === 'SPAN') {
+				if (getDom(component).tagName === 'SPAN') {
 					component.replaceElement(tagName as keyof HTMLElementTagNameMap)
 				}
 				else {
@@ -1239,6 +1718,9 @@ namespace Component {
 
 			component.supers.value.push(simpleBuilder)
 			component.supers.emit()
+			if (initialComponent && initialComponent !== component)
+				getDom(initialComponent).flushDeferredRealisation()
+			getDom(component).flushDeferredRealisation()
 			return component
 		}
 
@@ -1394,7 +1876,7 @@ namespace Component {
 	export function closest<COMPONENT extends Component> (builder: Component.Builder<any[], COMPONENT>, element?: HTMLElement | Component | null): COMPONENT | undefined
 	export function closest<COMPONENT extends Component> (builder: Component.Extension<any[], COMPONENT>, element?: HTMLElement | Component | null): COMPONENT | undefined
 	export function closest (builder: BuilderLike, element?: HTMLElement | Component | null) {
-		let cursor: HTMLElement | null = is(element) ? element.element : element ?? null
+		let cursor: HTMLElement | null = is(element) ? element.element ?? null : element ?? null
 		while (cursor) {
 			const component = cursor?.component
 			if (component?.is(builder))
@@ -1410,7 +1892,7 @@ namespace Component {
 	export function findAll<COMPONENT extends Component> (builder: Component.Extension<any[], COMPONENT>, element?: HTMLElement | Component | null): COMPONENT[]
 	export function findAll (builder: BuilderLike, element?: HTMLElement | Component | null) {
 		const components: Component[] = []
-		const cursor: HTMLElement | null = is(element) ? element.element : element ?? null
+		const cursor: HTMLElement | null = is(element) ? element.element ?? null : element ?? null
 		if (cursor) {
 			const walker = document.createTreeWalker(cursor, NodeFilter.SHOW_ELEMENT)
 			let node: Node | null

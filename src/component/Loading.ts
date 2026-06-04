@@ -46,6 +46,7 @@ const Loading = Component((component): Loading => {
 	const loading = component.addStyleTargets(LoadingStyleTargets)
 	const style = loading.styleTargets
 	const storage = Component().setOwner(component)
+	Component.getDomController(storage).realiseForInsertion()
 
 	const spinner = Component().style(style.Spinner)
 	const progressBar = Component().style(style.ProgressBar)

@@ -101,13 +101,13 @@ Component.extend(component => {
 				.setOwner(component)
 				.setCloseDueToMouseInputFilter(event => {
 					const hovered = HoverListener.hovered() ?? null
-					if (component.element.contains(hovered))
+					if (component.element?.contains(hovered))
 						return false
 
 					return true
 				})
 				.event.subscribe('toggle', e => {
-					if (!popover.element.matches(':popover-open')) {
+					if (!popover.element?.matches(':popover-open')) {
 						isShown = false
 						component.clickState = false
 						Mouse.offMove(updatePopoverState)
@@ -249,7 +249,9 @@ Component.extend(component => {
 							return
 
 						const closestHandlesMouseEvents = (event.target as HTMLElement).component?.closest(HandlesMouseEvents)
-						if (closestHandlesMouseEvents && closestHandlesMouseEvents?.element !== component.element && component.element.contains(closestHandlesMouseEvents.element))
+						const hostElement = component.element
+						const closestElement = closestHandlesMouseEvents?.element
+						if (hostElement && closestHandlesMouseEvents && closestElement && closestElement !== hostElement && hostElement.contains(closestElement))
 							return
 
 						component.clickState = !component.clickState
@@ -393,14 +395,19 @@ Component.extend(component => {
 					return false
 
 				const hovered = HoverListener.hovered() ?? null
-				if (component.element.contains(hovered) || component.popover.element.contains(hovered))
+				const hostElement = component.element
+				const popoverElement = component.popover.element
+				if (!hostElement || !popoverElement)
+					return false
+
+				if (hostElement.contains(hovered) || popoverElement.contains(hovered))
 					return false
 
 				const clearsPopover = hovered?.closest('[data-clear-popover]')
 				if (!clearsPopover)
 					return false
 
-				const clearsPopoverContainsHost = clearsPopover.contains(component.element)
+				const clearsPopoverContainsHost = clearsPopover.contains(hostElement)
 				if (clearsPopoverContainsHost)
 					return false
 
@@ -599,7 +606,7 @@ const Popover = Object.assign(
 				popover
 					// .style.remove('popover--normal-stacking--hidden')
 					.attributes.set('popover', 'manual')
-					.element.togglePopover(shown)
+					.tweak(popover => popover.element?.togglePopover(shown))
 
 			mutable(popover).lastStateChangeTime = Date.now()
 		}
@@ -617,7 +624,7 @@ const Popover = Object.assign(
 			if (popover.rooted.value)
 				popover
 					.attributes.set('popover', 'manual')
-					.element.togglePopover(false)
+					.tweak(popover => popover.element?.togglePopover(false))
 
 			popover.visible.asMutable?.setValue(false)
 
@@ -629,7 +636,7 @@ const Popover = Object.assign(
 				return false
 
 			const node = Component.is(descendant) ? descendant.element : descendant
-			if (popover.element.contains(node))
+			if (node && popover.element?.contains(node))
 				return true
 
 			for (const child of popover.popoverChildren.value)

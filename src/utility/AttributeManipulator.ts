@@ -46,6 +46,7 @@ interface TranslationHandlerRegistration {
 }
 
 function AttributeManipulator (component: Component): AttributeManipulator<Component> {
+	const dom = component.__dom
 	let removed = false
 	let translationHandlers: Record<string, TranslationHandlerRegistration> | undefined
 	const unuseAttributeMap = new Map<string, State.Unsubscribe>()
@@ -62,82 +63,48 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 
 	const result: AttributeManipulator<Component> = {
 		has (attribute) {
-			return component.element.hasAttribute(attribute)
+			return dom.hasAttribute(attribute)
 		},
 		get (attribute) {
 			return Maps.compute(attributeStates, attribute, () =>
-				State(component.element.getAttribute(attribute) ?? undefined))
+				State(dom.getAttribute(attribute) ?? undefined))
 		},
 		append (...attributes) {
 			for (const attribute of attributes) {
 				translationHandlers?.[attribute]?.unuse?.()
 				delete translationHandlers?.[attribute]
-				component.element.setAttribute(attribute, '')
+				dom.setAttribute(attribute, '')
 				attributeStates.get(attribute)?.asMutable?.setValue('')
 			}
 			return component
 		},
 		prepend (...attributes) {
-			const oldAttributes: Record<string, string> = {}
-			for (const attribute of [...component.element.attributes]) {
-				oldAttributes[attribute.name] = attribute.value
-				component.element.removeAttribute(attribute.name)
-			}
+			const oldAttributes = Object.fromEntries(dom.getAttributes())
 
 			for (const attribute of attributes) {
 				const value = oldAttributes[attribute] ?? ''
-				component.element.setAttribute(attribute, value)
+				dom.prependAttribute(attribute, value)
 				attributeStates.get(attribute)?.asMutable?.setValue(value)
 			}
-
-			for (const name of Object.keys(oldAttributes))
-				component.element.setAttribute(name, oldAttributes[name])
 
 			return component
 		},
 		insertBefore (referenceAttribute, ...attributes) {
-			const oldAttributes: Record<string, string> = {}
-			for (const attribute of [...component.element.attributes]) {
-				oldAttributes[attribute.name] = attribute.value
-				component.element.removeAttribute(attribute.name)
-			}
-
-			for (const attribute of Object.keys(oldAttributes)) {
-				if (attribute === referenceAttribute)
-					for (const attribute of attributes) {
-						const value = oldAttributes[attribute] ?? ''
-						component.element.setAttribute(attribute, value)
-						attributeStates.get(attribute)?.asMutable?.setValue(value)
-					}
-
-				component.element.setAttribute(attribute, oldAttributes[attribute])
+			const oldAttributes = Object.fromEntries(dom.getAttributes())
+			for (const attribute of attributes) {
+				const value = oldAttributes[attribute] ?? ''
+				dom.insertAttribute(referenceAttribute, 'before', attribute, value)
+				attributeStates.get(attribute)?.asMutable?.setValue(value)
 			}
 
 			return component
 		},
 		insertAfter (referenceAttribute, ...attributes) {
-			const oldAttributes: Record<string, string> = {}
-			for (const attribute of [...component.element.attributes]) {
-				oldAttributes[attribute.name] = attribute.value
-				component.element.removeAttribute(attribute.name)
-			}
-
-			if (!(referenceAttribute in oldAttributes))
-				for (const attribute of attributes) {
-					const value = oldAttributes[attribute] ?? ''
-					component.element.setAttribute(attribute, value)
-					attributeStates.get(attribute)?.asMutable?.setValue(value)
-				}
-
-			for (const attribute of Object.keys(oldAttributes)) {
-				component.element.setAttribute(attribute, oldAttributes[attribute])
-
-				if (attribute === referenceAttribute)
-					for (const attribute of attributes) {
-						const value = oldAttributes[attribute] ?? ''
-						component.element.setAttribute(attribute, value)
-						attributeStates.get(attribute)?.asMutable?.setValue(value)
-					}
+			const oldAttributes = Object.fromEntries(dom.getAttributes())
+			for (const attribute of attributes) {
+				const value = oldAttributes[attribute] ?? ''
+				dom.insertAttribute(referenceAttribute, 'after', attribute, value)
+				attributeStates.get(attribute)?.asMutable?.setValue(value)
 			}
 
 			return component
@@ -146,11 +113,11 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 			translationHandlers?.[attribute]?.unuse?.()
 			delete translationHandlers?.[attribute]
 			if (value === undefined) {
-				component.element.removeAttribute(attribute)
+				dom.removeAttribute(attribute)
 				attributeStates.get(attribute)?.asMutable?.setValue(undefined)
 			}
 			else {
-				component.element.setAttribute(attribute, value)
+				dom.setAttribute(attribute, value)
 				attributeStates.get(attribute)?.asMutable?.setValue(value)
 			}
 			return component
@@ -161,11 +128,11 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 				unuseAttributeMap.get(attribute)?.()
 				unuseAttributeMap.set(attribute, state.use(component, value => {
 					if (value === undefined) {
-						component.element.removeAttribute(attribute)
+						dom.removeAttribute(attribute)
 						attributeStates.get(attribute)?.asMutable?.setValue(undefined)
 					}
 					else {
-						component.element.setAttribute(attribute, value)
+						dom.setAttribute(attribute, value)
 						attributeStates.get(attribute)?.asMutable?.setValue(value)
 					}
 				}))
@@ -176,15 +143,15 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 				unuseAttributeMap.set(attribute, state.use(component, active => {
 					if (active) {
 						value ??= ''
-						component.element.setAttribute(attribute, value)
+						dom.setAttribute(attribute, value)
 						attributeStates.get(attribute)?.asMutable?.setValue(value)
 					}
 					else if (orElse !== undefined) {
-						component.element.setAttribute(attribute, orElse)
+						dom.setAttribute(attribute, orElse)
 						attributeStates.get(attribute)?.asMutable?.setValue(orElse)
 					}
 					else {
-						component.element.removeAttribute(attribute)
+						dom.removeAttribute(attribute)
 						attributeStates.get(attribute)?.asMutable?.setValue(undefined)
 					}
 				}))
@@ -192,18 +159,18 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 			return component
 		},
 		compute (attribute, supplier) {
-			if (component.element.hasAttribute(attribute))
+			if (dom.hasAttribute(attribute))
 				return component
 
 			translationHandlers?.[attribute]?.unuse?.()
 			delete translationHandlers?.[attribute]
 			const value = supplier(component)
 			if (value === undefined) {
-				component.element.removeAttribute(attribute)
+				dom.removeAttribute(attribute)
 				attributeStates.get(attribute)?.asMutable?.setValue(undefined)
 			}
 			else {
-				component.element.setAttribute(attribute, value)
+				dom.setAttribute(attribute, value)
 				attributeStates.get(attribute)?.asMutable?.setValue(value)
 			}
 			return component
@@ -223,7 +190,7 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 					return
 
 				const value = StringApplicatorSource.toString(source ?? '')
-				component.element.setAttribute(attribute, value)
+				dom.setAttribute(attribute, value)
 				attributeStates.get(attribute)?.asMutable?.setValue(value)
 			}, source)
 
@@ -236,7 +203,7 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 			for (const attribute of attributes) {
 				translationHandlers?.[attribute]?.unuse?.()
 				delete translationHandlers?.[attribute]
-				component.element.removeAttribute(attribute)
+				dom.removeAttribute(attribute)
 				attributeStates.get(attribute)?.asMutable?.setValue(undefined)
 			}
 			return component
@@ -245,12 +212,13 @@ function AttributeManipulator (component: Component): AttributeManipulator<Compo
 			return this[present ? 'set' : 'remove'](attribute, value)
 		},
 		copy (element) {
-			if ('element' in element)
-				element = element.element
+			const attributes = 'isComponent' in element
+				? element.__dom.getAttributes()
+				: [...element.attributes].map(attribute => [attribute.name, attribute.value] as [string, string])
 
-			for (const attribute of element.attributes) {
-				component.element.setAttribute(attribute.name, attribute.value)
-				attributeStates.get(attribute.name)?.asMutable?.setValue(attribute.value)
+			for (const [name, value] of attributes) {
+				dom.setAttribute(name, value)
+				attributeStates.get(name)?.asMutable?.setValue(value)
 			}
 			return component
 		},

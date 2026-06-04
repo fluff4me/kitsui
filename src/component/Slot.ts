@@ -23,10 +23,13 @@ Component.extend(component => {
 	let slot: Slot | undefined
 	component.extend<SlotComponentExtensions>(component => ({
 		hasContent () {
-			const walker = document.createTreeWalker(component.element, NodeFilter.SHOW_TEXT)
-			while (walker.nextNode())
-				if (walker.currentNode.textContent?.trim())
-					return true
+			const element = component.element
+			if (element) {
+				const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+				while (walker.nextNode())
+					if (walker.currentNode.textContent?.trim())
+						return true
+			}
 
 			for (const child of component.getDescendants())
 				if (!child.is(Slot))
@@ -40,7 +43,7 @@ Component.extend(component => {
 			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(...contents)
 			slot.if(state, slot => {
 				slot.append(...contents)
-				temporaryHolder?.remove()
+				releaseTemporaryHolder(temporaryHolder)
 				temporaryHolder = undefined
 			})
 
@@ -52,7 +55,7 @@ Component.extend(component => {
 			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(...contents)
 			slot.if(state, slot => {
 				slot.append(...contents)
-				temporaryHolder?.remove()
+				releaseTemporaryHolder(temporaryHolder)
 				temporaryHolder = undefined
 			})
 
@@ -64,7 +67,7 @@ Component.extend(component => {
 			let temporaryHolder: Component | undefined = Component().setOwner(slot).append(...contents)
 			slot.if(state, slot => {
 				slot.append(...contents)
-				temporaryHolder?.remove()
+				releaseTemporaryHolder(temporaryHolder)
 				temporaryHolder = undefined
 			})
 
@@ -76,7 +79,7 @@ Component.extend(component => {
 			let temporaryHolder: Component | undefined = Component().setOwner(newSlot).append(component)
 			newSlot.if(state, slot => {
 				slot.append(component)
-				temporaryHolder?.remove()
+				releaseTemporaryHolder(temporaryHolder)
 				temporaryHolder = undefined
 			})
 
@@ -89,7 +92,7 @@ Component.extend(component => {
 			let temporaryHolder: Component | undefined = Component().setOwner(newSlot).append(component)
 			newSlot.if(state, slot => {
 				slot.append(component)
-				temporaryHolder?.remove()
+				releaseTemporaryHolder(temporaryHolder)
 				temporaryHolder = undefined
 			})
 
@@ -102,7 +105,7 @@ Component.extend(component => {
 			let temporaryHolder: Component | undefined = Component().setOwner(newSlot).append(component)
 			newSlot.if(state, slot => {
 				slot.append(component)
-				temporaryHolder?.remove()
+				releaseTemporaryHolder(temporaryHolder)
 				temporaryHolder = undefined
 			})
 
@@ -110,6 +113,14 @@ Component.extend(component => {
 			return component
 		},
 	}))
+
+	function releaseTemporaryHolder (temporaryHolder: Component | undefined) {
+		if (!temporaryHolder)
+			return
+
+		Component.getDomController(temporaryHolder).takeChildren()
+		temporaryHolder.remove()
+	}
 })
 
 interface SlotIfElseExtensions {
@@ -210,7 +221,7 @@ const Slot = Object.assign(
 						const transaction = Object.assign(
 							ComponentInsertionTransaction(component, () => {
 								slot.removeContents()
-								slot.append(...component.element.children)
+								slot.append(...Component.getDomController(component).takeChildren())
 								inserted = true
 								component.remove()
 							}),
@@ -314,7 +325,7 @@ const Slot = Object.assign(
 			const transaction = Object.assign(
 				ComponentInsertionTransaction(component, () => {
 					slot.removeContents()
-					slot.append(...component.element.children)
+					slot.append(...Component.getDomController(component).takeChildren())
 					inserted = true
 					component.remove()
 				}),

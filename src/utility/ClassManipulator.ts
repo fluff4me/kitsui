@@ -13,29 +13,30 @@ interface ClassManipulator<HOST> {
 }
 
 function ClassManipulator (component: Component): ClassManipulator<Component> {
+	const dom = component.__dom
 	return {
 		has (...classes) {
-			return classes.every(className => component.element.classList.contains(className))
+			return dom.hasClasses(...classes)
 		},
 		some (...classes) {
-			return classes.some(className => component.element.classList.contains(className))
+			return dom.someClasses(...classes)
 		},
 		add (...classes) {
-			component.element.classList.add(...classes)
+			dom.addClasses(...classes)
 			return component
 		},
 		remove (...classes) {
-			component.element.classList.remove(...classes)
+			dom.removeClasses(...classes)
 			return component
 		},
 		toggle (present, ...classes) {
 			return this[present ? 'add' : 'remove'](...classes)
 		},
 		copy (element) {
-			if ('element' in element)
-				element = element.element
-
-			component.element.classList.add(...element.classList)
+			const classes = 'isComponent' in element
+				? element.__dom.getClasses()
+				: [...element.classList]
+			dom.addClasses(...classes)
 			return component
 		},
 		bind (state, ...classes) {

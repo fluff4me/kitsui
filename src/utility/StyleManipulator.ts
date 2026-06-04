@@ -52,6 +52,7 @@ interface StyleManipulator<HOST> extends StyleManipulatorFunction<HOST>, StyleMa
 }
 
 function StyleManipulator (component: Component): StyleManipulator<Component> {
+	const dom = component.__dom
 	const styles = new Set<ComponentName>()
 	const currentClasses: string[] = []
 	// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
@@ -203,7 +204,7 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 			refresh: () => updateClasses(),
 
 			hasProperty (property) {
-				return component.element.style.getPropertyValue(property) !== ''
+				return !!dom.getStyleProperty(property)
 			},
 			setProperty (property, value) {
 				unbindPropertyState[property]?.()
@@ -245,12 +246,12 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 			},
 			removeProperties (...properties) {
 				for (const property of properties)
-					component.element.style.removeProperty(property)
+					dom.removeStyleProperty(property)
 				return component
 			},
 			removeVariables (...variables) {
 				for (const variable of variables)
-					component.element.style.removeProperty(`--${variable}`)
+					dom.removeStyleProperty(`--${variable}`)
 				return component
 			},
 		} satisfies StyleManipulatorFunctions<Component>,
@@ -282,19 +283,16 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 		const toRemove = currentClasses.filter(cls => !toAdd.includes(cls))
 
 		if (toRemove)
-			component.element.classList.remove(...toRemove)
+			dom.removeClasses(...toRemove)
 
-		component.element.classList.add(...toAdd)
+		dom.addClasses(...toAdd)
 		currentClasses.push(...toAdd)
 		styleState.markDirty()
 		return component
 	}
 
 	function setProperty (property: string, value?: string | number | null) {
-		if (value === undefined || value === null)
-			component.element.style.removeProperty(property)
-		else
-			component.element.style.setProperty(property, `${value}`)
+		dom.setStyleProperty(property, value)
 	}
 }
 

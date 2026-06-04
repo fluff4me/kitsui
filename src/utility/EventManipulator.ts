@@ -12,6 +12,22 @@ type EventParameters<HOST, EVENTS, EVENT extends keyof EVENTS> = EVENTS[EVENT] e
 type EventParametersEmit<EVENTS, EVENT extends keyof EVENTS> = EVENTS[EVENT] extends (...params: infer PARAMS) => unknown ? PARAMS extends [Event, ...infer PARAMS] ? PARAMS : PARAMS : never
 type EventResult<EVENTS, EVENT extends keyof EVENTS> = EVENTS[EVENT] extends (...params: any[]) => infer RESULT ? RESULT : never
 
+export interface EventDispatchImmediate<RESULT> {
+	readonly deferred: false
+	readonly result: RESULT[]
+	readonly defaultPrevented: boolean
+	readonly stoppedPropagation: boolean | 'immediate'
+}
+
+export interface EventDispatchDeferred<RESULT> {
+	readonly deferred: true
+	readonly result: Promise<RESULT[]>
+	readonly defaultPrevented: false
+	readonly stoppedPropagation: false
+}
+
+export type EventDispatchResult<RESULT> = EventDispatchImmediate<RESULT> | EventDispatchDeferred<RESULT>
+
 export type EventHandler<HOST, EVENTS, EVENT extends keyof EVENTS> = (...params: EventParameters<HOST, EVENTS, EVENT>) => EventResult<EVENTS, EVENT>
 
 type ResolveEvent<EVENT extends Arrays.Or<PropertyKey>> = EVENT extends PropertyKey[] ? EVENT[number] : EVENT
@@ -29,8 +45,8 @@ interface EventManipulatorUntilSubscribe<HOST, EVENTS extends Record<string, any
 }
 
 interface EventManipulator<HOST, EVENTS extends Record<string, any>> extends EventManipulatorSubscribe<HOST, EVENTS> {
-	emit<EVENT extends keyof EVENTS> (event: EVENT, ...params: EventParametersEmit<EVENTS, EVENT>): EventResult<EVENTS, EVENT>[] & { defaultPrevented: boolean, stoppedPropagation: boolean | 'immediate' }
-	bubble<EVENT extends keyof EVENTS> (event: EVENT, ...params: EventParametersEmit<EVENTS, EVENT>): EventResult<EVENTS, EVENT>[] & { defaultPrevented: boolean, stoppedPropagation: boolean | 'immediate' }
+	emit<EVENT extends keyof EVENTS> (event: EVENT, ...params: EventParametersEmit<EVENTS, EVENT>): EventDispatchResult<EventResult<EVENTS, EVENT>>
+	bubble<EVENT extends keyof EVENTS> (event: EVENT, ...params: EventParametersEmit<EVENTS, EVENT>): EventDispatchResult<EventResult<EVENTS, EVENT>>
 	unsubscribe<EVENT extends Arrays.Or<keyof EVENTS>> (event: EVENT, handler: EventHandler<HOST, EVENTS, ResolveEvent<EVENT> & keyof EVENTS>): HOST
 	until (owner: State.Owner, initialiser: (until: EventManipulatorUntilSubscribe<HOST, EVENTS>) => unknown): HOST
 }
@@ -75,53 +91,14 @@ function EventManipulator<T extends object> (host: T): EventManipulator<T, Nativ
 	const elementHost = isComponent(host)
 		? host
 		: { element: document.createElement('span') }
+	const dom = isComponent(host) ? host.__dom : undefined
 
 	const manipulator: EventManipulator<T, NativeEvents> = {
 		emit (event, ...params) {
-			const detail: EventDetail = { result: [], params }
-			let stoppedPropagation: boolean | 'immediate' = false
-			let preventedDefault = false
-			const eventObject = Object.assign(
-				new CustomEvent(event, { detail }),
-				{
-					preventDefault () {
-						Event.prototype.preventDefault.call(this)
-						preventedDefault ||= true
-					},
-					stopPropagation () {
-						stoppedPropagation ||= true
-					},
-					stopImmediatePropagation () {
-						stoppedPropagation = 'immediate'
-					},
-				}
-			)
-			elementHost.element.dispatchEvent(eventObject)
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-			return Object.assign(detail.result, { defaultPrevented: eventObject.defaultPrevented || preventedDefault, stoppedPropagation }) as any
+			return dispatch(event, params, false)
 		},
 		bubble (event, ...params) {
-			const detail: EventDetail = { result: [], params }
-			let stoppedPropagation: boolean | 'immediate' = false
-			let preventedDefault = false
-			const eventObject = Object.assign(
-				new CustomEvent(event, { detail, bubbles: true }),
-				{
-					preventDefault () {
-						Event.prototype.preventDefault.call(this)
-						preventedDefault ||= true
-					},
-					stopPropagation () {
-						stoppedPropagation ||= true
-					},
-					stopImmediatePropagation () {
-						stoppedPropagation = 'immediate'
-					},
-				}
-			)
-			elementHost.element.dispatchEvent(eventObject)
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-			return Object.assign(detail.result, { defaultPrevented: eventObject.defaultPrevented || preventedDefault, stoppedPropagation }) as any
+			return dispatch(event, params, true)
 		},
 		subscribe (events, handler) {
 			return subscribe(handler, events)
@@ -140,7 +117,10 @@ function EventManipulator<T extends object> (host: T): EventManipulator<T, Nativ
 			delete (handler as EventHandlerRegistered)[SYMBOL_REGISTERED_FUNCTION]
 
 			for (const event of Arrays.resolve(events))
-				elementHost.element.removeEventListener(event, realHandler)
+				if (dom)
+					dom.removeEventListener(event, realHandler as EventListener)
+				else
+					elementHost.element!.removeEventListener(event, realHandler)
 
 			return host
 		},
@@ -168,6 +148,74 @@ function EventManipulator<T extends object> (host: T): EventManipulator<T, Nativ
 
 	return manipulator
 
+	function dispatch (event: keyof NativeEvents, params: any[], bubble: boolean) {
+		const run = (): EventDispatchImmediate<any> => {
+			const detail: EventDetail = { result: [], params }
+			let stoppedPropagation: boolean | 'immediate' = false
+			let preventedDefault = false
+			const eventObject = Object.assign(
+				new CustomEvent(event, { detail, bubbles: bubble }),
+				{
+					preventDefault () {
+						Event.prototype.preventDefault.call(this)
+						preventedDefault ||= true
+					},
+					stopPropagation () {
+						Event.prototype.stopPropagation.call(this)
+						stoppedPropagation ||= true
+					},
+					stopImmediatePropagation () {
+						Event.prototype.stopImmediatePropagation.call(this)
+						stoppedPropagation = 'immediate'
+					},
+				}
+			)
+			const element = dom?.element ?? elementHost.element!
+			element.dispatchEvent(eventObject)
+			return {
+				deferred: false,
+				// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+				result: detail.result,
+				defaultPrevented: eventObject.defaultPrevented || preventedDefault,
+				stoppedPropagation,
+			}
+		}
+
+		if (dom && !dom.element) {
+			let resolveResult!: (result: any[]) => void
+			const result = new Promise<any[]>(resolve => resolveResult = resolve)
+			let resolved = false
+			const resolveOnce = (result: any[]) => {
+				if (resolved)
+					return
+
+				resolved = true
+				resolveResult(result)
+			}
+
+			let unuseRemoved: State.Unsubscribe | undefined
+			dom.queueDispatch(() => {
+				unuseRemoved?.()
+				resolveOnce(run().result)
+			}, bubble)
+			if (isComponent(host))
+				unuseRemoved = host.removed.matchManual(true, () => {
+					unuseRemoved?.()
+					resolveOnce([])
+				})
+
+			const deferredResult: EventDispatchDeferred<any> = {
+				deferred: true,
+				result,
+				defaultPrevented: false,
+				stoppedPropagation: false,
+			}
+			return deferredResult
+		}
+
+		return run()
+	}
+
 	function subscribe (handler: EventHandlerRegistered, events: Arrays.Or<keyof NativeEvents>, options?: AddEventListenerOptions) {
 		if (handler[SYMBOL_REGISTERED_FUNCTION]) {
 			console.error(`Can't register handler for event(s) ${Arrays.resolve(events).join(', ')}, already used for other events`, handler)
@@ -188,7 +236,10 @@ function EventManipulator<T extends object> (host: T): EventManipulator<T, Nativ
 		Object.assign(handler, { [SYMBOL_REGISTERED_FUNCTION]: realHandler })
 
 		for (const event of Arrays.resolve(events))
-			elementHost.element.addEventListener(event, realHandler, options)
+			if (dom)
+				dom.addEventListener(event, realHandler as EventListener, options)
+			else
+				elementHost.element!.addEventListener(event, realHandler, options)
 
 		return host
 	}
