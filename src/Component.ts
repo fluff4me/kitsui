@@ -22,6 +22,28 @@ import Viewport from 'utility/Viewport'
 const selfScript = State<string | undefined>(undefined)
 
 const SYMBOL_COMPONENT_BRAND = Symbol('COMPONENT_BRAND')
+
+type MoveBeforeParent = Element & {
+	moveBefore?: (node: Node, child: Node | null) => void
+}
+
+function moveOrInsertBefore (parent: Element, node: Node, child: Node | null) {
+	const moveBefore = (parent as MoveBeforeParent).moveBefore
+	if (moveBefore && node.parentNode && node.isConnected && parent.isConnected && node.getRootNode() === parent.getRootNode())
+		moveBefore.call(parent, node, child)
+	else
+		parent.insertBefore(node, child)
+}
+
+function appendNodes (parent: Element, nodes: Node[]) {
+	for (const node of nodes)
+		moveOrInsertBefore(parent, node, null)
+}
+
+function prependNodes (parent: Element, nodes: Node[]) {
+	for (let i = nodes.length - 1; i >= 0; i--)
+		moveOrInsertBefore(parent, nodes[i], parent.firstChild)
+}
 export interface ComponentBrand<TYPE extends string> {
 	[SYMBOL_COMPONENT_BRAND]: TYPE
 }
@@ -773,7 +795,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				return component
 
 			const element = dom.realiseForInsertion()
-			destination.append(element)
+			moveOrInsertBefore(destination, element, null)
 			component.emitInsert()
 			return component
 		},
@@ -786,7 +808,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				return component
 
 			const element = dom.realiseForInsertion()
-			destination.prepend(element)
+			moveOrInsertBefore(destination, element, destination.firstChild)
 			component.emitInsert()
 			return component
 		},
@@ -804,9 +826,9 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			const siblingElement = sibling ? Component.requireElement(sibling, 'insert relative to sibling') : null
 			const element = dom.realiseForInsertion()
 			if (direction === 'before')
-				destination.insertBefore(element, siblingElement)
+				moveOrInsertBefore(destination, element, siblingElement)
 			else
-				destination.insertBefore(element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling)
+				moveOrInsertBefore(destination, element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling)
 
 			component.emitInsert()
 			return component
@@ -1293,7 +1315,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				}
 
 				const nodes = contents.filter(Truthy).map(nodeForInsertion)
-				element.append(...nodes)
+				appendNodes(element, nodes)
 				return nodes
 			},
 			prepend (...contents) {
@@ -1303,7 +1325,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				}
 
 				const nodes = contents.filter(Truthy).map(nodeForInsertion)
-				element.prepend(...nodes)
+				prependNodes(element, nodes)
 				return nodes
 			},
 			insert (direction, sibling, ...contents) {
@@ -1318,11 +1340,11 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				const siblingElement = sibling ? Component.requireElement(sibling, 'insert child relative to sibling') : null
 				if (direction === 'before')
 					for (let i = nodes.length - 1; i >= 0; i--)
-						element.insertBefore(nodes[i], siblingElement)
+						moveOrInsertBefore(element, nodes[i], siblingElement)
 				else {
 					let previousNode: Node | null = siblingElement
 					for (const node of nodes) {
-						element.insertBefore(node, !previousNode ? element.firstChild : previousNode.nextSibling)
+						moveOrInsertBefore(element, node, !previousNode ? element.firstChild : previousNode.nextSibling)
 						previousNode = node
 					}
 				}
