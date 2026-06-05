@@ -950,7 +950,7 @@ declare module "kitsui/Component" {
         readonly tagName: string;
         tag: keyof HTMLElementTagNameMap | string;
         requireElement(reason: string): HTMLElement;
-        realiseForInsertion(): HTMLElement;
+        realiseForInsertion(detachVirtualParent?: boolean): HTMLElement;
         adoptElement(element: HTMLElement): void;
         assertComposable(method: string): void;
         setAttribute(attribute: string, value?: string): void;
@@ -974,7 +974,7 @@ declare module "kitsui/Component" {
         removeContents(): void;
         getChildCount(): number;
         getChildren(): (Component | Node)[];
-        takeChildren(): Node[];
+        takeChildren(): (Component | Node)[];
         addEventListener(event: PropertyKey, handler: EventListener, options?: AddEventListenerOptions): void;
         removeEventListener(event: PropertyKey, handler: EventListener): void;
         queueDispatch(callback: () => unknown, bubble: boolean): void;

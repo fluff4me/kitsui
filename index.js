@@ -3020,6 +3020,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
     })(ComponentPerf || (exports.ComponentPerf = ComponentPerf = {}));
     const componentExtensionsRegistry = [];
     const virtualParentDetach = new WeakMap();
+    const virtualParents = new WeakMap();
     function getDom(component) {
         return component.__dom;
     }
@@ -3032,11 +3033,18 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             && !detector.component.rooted.value
             && !detector.component.removed.value
             && !detector.component.hasOwner()
-            && !detector.component.getAncestorComponents().some(ancestor => ancestor.hasOwner()));
+            && !hasOwnedAncestor(detector.component)
+            && (Component.isRealised(detector.component) || State_10.default.OwnerMetadata.hasSubscriptions(detector.component)));
         if (leakedComponents.length)
             console.warn('Leaked components:', ...leakedComponents.map(detector => detector.component));
         componentLeakDetectors = componentLeakDetectors.filter(detector => now - detector.built <= timeUntilLeakWarning);
     }, 100);
+    function hasOwnedAncestor(component) {
+        for (const ancestor of component.getAncestorComponents())
+            if (ancestor.hasOwner())
+                return true;
+        return false;
+    }
     function Component(type, builder) {
         if (typeof type === 'function' || typeof builder === 'function')
             return Component.Builder(type, builder);
@@ -3347,6 +3355,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             },
             remove() {
                 virtualParentDetach.get(component)?.();
+                virtualParents.delete(component);
                 component.removeContents();
                 component.removed.asMutable?.setValue(true);
                 component.rooted.asMutable?.setValue(false);
@@ -3478,7 +3487,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return state;
             },
             get parent() {
-                return dom.element?.parentElement?.component;
+                return dom.element?.parentElement?.component ?? virtualParents.get(component);
             },
             get previousSibling() {
                 return dom.element?.previousElementSibling?.component;
@@ -3495,12 +3504,11 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 return sibling;
             },
             *getAncestorComponents(builder) {
-                let cursor = dom.element;
+                let cursor = component.parent;
                 while (cursor) {
-                    cursor = cursor.parentElement;
-                    const component = cursor?.component;
-                    if (component?.is(builder))
-                        yield component;
+                    if (cursor.is(builder))
+                        yield cursor;
+                    cursor = cursor.parent;
                 }
             },
             *getChildren(builder) {
@@ -3716,8 +3724,9 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                         throw new Error(`Component has no realised element${reason ? `: ${reason}` : ''}`);
                     return element;
                 },
-                realiseForInsertion() {
-                    virtualParentDetach.get(component)?.();
+                realiseForInsertion(detachVirtualParent = true) {
+                    if (detachVirtualParent)
+                        virtualParentDetach.get(component)?.();
                     if (element) {
                         sealed = true;
                         return element;
@@ -3893,7 +3902,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                         Component.removeContents(element);
                         return;
                     }
-                    for (const child of children)
+                    for (const child of [...children])
                         if (Component.is(child))
                             child.remove();
                     children.splice(0, Infinity);
@@ -3909,9 +3918,11 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                         return [...element.childNodes];
                     const transferred = children.splice(0, Infinity);
                     for (const child of transferred)
-                        if (Component.is(child))
+                        if (Component.is(child)) {
                             virtualParentDetach.delete(child);
-                    return transferred.map(nodeForInsertion);
+                            virtualParents.delete(child);
+                        }
+                    return transferred;
                 },
                 addEventListener(event, handler, options) {
                     listeners.push({ event, handler, options });
@@ -3982,11 +3993,13 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     if (Component.is(content)) {
                         virtualParentDetach.get(content)?.();
                         content.element?.remove();
+                        virtualParents.set(content, component);
                         virtualParentDetach.set(content, () => {
                             const index = children.indexOf(content);
                             if (index !== -1)
                                 children.splice(index, 1);
                             virtualParentDetach.delete(content);
+                            virtualParents.delete(content);
                         });
                     }
                     else {
@@ -4083,7 +4096,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         }
         Component.element = element;
         function realise(from) {
-            return is(from) ? getDom(from).realiseForInsertion() : from;
+            return is(from) ? getDom(from).realiseForInsertion(false) : from;
         }
         Component.realise = realise;
         function requireElement(from, reason = 'element required') {
@@ -5833,6 +5846,14 @@ define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function 
         kitsui_1.Component.getDomController(store).realiseForInsertion();
         const parts = new Map();
         const seen = new Set();
+        let controller;
+        owner.removed.matchManual(true, () => {
+            controller?.abort();
+            for (const part of parts.values())
+                part.component.remove();
+            parts.clear();
+            store.remove();
+        });
         const Part = (unique, value, initialiser) => {
             if (typeof value === 'function' && !initialiser)
                 initialiser = value, value = undefined;
@@ -5844,13 +5865,12 @@ define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function 
                 return part.component;
             }
             const state = (0, kitsui_1.State)(value);
-            const component = (0, kitsui_1.Component)();
+            const component = (0, kitsui_1.Component)().setOwner(owner);
             initialiser?.(component, state);
             part = { state, component };
             parts.set(unique, part);
             return component;
         };
-        let controller;
         state.use(owner, async (value) => {
             seen.clear();
             controller?.abort();
