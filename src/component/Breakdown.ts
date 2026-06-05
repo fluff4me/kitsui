@@ -16,6 +16,14 @@ export default function <T> (owner: State.Owner, state: State<T>, handler: (valu
 	Component.getDomController(store).realiseForInsertion()
 	const parts = new Map<unknown, BreakdownPart<unknown>>()
 	const seen: Set<unknown> = new Set()
+	let controller: AbortController | undefined
+	owner.removed.matchManual(true, () => {
+		controller?.abort()
+		for (const part of parts.values())
+			part.component.remove()
+		parts.clear()
+		store.remove()
+	})
 	const Part: BreakdownPartConstructor = <B> (unique: unknown, value?: B, initialiser?: (component: Component, state: State<B>) => unknown): Component => {
 		if (typeof value === 'function' && !initialiser)
 			initialiser = value as NonNullable<typeof initialiser>, value = undefined
@@ -30,13 +38,12 @@ export default function <T> (owner: State.Owner, state: State<T>, handler: (valu
 		}
 
 		const state = State<B>(value)
-		const component = Component()
+		const component = Component().setOwner(owner)
 		initialiser?.(component, state)
 		part = { state, component }
 		parts.set(unique, part)
 		return component
 	}
-	let controller: AbortController | undefined
 	state.use(owner, async value => {
 		seen.clear()
 		controller?.abort()

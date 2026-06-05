@@ -310,7 +310,7 @@ export interface ComponentDomController {
 	readonly tagName: string
 	tag: keyof HTMLElementTagNameMap | string
 	requireElement (reason: string): HTMLElement
-	realiseForInsertion (): HTMLElement
+	realiseForInsertion (detachVirtualParent?: boolean): HTMLElement
 	adoptElement (element: HTMLElement): void
 	assertComposable (method: string): void
 	setAttribute (attribute: string, value?: string): void
@@ -334,7 +334,7 @@ export interface ComponentDomController {
 	removeContents (): void
 	getChildCount (): number
 	getChildren (): (Component | Node)[]
-	takeChildren (): Node[]
+	takeChildren (): (Component | Node)[]
 	addEventListener (event: PropertyKey, handler: EventListener, options?: AddEventListenerOptions): void
 	removeEventListener (event: PropertyKey, handler: EventListener): void
 	queueDispatch (callback: () => unknown, bubble: boolean): void
@@ -350,6 +350,7 @@ interface ComponentDomHost {
 }
 
 const virtualParentDetach = new WeakMap<Component, () => void>()
+const virtualParents = new WeakMap<Component, Component>()
 
 function getDom (component: Component): ComponentDomController {
 	return (component as Component & ComponentDomHost).__dom
@@ -363,13 +364,22 @@ setInterval(() => {
 		&& !detector.component.rooted.value
 		&& !detector.component.removed.value
 		&& !detector.component.hasOwner()
-		&& !detector.component.getAncestorComponents().some(ancestor => ancestor.hasOwner())
+		&& !hasOwnedAncestor(detector.component)
+		&& (Component.isRealised(detector.component) || State.OwnerMetadata.hasSubscriptions(detector.component))
 	)
 	if (leakedComponents.length)
 		console.warn('Leaked components:', ...leakedComponents.map(detector => detector.component))
 
 	componentLeakDetectors = componentLeakDetectors.filter(detector => now - detector.built <= timeUntilLeakWarning)
 }, 100)
+
+function hasOwnedAncestor (component: Component) {
+	for (const ancestor of component.getAncestorComponents())
+		if (ancestor.hasOwner())
+			return true
+
+	return false
+}
 
 function Component<TYPE extends keyof HTMLElementTagNameMap> (type: TYPE): Component<HTMLElementTagNameMap[TYPE]>
 function Component (): Component<HTMLSpanElement>
@@ -734,6 +744,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 
 		remove () {
 			virtualParentDetach.get(component)?.()
+			virtualParents.delete(component)
 			component.removeContents()
 
 			component.removed.asMutable?.setValue(true)
@@ -882,7 +893,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		},
 
 		get parent () {
-			return dom.element?.parentElement?.component
+			return dom.element?.parentElement?.component ?? virtualParents.get(component)
 		},
 		get previousSibling () {
 			return dom.element?.previousElementSibling?.component
@@ -899,12 +910,12 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			return sibling
 		},
 		*getAncestorComponents (builder?: Component.BuilderLike) {
-			let cursor: HTMLElement | null | undefined = dom.element
+			let cursor = component.parent
 			while (cursor) {
-				cursor = cursor.parentElement
-				const component = cursor?.component
-				if (component?.is(builder))
-					yield component
+				if (cursor.is(builder))
+					yield cursor
+
+				cursor = cursor.parent
 			}
 		},
 		*getChildren (builder?: Component.BuilderLike) {
@@ -1137,8 +1148,9 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 					throw new Error(`Component has no realised element${reason ? `: ${reason}` : ''}`)
 				return element
 			},
-			realiseForInsertion () {
-				virtualParentDetach.get(component)?.()
+			realiseForInsertion (detachVirtualParent = true) {
+				if (detachVirtualParent)
+					virtualParentDetach.get(component)?.()
 				if (element) {
 					sealed = true
 					return element
@@ -1322,7 +1334,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 					return
 				}
 
-				for (const child of children)
+				for (const child of [...children])
 					if (Component.is(child))
 						child.remove()
 				children.splice(0, Infinity)
@@ -1339,9 +1351,11 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 
 				const transferred = children.splice(0, Infinity)
 				for (const child of transferred)
-					if (Component.is(child))
+					if (Component.is(child)) {
 						virtualParentDetach.delete(child)
-				return transferred.map(nodeForInsertion)
+						virtualParents.delete(child)
+					}
+				return transferred
 			},
 			addEventListener (event, handler, options) {
 				listeners.push({ event, handler, options })
@@ -1414,11 +1428,13 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				if (Component.is(content)) {
 					virtualParentDetach.get(content)?.()
 					content.element?.remove()
+					virtualParents.set(content, component)
 					virtualParentDetach.set(content, () => {
 						const index = children.indexOf(content)
 						if (index !== -1)
 							children.splice(index, 1)
 						virtualParentDetach.delete(content)
+						virtualParents.delete(content)
 					})
 				}
 				else {
@@ -1549,7 +1565,7 @@ namespace Component {
 	}
 
 	export function realise<NODE extends Node> (from: Component | NODE): NODE {
-		return is(from) ? getDom(from).realiseForInsertion() as Node as NODE : from
+		return is(from) ? getDom(from).realiseForInsertion(false) as Node as NODE : from
 	}
 
 	export function requireElement<NODE extends Node> (from: Component | NODE, reason = 'element required'): NODE {
