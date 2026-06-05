@@ -2957,6 +2957,21 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
     Viewport_2 = __importDefault(Viewport_2);
     const selfScript = (0, State_10.default)(undefined);
     const SYMBOL_COMPONENT_BRAND = Symbol('COMPONENT_BRAND');
+    function moveOrInsertBefore(parent, node, child) {
+        const moveBefore = parent.moveBefore;
+        if (moveBefore && node.parentNode && node.isConnected && parent.isConnected && node.getRootNode() === parent.getRootNode())
+            moveBefore.call(parent, node, child);
+        else
+            parent.insertBefore(node, child);
+    }
+    function appendNodes(parent, nodes) {
+        for (const node of nodes)
+            moveOrInsertBefore(parent, node, null);
+    }
+    function prependNodes(parent, nodes) {
+        for (let i = nodes.length - 1; i >= 0; i--)
+            moveOrInsertBefore(parent, nodes[i], parent.firstChild);
+    }
     const ELEMENT_TO_COMPONENT_MAP = new WeakMap();
     (0, Objects_2.DefineMagic)(Element.prototype, 'component', {
         get() {
@@ -3385,7 +3400,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 if (dom.runOrQueueRealisation(() => component.appendTo(destination)))
                     return component;
                 const element = dom.realiseForInsertion();
-                destination.append(element);
+                moveOrInsertBefore(destination, element, null);
                 component.emitInsert();
                 return component;
             },
@@ -3397,7 +3412,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 if (dom.runOrQueueRealisation(() => component.prependTo(destination)))
                     return component;
                 const element = dom.realiseForInsertion();
-                destination.prepend(element);
+                moveOrInsertBefore(destination, element, destination.firstChild);
                 component.emitInsert();
                 return component;
             },
@@ -3413,9 +3428,9 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 const siblingElement = sibling ? Component.requireElement(sibling, 'insert relative to sibling') : null;
                 const element = dom.realiseForInsertion();
                 if (direction === 'before')
-                    destination.insertBefore(element, siblingElement);
+                    moveOrInsertBefore(destination, element, siblingElement);
                 else
-                    destination.insertBefore(element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling);
+                    moveOrInsertBefore(destination, element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling);
                 component.emitInsert();
                 return component;
             },
@@ -3864,7 +3879,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                         return [];
                     }
                     const nodes = contents.filter(Arrays_5.Truthy).map(nodeForInsertion);
-                    element.append(...nodes);
+                    appendNodes(element, nodes);
                     return nodes;
                 },
                 prepend(...contents) {
@@ -3873,7 +3888,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                         return [];
                     }
                     const nodes = contents.filter(Arrays_5.Truthy).map(nodeForInsertion);
-                    element.prepend(...nodes);
+                    prependNodes(element, nodes);
                     return nodes;
                 },
                 insert(direction, sibling, ...contents) {
@@ -3887,11 +3902,11 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     const siblingElement = sibling ? Component.requireElement(sibling, 'insert child relative to sibling') : null;
                     if (direction === 'before')
                         for (let i = nodes.length - 1; i >= 0; i--)
-                            element.insertBefore(nodes[i], siblingElement);
+                            moveOrInsertBefore(element, nodes[i], siblingElement);
                     else {
                         let previousNode = siblingElement;
                         for (const node of nodes) {
-                            element.insertBefore(node, !previousNode ? element.firstChild : previousNode.nextSibling);
+                            moveOrInsertBefore(element, node, !previousNode ? element.firstChild : previousNode.nextSibling);
                             previousNode = node;
                         }
                     }
