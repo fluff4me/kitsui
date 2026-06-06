@@ -274,6 +274,9 @@ function StyleManipulator (component: Component): StyleManipulator<Component> {
 			}
 		}
 
+		if (!stylesArray.length && !component.attributes.has('component'))
+			return component
+
 		if (!component.attributes.has('component'))
 			component.attributes.insertBefore('class', 'component')
 
