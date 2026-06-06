@@ -2892,6 +2892,8 @@ define("kitsui/utility/StyleManipulator", ["require", "exports", "kitsui/utility
                     Arrays_4.default.remove(stylesArray, combination.combined);
                 }
             }
+            if (!stylesArray.length && !component.attributes.has('component'))
+                return component;
             if (!component.attributes.has('component'))
                 component.attributes.insertBefore('class', 'component');
             component.attributes.set('component', stylesArray.join(' '));
@@ -3711,10 +3713,10 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             let realised = false;
             let sealed = false;
             let tag = type;
-            const attributes = new Map();
-            const attributeOrder = [];
-            const classes = new Set();
-            const styles = new Map();
+            let attributes = new Map();
+            let attributeOrder = [];
+            let classes = new Set();
+            let styles = new Map();
             const children = [];
             const listeners = [];
             const queuedEmits = [];
@@ -3749,14 +3751,18 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     element = document.createElement(tag);
                     realised = true;
                     element.component = component;
-                    for (const attribute of attributeOrder) {
-                        const value = attributes.get(attribute);
+                    for (const attribute of attributeOrder ?? []) {
+                        const value = attributes?.get(attribute);
                         if (value !== undefined)
                             element.setAttribute(attribute, value);
                     }
-                    element.classList.add(...classes);
-                    for (const [property, value] of styles)
+                    element.classList.add(...classes ?? []);
+                    for (const [property, value] of styles ?? [])
                         element.style.setProperty(property, value);
+                    attributes = undefined;
+                    attributeOrder = undefined;
+                    classes = undefined;
+                    styles = undefined;
                     for (const listener of listeners)
                         element.addEventListener(listener.event, listener.handler, listener.options);
                     for (const callback of onRealiseCallbacks.splice(0, Infinity))
@@ -3776,6 +3782,10 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     realised = true;
                     tag = newElement.tagName?.toLowerCase() ?? 'window';
                     element.component = component;
+                    attributes = undefined;
+                    attributeOrder = undefined;
+                    classes = undefined;
+                    styles = undefined;
                     for (const listener of listeners)
                         element.addEventListener(listener.event, listener.handler, listener.options);
                 },
@@ -3784,69 +3794,70 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                         throw new Error(`Cannot ${method} after a component has been appended`);
                 },
                 setAttribute(attribute, value = '') {
-                    ensureAttributeOrder(attribute);
                     if (value === undefined) {
                         this.removeAttribute(attribute);
                         return;
                     }
-                    attributes.set(attribute, value);
-                    element?.setAttribute(attribute, value);
+                    if (element)
+                        element.setAttribute(attribute, value);
+                    else {
+                        ensureAttributeOrder(attribute);
+                        attributes.set(attribute, value);
+                    }
                 },
                 hasAttribute(attribute) {
                     return element?.hasAttribute(attribute) ?? attributes.has(attribute);
                 },
                 getAttribute(attribute) {
-                    return element?.getAttribute(attribute) ?? attributes.get(attribute);
+                    return element ? element.getAttribute(attribute) ?? undefined : attributes.get(attribute);
                 },
                 removeAttribute(attribute) {
-                    attributes.delete(attribute);
-                    removeAttributeOrder(attribute);
-                    element?.removeAttribute(attribute);
+                    if (element)
+                        element.removeAttribute(attribute);
+                    else {
+                        attributes.delete(attribute);
+                        removeAttributeOrder(attribute);
+                    }
                 },
                 prependAttribute(attribute, value = '') {
+                    if (element) {
+                        reorderElementAttribute(attribute, value, undefined, 'before');
+                        return;
+                    }
                     removeAttributeOrder(attribute);
                     attributeOrder.unshift(attribute);
                     attributes.set(attribute, value);
-                    if (element) {
-                        const oldAttributes = [...element.attributes].map(attribute => [attribute.name, attribute.value]);
-                        for (const attribute of oldAttributes)
-                            element.removeAttribute(attribute[0]);
-                        for (const attribute of attributeOrder) {
-                            const value = attributes.get(attribute);
-                            if (value !== undefined)
-                                element.setAttribute(attribute, value);
-                        }
-                    }
                 },
                 insertAttribute(referenceAttribute, direction, attribute, value = '') {
+                    if (element) {
+                        reorderElementAttribute(attribute, value, referenceAttribute, direction);
+                        return;
+                    }
                     removeAttributeOrder(attribute);
                     const index = attributeOrder.indexOf(referenceAttribute);
                     attributeOrder.splice(index === -1 ? direction === 'before' ? 0 : attributeOrder.length : index + (direction === 'after' ? 1 : 0), 0, attribute);
                     attributes.set(attribute, value);
-                    if (element) {
-                        for (const attribute of [...element.attributes])
-                            element.removeAttribute(attribute.name);
-                        for (const attribute of attributeOrder) {
-                            const value = attributes.get(attribute);
-                            if (value !== undefined)
-                                element.setAttribute(attribute, value);
-                        }
-                    }
                 },
                 getAttributes() {
+                    if (element)
+                        return [...element.attributes].map(attribute => [attribute.name, attribute.value]);
                     return attributeOrder
                         .map(attribute => [attribute, attributes.get(attribute)])
                         .filter((entry) => entry[1] !== undefined);
                 },
                 addClasses(...classNames) {
-                    for (const className of classNames)
-                        classes.add(className);
-                    element?.classList.add(...classNames);
+                    if (element)
+                        element.classList.add(...classNames);
+                    else
+                        for (const className of classNames)
+                            classes.add(className);
                 },
                 removeClasses(...classNames) {
-                    for (const className of classNames)
-                        classes.delete(className);
-                    element?.classList.remove(...classNames);
+                    if (element)
+                        element.classList.remove(...classNames);
+                    else
+                        for (const className of classNames)
+                            classes.delete(className);
                 },
                 hasClasses(...classNames) {
                     return classNames.every(className => element?.classList.contains(className) ?? classes.has(className));
@@ -3863,15 +3874,19 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                         return;
                     }
                     const stringValue = `${value}`;
-                    styles.set(property, stringValue);
-                    element?.style.setProperty(property, stringValue);
+                    if (element)
+                        element.style.setProperty(property, stringValue);
+                    else
+                        styles.set(property, stringValue);
                 },
                 getStyleProperty(property) {
-                    return element?.style.getPropertyValue(property) || styles.get(property);
+                    return element ? element.style.getPropertyValue(property) || undefined : styles.get(property);
                 },
                 removeStyleProperty(property) {
-                    styles.delete(property);
-                    element?.style.removeProperty(property);
+                    if (element)
+                        element.style.removeProperty(property);
+                    else
+                        styles.delete(property);
                 },
                 append(...contents) {
                     if (!element) {
@@ -3988,6 +4003,17 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 const index = attributeOrder.indexOf(attribute);
                 if (index !== -1)
                     attributeOrder.splice(index, 1);
+            }
+            function reorderElementAttribute(attribute, value, referenceAttribute, direction) {
+                const entries = [...element.attributes]
+                    .map(attribute => [attribute.name, attribute.value])
+                    .filter(entry => entry[0] !== attribute);
+                const index = referenceAttribute === undefined ? -1 : entries.findIndex(entry => entry[0] === referenceAttribute);
+                entries.splice(index === -1 ? direction === 'before' ? 0 : entries.length : index + (direction === 'after' ? 1 : 0), 0, [attribute, value]);
+                for (const attribute of [...element.attributes])
+                    element.removeAttribute(attribute.name);
+                for (const [attribute, value] of entries)
+                    element.setAttribute(attribute, value);
             }
             function indexOfVirtualChild(sibling) {
                 if (!sibling)
