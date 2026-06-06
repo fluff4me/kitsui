@@ -325,6 +325,20 @@ interface PendingEventListener {
 	options?: AddEventListenerOptions
 }
 
+const VOID_ELEMENT_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr'])
+
+function escapeTextContent (value: string) {
+	return value
+		.replaceAll('&', '&amp;')
+		.replaceAll('<', '&lt;')
+		.replaceAll('>', '&gt;')
+}
+
+function escapeAttributeValue (value: string) {
+	return escapeTextContent(value)
+		.replaceAll('"', '&quot;')
+}
+
 export interface ComponentDomController {
 	readonly element: HTMLElement | undefined
 	readonly realised: boolean
@@ -429,6 +443,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 	let unuseAriaLabelledByIdState: State.Unsubscribe | undefined
 	let unuseAriaControlsIdState: State.Unsubscribe | undefined
 	let unuseOwnerRemove: State.Unsubscribe | undefined
+	let getOuterHTML!: () => string
 
 	let descendantsListeningForScroll: HTMLCollection | undefined
 	let descendantRectsListeningForScroll: HTMLCollection | undefined
@@ -445,6 +460,9 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		isComponent: true,
 		isInsertionDestination: true,
 		__dom: dom,
+		get outerHTML () {
+			return getOuterHTML()
+		},
 		get element () {
 			return dom.element
 		},
@@ -1123,7 +1141,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				FocusListener.blur(dom.element)
 			return component
 		},
-	} satisfies Pick<Component, keyof BaseComponent>) as any as Mutable<Component>
+	} satisfies Pick<Component, keyof BaseComponent> & { readonly outerHTML: string }) as any as Mutable<Component>
 
 	// WeavingArg.setRenderable(component, () => component.element.textContent ?? '')
 	// Objects.stringify.disable(component)
@@ -1435,7 +1453,53 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				return true
 			},
 		}
+		getOuterHTML = () => {
+			if (element)
+				return element.outerHTML
+
+			const tagName = tag.toString().toLowerCase()
+			const attributeText = getOuterHTMLAttributes()
+			if (VOID_ELEMENT_TAGS.has(tagName))
+				return `<${tagName}${attributeText}>`
+
+			return `<${tagName}${attributeText}>${children.map(contentOuterHTML).join('')}</${tagName}>`
+		}
 		return controller
+
+		function getOuterHTMLAttributes () {
+			const outerAttributes = new Map(controller.getAttributes())
+			const classNames = controller.getClasses()
+			if (classNames.length)
+				outerAttributes.set('class', [outerAttributes.get('class'), ...classNames].filter(Truthy).join(' '))
+
+			const styleText = [...styles!]
+				.map(([property, value]) => `${property}: ${value};`)
+				.join(' ')
+			if (styleText)
+				outerAttributes.set('style', [outerAttributes.get('style'), styleText].filter(Truthy).join(' '))
+
+			let result = ''
+			for (const [attribute, value] of outerAttributes)
+				result += value === '' ? ` ${attribute}` : ` ${attribute}="${escapeAttributeValue(value)}"`
+
+			return result
+		}
+
+		function contentOuterHTML (content: Component | Node): string {
+			if (Component.is(content))
+				return (content as Component & { outerHTML: string }).outerHTML
+
+			if (content instanceof Element)
+				return content.outerHTML
+
+			if (content instanceof Text)
+				return escapeTextContent(content.data)
+
+			if (content instanceof Comment)
+				return `<!--${content.data.replaceAll('-->', '--&gt;')}-->`
+
+			return escapeTextContent(content.textContent ?? '')
+		}
 
 		function ensureAttributeOrder (attribute: string) {
 			if (!attributeOrder!.includes(attribute))
