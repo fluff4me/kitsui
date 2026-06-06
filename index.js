@@ -3036,6 +3036,17 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         })(CallbacksOnInsertions = ComponentPerf.CallbacksOnInsertions || (ComponentPerf.CallbacksOnInsertions = {}));
     })(ComponentPerf || (exports.ComponentPerf = ComponentPerf = {}));
     const componentExtensionsRegistry = [];
+    const VOID_ELEMENT_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+    function escapeTextContent(value) {
+        return value
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;');
+    }
+    function escapeAttributeValue(value) {
+        return escapeTextContent(value)
+            .replaceAll('"', '&quot;');
+    }
     const virtualParentDetach = new WeakMap();
     const virtualParents = new WeakMap();
     function getDom(component) {
@@ -3074,6 +3085,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         let unuseAriaLabelledByIdState;
         let unuseAriaControlsIdState;
         let unuseOwnerRemove;
+        let getOuterHTML;
         let descendantsListeningForScroll;
         let descendantRectsListeningForScroll;
         const jitTweaks = new Map();
@@ -3086,6 +3098,9 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             isComponent: true,
             isInsertionDestination: true,
             __dom: dom,
+            get outerHTML() {
+                return getOuterHTML();
+            },
             get element() {
                 return dom.element;
             },
@@ -3994,7 +4009,42 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     return true;
                 },
             };
+            getOuterHTML = () => {
+                if (element)
+                    return element.outerHTML;
+                const tagName = tag.toString().toLowerCase();
+                const attributeText = getOuterHTMLAttributes();
+                if (VOID_ELEMENT_TAGS.has(tagName))
+                    return `<${tagName}${attributeText}>`;
+                return `<${tagName}${attributeText}>${children.map(contentOuterHTML).join('')}</${tagName}>`;
+            };
             return controller;
+            function getOuterHTMLAttributes() {
+                const outerAttributes = new Map(controller.getAttributes());
+                const classNames = controller.getClasses();
+                if (classNames.length)
+                    outerAttributes.set('class', [outerAttributes.get('class'), ...classNames].filter(Arrays_5.Truthy).join(' '));
+                const styleText = [...styles]
+                    .map(([property, value]) => `${property}: ${value};`)
+                    .join(' ');
+                if (styleText)
+                    outerAttributes.set('style', [outerAttributes.get('style'), styleText].filter(Arrays_5.Truthy).join(' '));
+                let result = '';
+                for (const [attribute, value] of outerAttributes)
+                    result += value === '' ? ` ${attribute}` : ` ${attribute}="${escapeAttributeValue(value)}"`;
+                return result;
+            }
+            function contentOuterHTML(content) {
+                if (Component.is(content))
+                    return content.outerHTML;
+                if (content instanceof Element)
+                    return content.outerHTML;
+                if (content instanceof Text)
+                    return escapeTextContent(content.data);
+                if (content instanceof Comment)
+                    return `<!--${content.data.replaceAll('-->', '--&gt;')}-->`;
+                return escapeTextContent(content.textContent ?? '');
+            }
             function ensureAttributeOrder(attribute) {
                 if (!attributeOrder.includes(attribute))
                     attributeOrder.push(attribute);
@@ -4548,11 +4598,11 @@ define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "k
         const style = loading.styleTargets;
         const storage = (0, Component_3.default)().setOwner(component);
         Component_3.default.getDomController(storage).realiseForInsertion();
-        const spinner = (0, Component_3.default)().style(style.Spinner);
-        const progressBar = (0, Component_3.default)().style(style.ProgressBar);
-        const messageText = (0, Component_3.default)().style(style.MessageText);
-        const errorIcon = (0, Component_3.default)().style(style.ErrorIcon);
-        const errorText = (0, Component_3.default)().style(style.ErrorText);
+        const spinner = (0, Component_3.default)().setOwner(loading).style(style.Spinner);
+        const progressBar = (0, Component_3.default)().setOwner(loading).style(style.ProgressBar);
+        const messageText = (0, Component_3.default)().setOwner(loading).style(style.MessageText);
+        const errorIcon = (0, Component_3.default)().setOwner(loading).style(style.ErrorIcon);
+        const errorText = (0, Component_3.default)().setOwner(loading).style(style.ErrorText);
         const loaded = (0, State_12.default)(false);
         let owner;
         let refresh;
