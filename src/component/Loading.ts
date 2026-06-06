@@ -48,11 +48,11 @@ const Loading = Component((component): Loading => {
 	const storage = Component().setOwner(component)
 	Component.getDomController(storage).realiseForInsertion()
 
-	const spinner = Component().style(style.Spinner)
-	const progressBar = Component().style(style.ProgressBar)
-	const messageText = Component().style(style.MessageText)
-	const errorIcon = Component().style(style.ErrorIcon)
-	const errorText = Component().style(style.ErrorText)
+	const spinner = Component().setOwner(loading).style(style.Spinner)
+	const progressBar = Component().setOwner(loading).style(style.ProgressBar)
+	const messageText = Component().setOwner(loading).style(style.MessageText)
+	const errorIcon = Component().setOwner(loading).style(style.ErrorIcon)
+	const errorText = Component().setOwner(loading).style(style.ErrorText)
 
 	const loaded = State(false)
 
