@@ -3076,7 +3076,6 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         if (typeof type === 'function' || typeof builder === 'function')
             return Component.Builder(type, builder);
         type ??= 'span';
-        type = type;
         if (!canBuildComponents)
             throw new Error('Components cannot be built yet');
         let unuseIdState;
@@ -4366,6 +4365,7 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
         let indexjsText;
         let lines;
         function getBuilderName() {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             let moduleName = '__moduleName' in self ? self.__moduleName : undefined;
             if (moduleName)
                 return addKebabCase(moduleName.slice(moduleName.lastIndexOf('/') + 1));
@@ -4830,7 +4830,8 @@ define("kitsui/component/DragDrop", ["require", "exports", "kitsui/Component", "
                 if (depth)
                     return depth;
                 return (bState?.order ?? 0) - (aState?.order ?? 0);
-            })[0];
+            })
+                .at(0);
         }
         function isTargetEligible(target, session) {
             const state = targetStateMap.get(target);

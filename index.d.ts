@@ -948,7 +948,7 @@ declare module "kitsui/Component" {
         readonly realised: boolean;
         readonly sealed: boolean;
         readonly tagName: string;
-        tag: keyof HTMLElementTagNameMap | string;
+        tag: ComponentTagName;
         requireElement(reason: string): HTMLElement;
         realiseForInsertion(detachVirtualParent?: boolean): HTMLElement;
         adoptElement(element: HTMLElement): void;
@@ -984,6 +984,7 @@ declare module "kitsui/Component" {
         flushDeferredRealisation(): void;
         runOrQueueRealisation(callback: () => unknown): boolean;
     }
+    type ComponentTagName = keyof HTMLElementTagNameMap | (string & {});
     function Component<TYPE extends keyof HTMLElementTagNameMap>(type: TYPE): Component<HTMLElementTagNameMap[TYPE]>;
     function Component(): Component<HTMLSpanElement>;
     function Component(type?: keyof HTMLElementTagNameMap): Component;
