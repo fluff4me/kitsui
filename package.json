@@ -7,9 +7,9 @@
 	"devDependencies": {
 		"chiri": "github:fluff4me/chiri#4404e36d0f999f3ec38bec9bb05fdcfed8ec6d07",
 		"happy-dom": "20.9.0",
-		"lint": "github:fluff4me/lint#f3a16799fa92d437650d5a5f397681b310d8d36a",
+		"lint": "github:fluff4me/lint#67c325cac44e46be0d8cad6ea5935a7ad9c6638d",
 		"task": "github:chirivulpes/task#4743b1177d35a1fa751de5fed6362e5d4e36ce0e",
 		"typescript": "5.8.3",
-		"weaving": "github:chirivulpes/weaving#a0e911b8e0a1c0ca5ae9a220154aec29025d67e7"
+		"weaving": "github:chirivulpes/weaving#105ed29c4bdbae5570ca486298024426575c26af"
 	}
 }
