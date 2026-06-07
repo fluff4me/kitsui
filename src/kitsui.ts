@@ -1,4 +1,5 @@
 import _Dialog from 'component/Dialog'
+import _DragDrop from 'component/DragDrop'
 import _Label, { LabelTarget as _LabelTarget } from 'component/Label'
 import _Loading from 'component/Loading'
 import _Popover from 'component/Popover'
@@ -23,4 +24,6 @@ export namespace Kit {
 	export const Popover = _Popover
 	export type Tooltip = _Tooltip
 	export const Tooltip = _Tooltip
+	export type DragDrop<T> = _DragDrop<T>
+	export const DragDrop = _DragDrop
 }
