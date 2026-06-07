@@ -1,0 +1,5 @@
+overrides:
+  chiri: link:../../node/chiri
+  lint: link:../../node/lint
+  task: link:../../node/task/out
+  weaving: link:../../node/weaving/build

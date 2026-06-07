@@ -949,7 +949,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			const [sibling] = component.getNextSiblings(builder)
 			return sibling
 		},
-		*getAncestorComponents (builder?: Component.BuilderLike) {
+		* getAncestorComponents (builder?: Component.BuilderLike) {
 			let cursor = component.parent
 			while (cursor) {
 				if (cursor.is(builder))
@@ -958,14 +958,14 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				cursor = cursor.parent
 			}
 		},
-		*getChildren (builder?: Component.BuilderLike) {
+		* getChildren (builder?: Component.BuilderLike) {
 			for (const child of dom.element?.children ?? []) {
 				const component = child.component
 				if (component?.is(builder))
 					yield component
 			}
 		},
-		*getSiblings (builder?: Component.BuilderLike) {
+		* getSiblings (builder?: Component.BuilderLike) {
 			const element = dom.element
 			const parent = element?.parentElement
 			for (const child of parent?.children ?? [])
@@ -975,7 +975,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 						yield component
 				}
 		},
-		*getPreviousSiblings (builder?: Component.BuilderLike) {
+		* getPreviousSiblings (builder?: Component.BuilderLike) {
 			const element = dom.element
 			const parent = element?.parentElement
 			for (const child of parent?.children ?? []) {
@@ -987,7 +987,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 					yield childComponent
 			}
 		},
-		*getNextSiblings (builder?: Component.BuilderLike) {
+		* getNextSiblings (builder?: Component.BuilderLike) {
 			let cursor: Element | null | undefined = dom.element
 			while ((cursor = cursor?.nextElementSibling)) {
 				const component = cursor.component
@@ -995,7 +995,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 					yield component
 			}
 		},
-		*getDescendants (builder?: Component.BuilderLike) {
+		* getDescendants (builder?: Component.BuilderLike) {
 			if (!dom.element)
 				return
 
@@ -1932,8 +1932,7 @@ namespace Component {
 	const VARIABLE_NAME_REGEX = /\s*(?:const |exports\.(?!default))(\w+) = /
 	const LAST_MODULE_DEF_REGEX = /.*\bdefine\("(?:[^"]+\/)*(\w+)", /s
 	const PASCAL_CASE_WORD_START = /(?<=[a-z0-9_-])(?=[A-Z])/g
-
-	// eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
+	 
 	interface BuilderName extends String {
 		kebabcase: string
 	}

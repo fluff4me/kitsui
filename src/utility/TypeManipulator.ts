@@ -7,8 +7,8 @@ interface TypeManipulator<HOST, TYPE extends string> {
 	toggle (has: boolean, ...types: TYPE[]): HOST
 }
 
-const TypeManipulator // Object.assign(
-	= function <HOST, TYPE extends string> (host: HOST, onAdd: (types: TYPE[]) => unknown, onRemove: (types: TYPE[]) => unknown): TypeManipulator<HOST, TYPE> {
+const TypeManipulator = // Object.assign(
+	function <HOST, TYPE extends string> (host: HOST, onAdd: (types: TYPE[]) => unknown, onRemove: (types: TYPE[]) => unknown): TypeManipulator<HOST, TYPE> {
 		const state = State(new Set<TYPE>())
 		return Object.assign(
 			add,

@@ -5,11 +5,12 @@
 	"main": "index.js",
 	"types": "index.d.ts",
 	"devDependencies": {
-		"typescript": "5.8.3",
+		"chiri": "github:fluff4me/chiri#4404e36d0f999f3ec38bec9bb05fdcfed8ec6d07",
+		"happy-dom": "20.9.0",
+		"lint": "github:fluff4me/lint#59de9b26041d6b98921a8a158ea5c29fdc699297",
+		"task": "github:chirivulpes/task#4743b1177d35a1fa751de5fed6362e5d4e36ce0e",
 		"ts-node": "10.9.2",
-		"lint": "github:fluff4me/lint",
-		"task": "github:chirivulpes/task#package",
-		"chiri": "github:fluff4me/chiri#package",
-		"weaving": "github:chirivulpes/weaving#package"
+		"typescript": "5.8.3",
+		"weaving": "github:chirivulpes/weaving#a0e911b8e0a1c0ca5ae9a220154aec29025d67e7"
 	}
 }
