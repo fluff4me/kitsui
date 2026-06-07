@@ -4577,11 +4577,364 @@ define("kitsui/component/Dialog", ["require", "exports", "kitsui/Component", "ki
     });
     exports.default = Dialog;
 });
-define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_3, State_12) {
+define("kitsui/component/DragDrop", ["require", "exports", "kitsui/Component", "kitsui/utility/State", "kitsui/utility/Vector2"], function (require, exports, Component_3, State_12, Vector2_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     Component_3 = __importDefault(Component_3);
     State_12 = __importDefault(State_12);
+    Vector2_1 = __importDefault(Vector2_1);
+    function DragDrop(id) {
+        const active = (0, State_12.default)(undefined);
+        const targets = new Set();
+        let targetOrder = 0;
+        const Draggable = Component_3.default.Extension((component, initialiser) => {
+            const config = DraggableConfig();
+            initialiser(config);
+            const dragging = (0, State_12.default)(false);
+            const dragSession = (0, State_12.default)(undefined);
+            const disabled = config.getDisabled();
+            let suppressNextClick = false;
+            let clearSuppressNextClickTimeout;
+            let controller;
+            let session;
+            let preview;
+            component
+                .style.setProperties({
+                userSelect: 'none',
+                ['-webkitUserDrag']: 'none',
+            })
+                .event.subscribe('pointerdown', event => {
+                if (!(event instanceof PointerEvent) || event.button !== 0 || disabled.value)
+                    return;
+                const payload = config.getPayload()?.value;
+                const sourceElement = component.element;
+                if (payload === undefined || payload === null || !sourceElement)
+                    return;
+                const payloadValue = payload;
+                const start = Vector2_1.default.fromClient(event);
+                const sourceRect = sourceElement.getBoundingClientRect();
+                const offset = Vector2_1.default.subtract(start, sourceRect);
+                let started = false;
+                controller?.abort();
+                controller = new AbortController();
+                document.addEventListener('pointermove', handleMove, { signal: controller.signal });
+                document.addEventListener('pointerup', handleUp, { signal: controller.signal });
+                document.addEventListener('pointercancel', handleCancel, { signal: controller.signal });
+                const capture = sourceElement.setPointerCapture;
+                if (capture)
+                    try {
+                        capture.call(sourceElement, event.pointerId);
+                    }
+                    catch { }
+                function handleMove(event) {
+                    const pointer = Vector2_1.default.fromClient(event);
+                    if (!started) {
+                        if (Vector2_1.default.distanceWithin(config.getThreshold(), start, pointer))
+                            return;
+                        started = true;
+                        suppressNextClick = true;
+                        clearTimeout(clearSuppressNextClickTimeout);
+                        startSession(pointer, payloadValue);
+                    }
+                    event.preventDefault();
+                    if (!session)
+                        return;
+                    session.pointer.value = pointer;
+                    updatePreview(session);
+                    updateTargets(session);
+                }
+                function handleUp(event) {
+                    controller?.abort();
+                    controller = undefined;
+                    if (!started || !session)
+                        return;
+                    event.preventDefault();
+                    void drop(session);
+                }
+                function handleCancel() {
+                    cancelSession();
+                }
+                function startSession(pointer, payload) {
+                    const pointerState = (0, State_12.default)(pointer);
+                    const activeTarget = (0, State_12.default)(undefined);
+                    const dropping = (0, State_12.default)(false);
+                    const nextSession = {
+                        id,
+                        payload,
+                        source: draggable,
+                        sourceRect,
+                        start,
+                        pointer: pointerState,
+                        offset,
+                        activeTarget,
+                        dropping,
+                        cancel: cancelSession,
+                    };
+                    session = nextSession;
+                    for (const handler of config.getStartHandlers())
+                        handler(nextSession, payload);
+                    const previewFactory = config.getPreview();
+                    preview = previewFactory?.(nextSession, payload);
+                    if (preview) {
+                        preview
+                            .style.setProperties({
+                            position: 'fixed',
+                            left: '0',
+                            top: '0',
+                            width: `${sourceRect.width}px`,
+                            height: `${sourceRect.height}px`,
+                            pointerEvents: 'none',
+                            zIndex: '2147483647',
+                        })
+                            .appendTo(Component_3.default.getBody());
+                    }
+                    active.value = nextSession;
+                    dragging.value = true;
+                    dragSession.value = nextSession;
+                    updatePreview(nextSession);
+                    updateTargets(nextSession);
+                    startAutoScroll(nextSession);
+                }
+            })
+                .event.subscribeCapture('click', event => {
+                if (!suppressNextClick)
+                    return;
+                suppressNextClick = false;
+                clearTimeout(clearSuppressNextClickTimeout);
+                event.preventDefault();
+                event.stopPropagation();
+            })
+                .onRemoveManual(cancelSession);
+            disabled.subscribe(component, disabled => {
+                if (disabled && session)
+                    cancelSession();
+            });
+            const draggable = component.extend(component => ({
+                dragging,
+                dragSession,
+                cancelDrag: () => {
+                    cancelSession();
+                    return component;
+                },
+            }));
+            return draggable;
+            async function drop(sessionToDrop) {
+                const target = sessionToDrop.activeTarget.value;
+                const targetState = target && targetStateMap.get(target);
+                if (!target || !targetState?.drop) {
+                    cancelSession();
+                    return;
+                }
+                target.dragDropPending.value = true;
+                sessionToDrop.dropping.value = true;
+                try {
+                    await targetState.drop(sessionToDrop.payload, sessionToDrop);
+                }
+                finally {
+                    target.dragDropPending.value = false;
+                    cancelSession();
+                }
+            }
+            function cancelSession() {
+                const hadSession = !!session;
+                controller?.abort();
+                controller = undefined;
+                if (active.value === session)
+                    active.value = undefined;
+                preview?.remove();
+                preview = undefined;
+                session = undefined;
+                dragging.value = false;
+                dragSession.value = undefined;
+                updateTargets();
+                if (hadSession) {
+                    clearTimeout(clearSuppressNextClickTimeout);
+                    clearSuppressNextClickTimeout = window.setTimeout(() => suppressNextClick = false, 1000);
+                }
+            }
+            function updatePreview(session) {
+                if (!preview)
+                    return;
+                preview.style.setProperty('transform', `translate3d(${session.pointer.value.x - session.offset.x}px, ${session.pointer.value.y - session.offset.y}px, 0)`);
+            }
+        });
+        const targetStateMap = new WeakMap();
+        const DropTarget = Component_3.default.Extension((component, initialiser) => {
+            const config = DropTargetConfig();
+            initialiser(config);
+            const disabled = config.getDisabled();
+            const dragDropShown = (0, State_12.default)(false);
+            const dragDropActive = (0, State_12.default)(false);
+            const dragDropPending = (0, State_12.default)(false);
+            const target = component.extend(component => ({
+                dragDropShown,
+                dragDropActive,
+                dragDropPending,
+            }));
+            const state = {
+                component: target,
+                accepts: config.getAccepts(),
+                disabled,
+                drop: config.getDrop(),
+                order: targetOrder++,
+                priority: config.getPriority(),
+            };
+            targetStateMap.set(target, state);
+            targets.add(target);
+            target.onRemoveManual(() => {
+                targets.delete(target);
+                targetStateMap.delete(target);
+                updateTargets(active.value);
+            });
+            disabled.subscribe(target, () => updateTargets(active.value));
+            active.subscribe(target, session => updateTargetDisplay(target, session));
+            return target;
+        });
+        return {
+            id,
+            active,
+            Draggable,
+            DropTarget,
+        };
+        function updateTargets(session = active.value) {
+            const activeTarget = session && getActiveTarget(session);
+            for (const target of targets)
+                updateTargetDisplay(target, session, activeTarget);
+            if (session)
+                session.activeTarget.value = activeTarget;
+        }
+        function updateTargetDisplay(target, session = active.value, activeTarget = session?.activeTarget.value) {
+            const shown = !!session && isTargetEligible(target, session);
+            target.dragDropShown.value = shown;
+            target.dragDropActive.value = shown && target === activeTarget;
+        }
+        function getActiveTarget(session) {
+            const pointer = session.pointer.value;
+            return [...targets]
+                .filter(target => {
+                if (!isTargetEligible(target, session))
+                    return false;
+                const rect = target.element?.getBoundingClientRect();
+                return !!rect
+                    && pointer.x >= rect.left
+                    && pointer.x <= rect.right
+                    && pointer.y >= rect.top
+                    && pointer.y <= rect.bottom;
+            })
+                .sort((a, b) => {
+                const aState = targetStateMap.get(a);
+                const bState = targetStateMap.get(b);
+                const priority = (bState?.priority ?? 0) - (aState?.priority ?? 0);
+                if (priority)
+                    return priority;
+                const depth = getDepth(b) - getDepth(a);
+                if (depth)
+                    return depth;
+                return (bState?.order ?? 0) - (aState?.order ?? 0);
+            })[0];
+        }
+        function isTargetEligible(target, session) {
+            const state = targetStateMap.get(target);
+            if (!state || state.disabled.value || !target.element || target === session.source)
+                return false;
+            return state.accepts?.(session.payload, session) ?? true;
+        }
+        function getDepth(component) {
+            let depth = 0;
+            let cursor = component.element;
+            while ((cursor = cursor?.parentElement ?? null))
+                depth++;
+            return depth;
+        }
+        function startAutoScroll(session) {
+            const margin = 72;
+            const maxSpeed = 28;
+            const scroll = () => {
+                if (active.value !== session)
+                    return;
+                const { y } = session.pointer.value;
+                const height = window.innerHeight;
+                const top = y < margin ? -((margin - y) / margin) : 0;
+                const bottom = y > height - margin ? (y - (height - margin)) / margin : 0;
+                const delta = Math.round((top + bottom) * maxSpeed);
+                if (delta) {
+                    window.scrollBy(0, delta);
+                    updateTargets(session);
+                }
+                requestAnimationFrame(scroll);
+            };
+            requestAnimationFrame(scroll);
+        }
+    }
+    function DraggableConfig() {
+        let payloadState;
+        let disabledState = (0, State_12.default)(false);
+        let thresholdPx = 6;
+        let previewFactory;
+        const startHandlers = [];
+        return {
+            payload(state) {
+                payloadState = state;
+                return this;
+            },
+            disabledWhen(state) {
+                disabledState = State_12.default.get(state);
+                return this;
+            },
+            threshold(threshold) {
+                thresholdPx = threshold;
+                return this;
+            },
+            preview(factory) {
+                previewFactory = factory;
+                return this;
+            },
+            onStart(handler) {
+                startHandlers.push(handler);
+                return this;
+            },
+            getPayload: () => payloadState,
+            getDisabled: () => disabledState,
+            getThreshold: () => thresholdPx,
+            getPreview: () => previewFactory,
+            getStartHandlers: () => startHandlers,
+        };
+    }
+    function DropTargetConfig() {
+        let accepts;
+        let disabledState = (0, State_12.default)(false);
+        let dropHandler;
+        let priorityValue = 0;
+        return {
+            accepts(predicate) {
+                accepts = predicate;
+                return this;
+            },
+            disabledWhen(state) {
+                disabledState = State_12.default.get(state);
+                return this;
+            },
+            drop(handler) {
+                dropHandler = handler;
+                return this;
+            },
+            priority(priority) {
+                priorityValue = priority;
+                return this;
+            },
+            getAccepts: () => accepts,
+            getDisabled: () => disabledState,
+            getDrop: () => dropHandler,
+            getPriority: () => priorityValue,
+        };
+    }
+    exports.default = DragDrop;
+});
+define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_4, State_13) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Component_4 = __importDefault(Component_4);
+    State_13 = __importDefault(State_13);
     var LoadingStyleTargets;
     (function (LoadingStyleTargets) {
         LoadingStyleTargets[LoadingStyleTargets["Loading"] = 0] = "Loading";
@@ -4593,17 +4946,17 @@ define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "k
         LoadingStyleTargets[LoadingStyleTargets["ErrorIcon"] = 6] = "ErrorIcon";
         LoadingStyleTargets[LoadingStyleTargets["ErrorText"] = 7] = "ErrorText";
     })(LoadingStyleTargets || (LoadingStyleTargets = {}));
-    const Loading = (0, Component_3.default)((component) => {
+    const Loading = (0, Component_4.default)((component) => {
         const loading = component.addStyleTargets(LoadingStyleTargets);
         const style = loading.styleTargets;
-        const storage = (0, Component_3.default)().setOwner(component);
-        Component_3.default.getDomController(storage).realiseForInsertion();
-        const spinner = (0, Component_3.default)().setOwner(loading).style(style.Spinner);
-        const progressBar = (0, Component_3.default)().setOwner(loading).style(style.ProgressBar);
-        const messageText = (0, Component_3.default)().setOwner(loading).style(style.MessageText);
-        const errorIcon = (0, Component_3.default)().setOwner(loading).style(style.ErrorIcon);
-        const errorText = (0, Component_3.default)().setOwner(loading).style(style.ErrorText);
-        const loaded = (0, State_12.default)(false);
+        const storage = (0, Component_4.default)().setOwner(component);
+        Component_4.default.getDomController(storage).realiseForInsertion();
+        const spinner = (0, Component_4.default)().setOwner(loading).style(style.Spinner);
+        const progressBar = (0, Component_4.default)().setOwner(loading).style(style.ProgressBar);
+        const messageText = (0, Component_4.default)().setOwner(loading).style(style.MessageText);
+        const errorIcon = (0, Component_4.default)().setOwner(loading).style(style.ErrorIcon);
+        const errorText = (0, Component_4.default)().setOwner(loading).style(style.ErrorText);
+        const loaded = (0, State_13.default)(false);
         let owner;
         let refresh;
         const onSetHandlers = [];
@@ -4621,16 +4974,16 @@ define("kitsui/component/Loading", ["require", "exports", "kitsui/Component", "k
                 return this;
             },
             showForever() {
-                return this.set(State_12.default.Async(State_12.default.Owner.create(), async () => { await new Promise(resolve => { }); }), () => { });
+                return this.set(State_13.default.Async(State_13.default.Owner.create(), async () => { await new Promise(resolve => { }); }), () => { });
             },
             set(stateIn, initialiser) {
                 owner?.remove();
-                owner = State_12.default.Owner.create();
+                owner = State_13.default.Owner.create();
                 const thisSetOwner = owner;
                 loading.rooted.match(thisSetOwner, true, () => {
                     const owner = thisSetOwner;
                     loaded.value = false;
-                    const state = typeof stateIn !== 'function' ? stateIn : State_12.default.Async(owner, stateIn);
+                    const state = typeof stateIn !== 'function' ? stateIn : State_13.default.Async(owner, stateIn);
                     refresh = state.refresh;
                     updateDisplays();
                     state.settled.subscribe(owner, updateDisplays);
@@ -4746,23 +5099,23 @@ define("kitsui/utility/HoverListener", ["require", "exports", "kitsui/utility/Ar
     exports.default = HoverListener;
     Object.assign(window, { HoverListener });
 });
-define("kitsui/utility/InputBus", ["require", "exports", "kitsui/Component", "kitsui/utility/EventManipulator"], function (require, exports, Component_4, EventManipulator_2) {
+define("kitsui/utility/InputBus", ["require", "exports", "kitsui/Component", "kitsui/utility/EventManipulator"], function (require, exports, Component_5, EventManipulator_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.HandlesMouseEvents = exports.HandlesKeyboardEvents = void 0;
-    Component_4 = __importDefault(Component_4);
+    Component_5 = __importDefault(Component_5);
     EventManipulator_2 = __importDefault(EventManipulator_2);
     var Classes;
     (function (Classes) {
         Classes["ReceiveFocusedClickEvents"] = "_receieve-focused-click-events";
     })(Classes || (Classes = {}));
-    Component_4.default.extend(component => {
+    Component_5.default.extend(component => {
         component.extend(component => ({
             receiveFocusedClickEvents: () => component.classes.add(Classes.ReceiveFocusedClickEvents),
         }));
     });
-    exports.HandlesKeyboardEvents = Component_4.default.Tag().setName('HandlesKeyboardEvents');
-    exports.HandlesMouseEvents = Component_4.default.Tag().setName('HandlesMouseEvents');
+    exports.HandlesKeyboardEvents = Component_5.default.Tag().setName('HandlesKeyboardEvents');
+    exports.HandlesMouseEvents = Component_5.default.Tag().setName('HandlesMouseEvents');
     const MOUSE_KEYNAME_MAP = {
         [0]: 'MouseLeft',
         [1]: 'MouseMiddle',
@@ -4861,7 +5214,7 @@ define("kitsui/utility/InputBus", ["require", "exports", "kitsui/Component", "ki
             if (e.type === 'keydown' && eventKey === 'Enter' && !event.shift && !event.alt) {
                 const form = target?.closest('form');
                 if (form && (target?.tagName.toLowerCase() === 'input' || target?.closest('[contenteditable]')) && !event.ctrl) {
-                    if (!Component_4.default.closest(exports.HandlesKeyboardEvents, target))
+                    if (!Component_5.default.closest(exports.HandlesKeyboardEvents, target))
                         e.preventDefault();
                 }
                 else {
@@ -4938,24 +5291,24 @@ define("kitsui/utility/Task", ["require", "exports", "kitsui/utility/Time"], fun
     }
     exports.default = Task;
 });
-define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "kitsui/component/Dialog", "kitsui/utility/FocusListener", "kitsui/utility/HoverListener", "kitsui/utility/InputBus", "kitsui/utility/Mouse", "kitsui/utility/Objects", "kitsui/utility/State", "kitsui/utility/Task", "kitsui/utility/Vector2", "kitsui/utility/Viewport"], function (require, exports, Component_5, Dialog_1, FocusListener_2, HoverListener_1, InputBus_1, Mouse_3, Objects_3, State_13, Task_1, Vector2_1, Viewport_3) {
+define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "kitsui/component/Dialog", "kitsui/utility/FocusListener", "kitsui/utility/HoverListener", "kitsui/utility/InputBus", "kitsui/utility/Mouse", "kitsui/utility/Objects", "kitsui/utility/State", "kitsui/utility/Task", "kitsui/utility/Vector2", "kitsui/utility/Viewport"], function (require, exports, Component_6, Dialog_1, FocusListener_2, HoverListener_1, InputBus_1, Mouse_3, Objects_3, State_14, Task_1, Vector2_2, Viewport_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Component_5 = __importStar(Component_5);
+    Component_6 = __importStar(Component_6);
     Dialog_1 = __importDefault(Dialog_1);
     FocusListener_2 = __importDefault(FocusListener_2);
     HoverListener_1 = __importDefault(HoverListener_1);
     InputBus_1 = __importStar(InputBus_1);
     Mouse_3 = __importDefault(Mouse_3);
-    State_13 = __importDefault(State_13);
+    State_14 = __importDefault(State_14);
     Task_1 = __importDefault(Task_1);
-    Vector2_1 = __importDefault(Vector2_1);
+    Vector2_2 = __importDefault(Vector2_2);
     Viewport_3 = __importDefault(Viewport_3);
     var FocusTrap;
     (function (FocusTrap) {
         let component;
         function get() {
-            return component ??= (0, Component_5.default)()
+            return component ??= (0, Component_6.default)()
                 .tabIndex('auto')
                 .ariaHidden()
                 .style.setProperties({
@@ -4973,8 +5326,8 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
         }
         FocusTrap.hide = hide;
     })(FocusTrap || (FocusTrap = {}));
-    const PopoverHost = Component_5.default.Tag();
-    Component_5.default.extend(component => {
+    const PopoverHost = Component_6.default.Tag();
+    Component_6.default.extend(component => {
         component.extend((component) => ({
             hasPopoverSet() {
                 return !!component.popover;
@@ -4985,8 +5338,8 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                 component.and(PopoverHost);
                 if (component.popover)
                     component.popover.remove();
-                const popoverIn = Component_5.default.is(initialiserOrPopover) ? initialiserOrPopover : undefined;
-                const initialiser = Component_5.default.is(initialiserOrPopover) ? undefined : initialiserOrPopover;
+                const popoverIn = Component_6.default.is(initialiserOrPopover) ? initialiserOrPopover : undefined;
+                const initialiser = Component_6.default.is(initialiserOrPopover) ? undefined : initialiserOrPopover;
                 if (popoverIn && popoverIn.hasOwner()) {
                     console.log('Detaching popover from owner', popoverIn);
                     popoverIn.setOwner(undefined);
@@ -4999,7 +5352,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                 const popover = popoverIn ?? Popover()
                     .anchor.from(component)
                     .tweak(popover => popover
-                    .prepend((0, Component_5.default)()
+                    .prepend((0, Component_6.default)()
                     .style(popover.styleTargets.PopoverCloseSurface)
                     .event.subscribe('click', () => popover.hide())))
                     .setOwner(component)
@@ -5032,7 +5385,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                     popover.style.bind(popover.anchor.state.mapManual((location, oldLocation) => (location?.preference ?? oldLocation?.preference)?.yAnchor.side === 'bottom'), popover.styleTargets.Popover_AnchoredTop);
                     popover.style.bind(popover.anchor.state.mapManual((location, oldLocation) => (location?.preference ?? oldLocation?.preference)?.xAnchor.side === 'left'), popover.styleTargets.Popover_AnchoredLeft);
                 });
-                const combinedOwner = State_13.default.Owner.getCombined(component, popover);
+                const combinedOwner = State_14.default.Owner.getCombined(component, popover);
                 if (!popoverIn)
                     component.getStateForClosest(Dialog_1.default)
                         .map(popover, dialog => dialog() ?? document.body)
@@ -5047,7 +5400,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                 }
                 component.event.until(combinedOwner, event => event
                     .subscribe('touchstart', event => {
-                    touchStart = Vector2_1.default.fromClient(event.touches[0]);
+                    touchStart = Vector2_2.default.fromClient(event.touches[0]);
                     if (event.touches.length > 1)
                         return cancelLongpress();
                     const closestWithPopover = [
@@ -5110,8 +5463,8 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                         return;
                     if (event.touches.length > 1)
                         return cancelLongpress();
-                    const newPosition = Vector2_1.default.fromClient(event.touches[0]);
-                    if (!Vector2_1.default.distanceWithin(20, touchStart, newPosition))
+                    const newPosition = Vector2_2.default.fromClient(event.touches[0]);
+                    if (!Vector2_2.default.distanceWithin(20, touchStart, newPosition))
                         return cancelLongpress();
                 })
                     .subscribe('touchend', event => {
@@ -5145,7 +5498,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
                         else
                             popover.hide();
                     }));
-                    Component_5.ComponentPerf.CallbacksOnInsertions.add(component, updatePopoverParent);
+                    Component_6.ComponentPerf.CallbacksOnInsertions.add(component, updatePopoverParent);
                     // component.receiveInsertEvents()
                     // component.receiveAncestorInsertEvents()
                     // component.event.subscribe(['insert', 'ancestorInsert'], updatePopoverParent)
@@ -5279,13 +5632,13 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
         PopoverStyleTargets[PopoverStyleTargets["Popover_AnchoredTop"] = 2] = "Popover_AnchoredTop";
         PopoverStyleTargets[PopoverStyleTargets["Popover_AnchoredLeft"] = 3] = "Popover_AnchoredLeft";
     })(PopoverStyleTargets || (PopoverStyleTargets = {}));
-    const Popover = Object.assign((0, Component_5.default)((component) => {
+    const Popover = Object.assign((0, Component_6.default)((component) => {
         let mousePadding;
         let delay = 0;
         let unbind;
-        const visible = (0, State_13.default)(false);
+        const visible = (0, State_14.default)(false);
         let shouldCloseOnInput = true;
-        const hoverable = (0, State_13.default)(true);
+        const hoverable = (0, State_14.default)(true);
         let inputFilter;
         // let normalStacking = false
         const popover = component
@@ -5300,8 +5653,8 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
             .extend(popover => ({
             lastStateChangeTime: 0,
             visible,
-            popoverChildren: (0, State_13.default)([]),
-            popoverParent: (0, State_13.default)(undefined),
+            popoverChildren: (0, State_14.default)([]),
+            popoverParent: (0, State_14.default)(undefined),
             popoverHasFocus: FocusListener_2.default.focused.map(popover, focused => !focused ? 'no-focus'
                 : (visible.value && containsPopoverDescendant(focused)) ? 'focused'
                     : undefined),
@@ -5429,7 +5782,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
         function containsPopoverDescendant(descendant) {
             if (!descendant)
                 return false;
-            const node = Component_5.default.is(descendant) ? descendant.element : descendant;
+            const node = Component_6.default.is(descendant) ? descendant.element : descendant;
             if (node && popover.element?.contains(node))
                 return true;
             for (const child of popover.popoverChildren.value)
@@ -5441,7 +5794,7 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
         }
     }), {
         forceCloseAll() {
-            for (const popoverHost of Component_5.default.findAll(PopoverHost)) {
+            for (const popoverHost of Component_6.default.findAll(PopoverHost)) {
                 const host = popoverHost;
                 host.clickState = false;
                 host.popover.hide();
@@ -5450,20 +5803,20 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
     });
     exports.default = Popover;
 });
-define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_6, State_14) {
+define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_7, State_15) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Component_6 = __importDefault(Component_6);
-    State_14 = __importDefault(State_14);
+    Component_7 = __importDefault(Component_7);
+    State_15 = __importDefault(State_15);
     function ComponentInsertionTransaction(component, onEnd) {
         let unuseComponentRemove = component?.removed.useManual(removed => removed && onComponentRemove());
-        const closed = (0, State_14.default)(false);
+        const closed = (0, State_15.default)(false);
         let removed = false;
         const result = {
             isInsertionDestination: true,
             closed,
             get size() {
-                return component ? Component_6.default.getDomController(component).getChildren().length : 0;
+                return component ? Component_7.default.getDomController(component).getChildren().length : 0;
             },
             append(...contents) {
                 if (closed.value) {
@@ -5576,14 +5929,14 @@ define("kitsui/utility/AbortablePromise", ["require", "exports"], function (requ
     })(AbortablePromise || (AbortablePromise = {}));
     exports.default = AbortablePromise;
 });
-define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kitsui/ext/ComponentInsertionTransaction", "kitsui/utility/AbortablePromise", "kitsui/utility/State"], function (require, exports, Component_7, ComponentInsertionTransaction_1, AbortablePromise_1, State_15) {
+define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kitsui/ext/ComponentInsertionTransaction", "kitsui/utility/AbortablePromise", "kitsui/utility/State"], function (require, exports, Component_8, ComponentInsertionTransaction_1, AbortablePromise_1, State_16) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Component_7 = __importStar(Component_7);
+    Component_8 = __importStar(Component_8);
     ComponentInsertionTransaction_1 = __importDefault(ComponentInsertionTransaction_1);
     AbortablePromise_1 = __importDefault(AbortablePromise_1);
-    State_15 = __importDefault(State_15);
-    Component_7.default.extend(component => {
+    State_16 = __importDefault(State_16);
+    Component_8.default.extend(component => {
         let slot;
         component.extend(component => ({
             hasContent() {
@@ -5601,7 +5954,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             appendWhen(state, ...contents) {
                 const slot = Slot().appendTo(component).preserveContents();
-                let temporaryHolder = (0, Component_7.default)().setOwner(slot).append(...contents);
+                let temporaryHolder = (0, Component_8.default)().setOwner(slot).append(...contents);
                 slot.if(state, slot => {
                     slot.append(...contents);
                     releaseTemporaryHolder(temporaryHolder);
@@ -5611,7 +5964,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             prependWhen(state, ...contents) {
                 const slot = Slot().prependTo(component).preserveContents();
-                let temporaryHolder = (0, Component_7.default)().setOwner(slot).append(...contents);
+                let temporaryHolder = (0, Component_8.default)().setOwner(slot).append(...contents);
                 slot.if(state, slot => {
                     slot.append(...contents);
                     releaseTemporaryHolder(temporaryHolder);
@@ -5621,7 +5974,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             insertWhen(state, direction, sibling, ...contents) {
                 const slot = Slot().insertTo(component, direction, sibling).preserveContents();
-                let temporaryHolder = (0, Component_7.default)().setOwner(slot).append(...contents);
+                let temporaryHolder = (0, Component_8.default)().setOwner(slot).append(...contents);
                 slot.if(state, slot => {
                     slot.append(...contents);
                     releaseTemporaryHolder(temporaryHolder);
@@ -5631,7 +5984,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             appendToWhen(state, destination) {
                 const newSlot = Slot().appendTo(destination).preserveContents();
-                let temporaryHolder = (0, Component_7.default)().setOwner(newSlot).append(component);
+                let temporaryHolder = (0, Component_8.default)().setOwner(newSlot).append(component);
                 newSlot.if(state, slot => {
                     slot.append(component);
                     releaseTemporaryHolder(temporaryHolder);
@@ -5643,7 +5996,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             prependToWhen(state, destination) {
                 const newSlot = Slot().prependTo(destination).preserveContents();
-                let temporaryHolder = (0, Component_7.default)().setOwner(newSlot).append(component);
+                let temporaryHolder = (0, Component_8.default)().setOwner(newSlot).append(component);
                 newSlot.if(state, slot => {
                     slot.append(component);
                     releaseTemporaryHolder(temporaryHolder);
@@ -5655,7 +6008,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             insertToWhen(state, destination, direction, sibling) {
                 const newSlot = Slot().insertTo(destination, direction, sibling).preserveContents();
-                let temporaryHolder = (0, Component_7.default)().setOwner(newSlot).append(component);
+                let temporaryHolder = (0, Component_8.default)().setOwner(newSlot).append(component);
                 newSlot.if(state, slot => {
                     slot.append(component);
                     releaseTemporaryHolder(temporaryHolder);
@@ -5669,25 +6022,25 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
         function releaseTemporaryHolder(temporaryHolder) {
             if (!temporaryHolder)
                 return;
-            Component_7.default.getDomController(temporaryHolder).takeChildren();
+            Component_8.default.getDomController(temporaryHolder).takeChildren();
             temporaryHolder.remove();
         }
     });
-    const Slot = Object.assign(Component_7.default.Builder((slot) => {
+    const Slot = Object.assign(Component_8.default.Builder((slot) => {
         let unuse;
         let cleanup;
         let abort;
         let abortTransaction;
-        const elses = (0, State_15.default)({ elseIfs: [] });
+        const elses = (0, State_16.default)({ elseIfs: [] });
         let unuseElses;
         let unuseOwner;
         let preserveContents = false;
         let inserted = false;
-        const hidden = (0, State_15.default)(false);
-        const useDisplayContents = (0, State_15.default)(true);
+        const hidden = (0, State_16.default)(false);
+        const useDisplayContents = (0, State_16.default)(true);
         let contentsOwner;
         return slot
-            .style.bindProperty('display', State_15.default.MapManual([hidden, useDisplayContents], (hidden, useDisplayContents) => hidden ? 'none' : useDisplayContents ? 'contents' : undefined))
+            .style.bindProperty('display', State_16.default.MapManual([hidden, useDisplayContents], (hidden, useDisplayContents) => hidden ? 'none' : useDisplayContents ? 'contents' : undefined))
             .extend(slot => ({
             useDisplayContents,
             noDisplayContents() {
@@ -5716,16 +6069,16 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 if (slot.removed.value)
                     return slot;
                 const wasArrayState = Array.isArray(state);
-                const wasObjectState = !wasArrayState && !State_15.default.is(state);
+                const wasObjectState = !wasArrayState && !State_16.default.is(state);
                 if (wasArrayState) {
-                    const owner = State_15.default.Owner.create();
+                    const owner = State_16.default.Owner.create();
                     unuseOwner = owner.remove;
-                    state = State_15.default.Map(owner, state, (...outputs) => outputs);
+                    state = State_16.default.Map(owner, state, (...outputs) => outputs);
                 }
                 else if (wasObjectState) {
-                    const owner = State_15.default.Owner.create();
+                    const owner = State_16.default.Owner.create();
                     unuseOwner = owner.remove;
-                    state = State_15.default.Use(owner, state);
+                    state = State_16.default.Use(owner, state);
                 }
                 unuse = state.use(slot, value => {
                     abort?.();
@@ -5735,11 +6088,11 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                     abortTransaction?.();
                     abortTransaction = undefined;
                     contentsOwner?.remove();
-                    contentsOwner = State_15.default.Owner.create();
-                    const component = (0, Component_7.default)().setOwner(contentsOwner);
+                    contentsOwner = State_16.default.Owner.create();
+                    const component = (0, Component_8.default)().setOwner(contentsOwner);
                     const transaction = Object.assign((0, ComponentInsertionTransaction_1.default)(component, () => {
                         slot.removeContents();
-                        slot.append(...Component_7.default.getDomController(component).takeChildren());
+                        slot.append(...Component_8.default.getDomController(component).takeChildren());
                         inserted = true;
                         component.remove();
                     }), {
@@ -5784,7 +6137,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                         }
                         let unuseElsesList;
                         const unuseElsesContainer = elses.useManual(elses => {
-                            unuseElsesList = State_15.default.MapManual(elses.elseIfs.map(({ state }) => state), (...elses) => elses.indexOf(true))
+                            unuseElsesList = State_16.default.MapManual(elses.elseIfs.map(({ state }) => state), (...elses) => elses.indexOf(true))
                                 .useManual(elseToUse => {
                                 const initialiser = elseToUse === -1 ? elses.else : elses.elseIfs[elseToUse].initialiser;
                                 if (!initialiser) {
@@ -5829,11 +6182,11 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             .tweak(slot => slot.removed.matchManual(true, () => cleanup?.()));
         function handleSlotInitialiser(initialiser) {
             contentsOwner?.remove();
-            contentsOwner = State_15.default.Owner.create();
-            const component = (0, Component_7.default)().setOwner(contentsOwner);
+            contentsOwner = State_16.default.Owner.create();
+            const component = (0, Component_8.default)().setOwner(contentsOwner);
             const transaction = Object.assign((0, ComponentInsertionTransaction_1.default)(component, () => {
                 slot.removeContents();
-                slot.append(...Component_7.default.getDomController(component).takeChildren());
+                slot.append(...Component_8.default.getDomController(component).takeChildren());
                 inserted = true;
                 component.remove();
             }), {
@@ -5856,33 +6209,33 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 result = undefined;
             transaction.close();
             abortTransaction = undefined;
-            if (Component_7.default.is(result)) {
+            if (Component_8.default.is(result)) {
                 result.appendTo(slot);
                 inserted = true;
                 cleanup = undefined;
                 return;
             }
-            if (Component_7.ComponentInsertionDestination.is(result)) {
+            if (Component_8.ComponentInsertionDestination.is(result)) {
                 cleanup = undefined;
                 return;
             }
             cleanup = result;
         }
     }), {
-        using: (value, initialiser) => Slot().use(State_15.default.get(value), initialiser),
+        using: (value, initialiser) => Slot().use(State_16.default.get(value), initialiser),
     });
     exports.default = Slot;
 });
-define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "kitsui/component/Popover"], function (require, exports, Component_8, Popover_1) {
+define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "kitsui/component/Popover"], function (require, exports, Component_9, Popover_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Component_8 = __importDefault(Component_8);
+    Component_9 = __importDefault(Component_9);
     Popover_1 = __importDefault(Popover_1);
     var TooltipStyleTargets;
     (function (TooltipStyleTargets) {
         TooltipStyleTargets[TooltipStyleTargets["Tooltip"] = 0] = "Tooltip";
     })(TooltipStyleTargets || (TooltipStyleTargets = {}));
-    const Tooltip = (0, Component_8.default)((component) => {
+    const Tooltip = (0, Component_9.default)((component) => {
         const tooltip = component.and(Popover_1.default)
             .setDelay(200)
             .setMousePadding(0)
@@ -5893,10 +6246,10 @@ define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "k
             .anchor.add('aligned right', 'off bottom')
             .anchor.add('aligned right', 'off top');
     });
-    Component_8.default.extend(component => {
+    Component_9.default.extend(component => {
         component.extend((component) => ({
             setTooltip(initialiserOrTooltip) {
-                if (Component_8.default.is(initialiserOrTooltip))
+                if (Component_9.default.is(initialiserOrTooltip))
                     return component.setPopover('hover/longpress', initialiserOrTooltip);
                 const initialiser = initialiserOrTooltip;
                 return component.setPopover('hover/longpress', (popover, host) => initialiser(popover.and(Tooltip), host));
@@ -5905,18 +6258,19 @@ define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "k
     });
     exports.default = Tooltip;
 });
-define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/component/Label", "kitsui/component/Loading", "kitsui/component/Popover", "kitsui/component/Slot", "kitsui/component/Tooltip", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Dialog_2, Label_1, Loading_1, Popover_2, Slot_1, Tooltip_1, Component_9, State_16) {
+define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/component/DragDrop", "kitsui/component/Label", "kitsui/component/Loading", "kitsui/component/Popover", "kitsui/component/Slot", "kitsui/component/Tooltip", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Dialog_2, DragDrop_1, Label_1, Loading_1, Popover_2, Slot_1, Tooltip_1, Component_10, State_17) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Kit = exports.State = exports.Component = void 0;
     Dialog_2 = __importDefault(Dialog_2);
+    DragDrop_1 = __importDefault(DragDrop_1);
     Label_1 = __importStar(Label_1);
     Loading_1 = __importDefault(Loading_1);
     Popover_2 = __importDefault(Popover_2);
     Slot_1 = __importDefault(Slot_1);
     Tooltip_1 = __importDefault(Tooltip_1);
-    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_9).default; } });
-    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_16).default; } });
+    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_10).default; } });
+    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_17).default; } });
     var Kit;
     (function (Kit) {
         Kit.Label = Label_1.default;
@@ -5926,6 +6280,7 @@ define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/compo
         Kit.Dialog = Dialog_2.default;
         Kit.Popover = Popover_2.default;
         Kit.Tooltip = Tooltip_1.default;
+        Kit.DragDrop = DragDrop_1.default;
     })(Kit || (exports.Kit = Kit = {}));
 });
 define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function (require, exports, kitsui_1) {
@@ -6045,10 +6400,10 @@ define("kitsui/utility/ActiveListener", ["require", "exports"], function (requir
     exports.default = ActiveListener;
     Object.assign(window, { ActiveListener });
 });
-define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_17) {
+define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_18) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_17 = __importDefault(State_17);
+    State_18 = __importDefault(State_18);
     function Applicator(host, defaultValueOrApply, apply) {
         const defaultValue = !apply ? undefined : defaultValueOrApply;
         apply ??= defaultValueOrApply;
@@ -6057,7 +6412,7 @@ define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State
         return result;
         function makeApplicator(host) {
             return {
-                state: (0, State_17.default)(defaultValue),
+                state: (0, State_18.default)(defaultValue),
                 set: value => {
                     unbind?.();
                     setInternal(value);
@@ -6087,23 +6442,23 @@ define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State
     }
     exports.default = Applicator;
 });
-define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_18) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    State_18 = __importDefault(State_18);
-    var BrowserListener;
-    (function (BrowserListener) {
-        BrowserListener.isWebkit = (0, State_18.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
-    })(BrowserListener || (BrowserListener = {}));
-    exports.default = BrowserListener;
-});
-define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_19) {
+define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_19) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_19 = __importDefault(State_19);
+    var BrowserListener;
+    (function (BrowserListener) {
+        BrowserListener.isWebkit = (0, State_19.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
+    })(BrowserListener || (BrowserListener = {}));
+    exports.default = BrowserListener;
+});
+define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_20) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    State_20 = __importDefault(State_20);
     var FontsListener;
     (function (FontsListener) {
-        FontsListener.loaded = (0, State_19.default)(false);
+        FontsListener.loaded = (0, State_20.default)(false);
         async function listen() {
             await document.fonts.ready;
             FontsListener.loaded.asMutable?.setValue(true);
@@ -6112,25 +6467,25 @@ define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/St
     })(FontsListener || (FontsListener = {}));
     exports.default = FontsListener;
 });
-define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_20) {
+define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_21) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_20 = __importDefault(State_20);
+    State_21 = __importDefault(State_21);
     var PageListener;
     (function (PageListener) {
-        PageListener.visible = (0, State_20.default)(document.visibilityState === 'visible');
+        PageListener.visible = (0, State_21.default)(document.visibilityState === 'visible');
         document.addEventListener('visibilitychange', () => PageListener.visible.asMutable?.setValue(document.visibilityState === 'visible'));
     })(PageListener || (PageListener = {}));
     exports.default = PageListener;
 });
-define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "kitsui/utility/Task"], function (require, exports, State_21, Task_2) {
+define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "kitsui/utility/Task"], function (require, exports, State_22, Task_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_21 = __importDefault(State_21);
+    State_22 = __importDefault(State_22);
     Task_2 = __importDefault(Task_2);
     var Style;
     (function (Style) {
-        Style.properties = State_21.default.JIT(() => window.getComputedStyle(document.documentElement));
+        Style.properties = State_22.default.JIT(() => window.getComputedStyle(document.documentElement));
         const measured = {};
         function measure(property) {
             if (measured[property])
@@ -6143,7 +6498,7 @@ define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "k
                 element.style.opacity = '0';
                 element.style.position = 'fixed';
                 document.body.appendChild(element);
-                const state = measured[property] = (0, State_21.default)(0);
+                const state = measured[property] = (0, State_22.default)(0);
                 void Task_2.default.yield().then(() => {
                     state.value = element.clientWidth;
                     element.remove();
@@ -6155,13 +6510,13 @@ define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "k
     })(Style || (Style = {}));
     exports.default = Style;
 });
-define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_22) {
+define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_23) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_22 = __importDefault(State_22);
+    State_23 = __importDefault(State_23);
     const TypeManipulator // Object.assign(
      = function (host, onAdd, onRemove) {
-        const state = (0, State_22.default)(new Set());
+        const state = (0, State_23.default)(new Set());
         return Object.assign(add, {
             state,
             remove,

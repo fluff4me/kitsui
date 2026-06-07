@@ -1135,6 +1135,75 @@ declare module "kitsui/component/Dialog" {
     };
     export default Dialog;
 }
+declare module "kitsui/component/DragDrop" {
+    import Component from "kitsui/Component";
+    import State from "kitsui/utility/State";
+    import Vector2 from "kitsui/utility/Vector2";
+    function DragDrop<T>(id: string): DragDrop<T>;
+    namespace DragDrop {
+        interface Session<T> {
+            readonly id: string;
+            readonly payload: T;
+            readonly source: Draggable<T>;
+            readonly sourceRect: DOMRect;
+            readonly start: Vector2;
+            readonly pointer: State.Mutable<Vector2>;
+            readonly offset: Vector2;
+            readonly activeTarget: State.Mutable<DropTarget<T> | undefined>;
+            readonly dropping: State.Mutable<boolean>;
+            cancel(): void;
+        }
+        type PreviewFactory<T> = (session: Session<T>, payload: T) => Component | undefined;
+        type StartHandler<T> = (session: Session<T>, payload: T) => unknown;
+        type Accepts<T> = (payload: T, session: Session<T>) => boolean;
+        type DropHandler<T> = (payload: T, session: Session<T>) => unknown | Promise<unknown>;
+        interface DraggableConfig<T> {
+            payload(state: State<T>): this;
+            payload(state: State<T | undefined | null>): this;
+            disabledWhen(state: State.Or<boolean>): this;
+            threshold(threshold: number): this;
+            preview(factory: PreviewFactory<T>): this;
+            onStart(handler: StartHandler<T>): this;
+        }
+        interface DropTargetConfig<T> {
+            accepts(predicate: Accepts<T>): this;
+            disabledWhen(state: State.Or<boolean>): this;
+            drop(handler: DropHandler<T>): this;
+            priority(priority: number): this;
+        }
+        type DraggableInitialiser<T> = (drag: DraggableConfig<T>) => unknown;
+        type DropTargetInitialiser<T> = (target: DropTargetConfig<T>) => unknown;
+        interface DraggableExtensions<T> {
+            readonly dragging: State<boolean>;
+            readonly dragSession: State<Session<T> | undefined>;
+            cancelDrag(): this;
+        }
+        interface DropTargetExtensions<T> {
+            readonly dragDropShown: State.Mutable<boolean>;
+            readonly dragDropActive: State.Mutable<boolean>;
+            readonly dragDropPending: State.Mutable<boolean>;
+        }
+        interface Draggable<T> extends Component, DraggableExtensions<T> {
+        }
+        interface DropTarget<T> extends Component, DropTargetExtensions<T> {
+        }
+        interface DropTargetState<T> {
+            component: DropTarget<T>;
+            accepts?: Accepts<T>;
+            disabled: State<boolean>;
+            drop?: DropHandler<T>;
+            order: number;
+            priority: number;
+        }
+    }
+    interface DragDrop<T> {
+        readonly id: string;
+        readonly active: State<DragDrop.Session<T> | undefined>;
+        readonly Draggable: Component.Extension<[DragDrop.DraggableInitialiser<T>], DragDrop.Draggable<T>>;
+        readonly DropTarget: Component.Extension<[DragDrop.DropTargetInitialiser<T>], DragDrop.DropTarget<T>>;
+    }
+    export default DragDrop;
+}
 declare module "kitsui/component/Loading" {
     import Component from "kitsui/Component";
     import State from "kitsui/utility/State";
@@ -1428,6 +1497,7 @@ declare module "kitsui/component/Tooltip" {
 }
 declare module "kitsui" {
     import _Dialog from "kitsui/component/Dialog";
+    import _DragDrop from "kitsui/component/DragDrop";
     import _Label, { LabelTarget as _LabelTarget } from "kitsui/component/Label";
     import _Loading from "kitsui/component/Loading";
     import _Popover from "kitsui/component/Popover";
@@ -1457,6 +1527,8 @@ declare module "kitsui" {
         };
         type Tooltip = _Tooltip;
         const Tooltip: import("kitsui/Component").default.Builder<[], _Tooltip>;
+        type DragDrop<T> = _DragDrop<T>;
+        const DragDrop: typeof _DragDrop;
     }
 }
 declare module "kitsui/component/Breakdown" {
