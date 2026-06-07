@@ -2490,7 +2490,6 @@ define("kitsui/utility/EventManipulator", ["require", "exports", "kitsui/utility
                 element.dispatchEvent(eventObject);
                 return {
                     deferred: false,
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                     result: detail.result,
                     defaultPrevented: eventObject.defaultPrevented || preventedDefault,
                     stoppedPropagation,
@@ -6514,8 +6513,8 @@ define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     State_23 = __importDefault(State_23);
-    const TypeManipulator // Object.assign(
-     = function (host, onAdd, onRemove) {
+    const TypeManipulator = // Object.assign(
+     function (host, onAdd, onRemove) {
         const state = (0, State_23.default)(new Set());
         return Object.assign(add, {
             state,
