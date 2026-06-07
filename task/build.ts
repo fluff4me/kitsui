@@ -25,9 +25,13 @@ export default Task('build', async task => {
 	await fs.writeFile('out/index.js', js, 'utf-8')
 	await fs.writeFile('out/index.d.ts', dts, 'utf-8')
 
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 	const packageJson = JSON.parse(await fs.readFile('package.json', 'utf-8'))
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 	delete packageJson.private
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 	delete packageJson.scripts
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 	delete packageJson.devDependencies
 	await fs.writeFile('out/package.json', JSON.stringify(packageJson, null, '\t'), 'utf-8')
 })

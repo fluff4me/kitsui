@@ -289,7 +289,7 @@ function DragDrop<T> (id: string): DragDrop<T> {
 
 				return (bState?.order ?? 0) - (aState?.order ?? 0)
 			})
-			[0]
+			.at(0)
 	}
 
 	function isTargetEligible (target: DragDrop.DropTarget<T>, session: DragDrop.Session<T>) {
@@ -424,6 +424,7 @@ namespace DragDrop {
 	export type PreviewFactory<T> = (session: Session<T>, payload: T) => Component | undefined
 	export type StartHandler<T> = (session: Session<T>, payload: T) => unknown
 	export type Accepts<T> = (payload: T, session: Session<T>) => boolean
+	// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 	export type DropHandler<T> = (payload: T, session: Session<T>) => unknown | Promise<unknown>
 
 	export interface DraggableConfig<T> {

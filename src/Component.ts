@@ -344,7 +344,7 @@ export interface ComponentDomController {
 	readonly realised: boolean
 	readonly sealed: boolean
 	readonly tagName: string
-	tag: keyof HTMLElementTagNameMap | string
+	tag: ComponentTagName
 	requireElement (reason: string): HTMLElement
 	realiseForInsertion (detachVirtualParent?: boolean): HTMLElement
 	adoptElement (element: HTMLElement): void
@@ -384,6 +384,8 @@ export interface ComponentDomController {
 interface ComponentDomHost {
 	__dom: ComponentDomController
 }
+
+type ComponentTagName = keyof HTMLElementTagNameMap | (string & {})
 
 const virtualParentDetach = new WeakMap<Component, () => void>()
 const virtualParents = new WeakMap<Component, Component>()
@@ -433,7 +435,6 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		return Component.Builder(type as keyof HTMLElementTagNameMap, builder as AnyFunction)
 
 	type ??= 'span'
-	type = type
 
 	if (!canBuildComponents)
 		throw new Error('Components cannot be built yet')
@@ -1158,7 +1159,7 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 		let element: HTMLElement | undefined
 		let realised = false
 		let sealed = false
-		let tag: keyof HTMLElementTagNameMap | string = type as keyof HTMLElementTagNameMap
+		let tag = type as ComponentTagName
 		let attributes: Map<string, string> | undefined = new Map()
 		let attributeOrder: string[] | undefined = []
 		let classes: Set<string> | undefined = new Set()
@@ -1932,7 +1933,7 @@ namespace Component {
 	const VARIABLE_NAME_REGEX = /\s*(?:const |exports\.(?!default))(\w+) = /
 	const LAST_MODULE_DEF_REGEX = /.*\bdefine\("(?:[^"]+\/)*(\w+)", /s
 	const PASCAL_CASE_WORD_START = /(?<=[a-z0-9_-])(?=[A-Z])/g
-	 
+
 	interface BuilderName extends String {
 		kebabcase: string
 	}
@@ -1947,6 +1948,7 @@ namespace Component {
 	let indexjsText!: string | undefined
 	let lines: string[] | undefined
 	function getBuilderName (): BuilderName | undefined {
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 		let moduleName = '__moduleName' in self ? (self as any).__moduleName as string | undefined : undefined
 		if (moduleName)
 			return addKebabCase(moduleName.slice(moduleName.lastIndexOf('/') + 1))

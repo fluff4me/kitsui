@@ -45,6 +45,7 @@ interface StyleManipulatorFunctions<HOST> {
 
 interface StyleManipulatorFunction<HOST> {
 	(...names: ComponentName[]): HOST
+	// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 	(...names: State<ComponentName | undefined>[]): HOST
 }
 

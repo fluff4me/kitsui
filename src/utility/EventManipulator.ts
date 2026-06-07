@@ -174,7 +174,7 @@ function EventManipulator<T extends object> (host: T): EventManipulator<T, Nativ
 			element.dispatchEvent(eventObject)
 			return {
 				deferred: false,
-				 
+
 				result: detail.result,
 				defaultPrevented: eventObject.defaultPrevented || preventedDefault,
 				stoppedPropagation,
