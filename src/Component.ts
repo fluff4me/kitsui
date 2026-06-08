@@ -389,9 +389,17 @@ type ComponentTagName = keyof HTMLElementTagNameMap | (string & {})
 
 const virtualParentDetach = new WeakMap<Component, () => void>()
 const virtualParents = new WeakMap<Component, Component>()
+const insertionSubstitutes = new WeakMap<Component, (component: Component) => Node | undefined>()
+const insertionSubstituteNodes = new WeakSet<Node>()
 
 function getDom (component: Component): ComponentDomController {
 	return (component as Component & ComponentDomHost).__dom
+}
+function getInsertionSubstitute (component: Component): Node | undefined {
+	const substitute = insertionSubstitutes.get(component)?.(component)
+	if (substitute)
+		insertionSubstituteNodes.add(substitute)
+	return substitute
 }
 let componentLeakDetectors: ComponentLeakDetector[] = []
 const timeUntilLeakWarning = 10000
@@ -813,9 +821,11 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			if (dom.runOrQueueRealisation(() => component.appendTo(destination)))
 				return component
 
-			const element = dom.realiseForInsertion()
-			moveOrInsertBefore(destination, element, null)
-			component.emitInsert()
+			const substitute = getInsertionSubstitute(component)
+			const node = substitute ?? dom.realiseForInsertion()
+			moveOrInsertBefore(destination, node, null)
+			if (!substitute)
+				component.emitInsert()
 			return component
 		},
 		prependTo (destination) {
@@ -826,15 +836,17 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			if (dom.runOrQueueRealisation(() => component.prependTo(destination)))
 				return component
 
-			const element = dom.realiseForInsertion()
-			moveOrInsertBefore(destination, element, destination.firstChild)
-			component.emitInsert()
+			const substitute = getInsertionSubstitute(component)
+			const node = substitute ?? dom.realiseForInsertion()
+			moveOrInsertBefore(destination, node, destination.firstChild)
+			if (!substitute)
+				component.emitInsert()
 			return component
 		},
 		insertTo (destination, direction, sibling) {
 			if (ComponentInsertionDestination.is(destination)) {
 				destination.insert(direction, sibling, component)
-				if (!Component.is(destination) || Component.hasElement(destination))
+				if (!Component.is(destination))
 					component.emitInsert()
 				return component
 			}
@@ -843,13 +855,15 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 				return component
 
 			const siblingElement = sibling ? Component.requireElement(sibling, 'insert relative to sibling') : null
-			const element = dom.realiseForInsertion()
+			const substitute = getInsertionSubstitute(component)
+			const node = substitute ?? dom.realiseForInsertion()
 			if (direction === 'before')
-				moveOrInsertBefore(destination, element, siblingElement)
+				moveOrInsertBefore(destination, node, siblingElement)
 			else
-				moveOrInsertBefore(destination, element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling)
+				moveOrInsertBefore(destination, node, !siblingElement ? destination.firstChild : siblingElement?.nextSibling)
 
-			component.emitInsert()
+			if (!substitute)
+				component.emitInsert()
 			return component
 		},
 		append (...contents) {
@@ -864,12 +878,13 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			}
 
 			const elements = dom.append(...contents)
+			const insertedElements = elements.filter(element => !insertionSubstituteNodes.has(element))
 
-			for (const element of elements)
+			for (const element of insertedElements)
 				(element as Element).component?.emitInsert()
 
-			if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
-				component.event.emit('childrenInsert', elements)
+			if (insertedElements.length && component.classes.has(Classes.ReceiveChildrenInsertEvents))
+				component.event.emit('childrenInsert', insertedElements)
 			return component
 		},
 		prepend (...contents) {
@@ -884,12 +899,13 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			}
 
 			const elements = dom.prepend(...contents)
+			const insertedElements = elements.filter(element => !insertionSubstituteNodes.has(element))
 
-			for (const element of elements)
+			for (const element of insertedElements)
 				(element as Element).component?.emitInsert()
 
-			if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
-				component.event.emit('childrenInsert', elements)
+			if (insertedElements.length && component.classes.has(Classes.ReceiveChildrenInsertEvents))
+				component.event.emit('childrenInsert', insertedElements)
 			return component
 		},
 		insert (direction, sibling, ...contents) {
@@ -904,12 +920,13 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 			}
 
 			const elements = dom.insert(direction, sibling, ...contents)
+			const insertedElements = elements.filter(element => !insertionSubstituteNodes.has(element))
 
-			for (const element of elements)
+			for (const element of insertedElements)
 				(element as Element).component?.emitInsert()
 
-			if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
-				component.event.emit('childrenInsert', elements)
+			if (insertedElements.length && component.classes.has(Classes.ReceiveChildrenInsertEvents))
+				component.event.emit('childrenInsert', insertedElements)
 			return component
 		},
 		removeContents () {
@@ -1534,9 +1551,14 @@ function Component (type?: keyof HTMLElementTagNameMap | AnyFunction, builder?: 
 					|| (Component.is(child) && child.element === sibling)))
 		}
 		function nodeForInsertion (content: Component | Node): Node {
-			if (Component.is(content))
+			if (Component.is(content)) {
+				const substitute = getInsertionSubstitute(content)
+				if (substitute)
+					return substitute
 				virtualParentDetach.get(content)?.()
-			return Component.is(content) ? getDom(content).realiseForInsertion() : content
+				return getDom(content).realiseForInsertion()
+			}
+			return content
 		}
 		function prepareVirtualChildren (contents: (Component | Node | Falsy)[]): (Component | Node)[] {
 			return contents.filter(Truthy).map(content => {
@@ -1702,6 +1724,15 @@ namespace Component {
 
 	export function getDomController (component: Component): ComponentDomController {
 		return getDom(component)
+	}
+
+	export function substituteInsertion (component: Component, provider: (component: Component) => Node | undefined): State.Unsubscribe {
+		insertionSubstitutes.set(component, provider)
+		return () => insertionSubstitutes.delete(component)
+	}
+
+	export function moveBefore (parent: Element, node: Node, child: Node | null): void {
+		moveOrInsertBefore(parent, node, child)
 	}
 
 	export function wrap (element: HTMLElement): Component {
