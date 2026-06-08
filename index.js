@@ -3048,8 +3048,16 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
     }
     const virtualParentDetach = new WeakMap();
     const virtualParents = new WeakMap();
+    const insertionSubstitutes = new WeakMap();
+    const insertionSubstituteNodes = new WeakSet();
     function getDom(component) {
         return component.__dom;
+    }
+    function getInsertionSubstitute(component) {
+        const substitute = insertionSubstitutes.get(component)?.(component);
+        if (substitute)
+            insertionSubstituteNodes.add(substitute);
+        return substitute;
     }
     let componentLeakDetectors = [];
     const timeUntilLeakWarning = 10000;
@@ -3414,9 +3422,11 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 }
                 if (dom.runOrQueueRealisation(() => component.appendTo(destination)))
                     return component;
-                const element = dom.realiseForInsertion();
-                moveOrInsertBefore(destination, element, null);
-                component.emitInsert();
+                const substitute = getInsertionSubstitute(component);
+                const node = substitute ?? dom.realiseForInsertion();
+                moveOrInsertBefore(destination, node, null);
+                if (!substitute)
+                    component.emitInsert();
                 return component;
             },
             prependTo(destination) {
@@ -3426,27 +3436,31 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                 }
                 if (dom.runOrQueueRealisation(() => component.prependTo(destination)))
                     return component;
-                const element = dom.realiseForInsertion();
-                moveOrInsertBefore(destination, element, destination.firstChild);
-                component.emitInsert();
+                const substitute = getInsertionSubstitute(component);
+                const node = substitute ?? dom.realiseForInsertion();
+                moveOrInsertBefore(destination, node, destination.firstChild);
+                if (!substitute)
+                    component.emitInsert();
                 return component;
             },
             insertTo(destination, direction, sibling) {
                 if (ComponentInsertionDestination.is(destination)) {
                     destination.insert(direction, sibling, component);
-                    if (!Component.is(destination) || Component.hasElement(destination))
+                    if (!Component.is(destination))
                         component.emitInsert();
                     return component;
                 }
                 if (dom.runOrQueueRealisation(() => component.insertTo(destination, direction, sibling)))
                     return component;
                 const siblingElement = sibling ? Component.requireElement(sibling, 'insert relative to sibling') : null;
-                const element = dom.realiseForInsertion();
+                const substitute = getInsertionSubstitute(component);
+                const node = substitute ?? dom.realiseForInsertion();
                 if (direction === 'before')
-                    moveOrInsertBefore(destination, element, siblingElement);
+                    moveOrInsertBefore(destination, node, siblingElement);
                 else
-                    moveOrInsertBefore(destination, element, !siblingElement ? destination.firstChild : siblingElement?.nextSibling);
-                component.emitInsert();
+                    moveOrInsertBefore(destination, node, !siblingElement ? destination.firstChild : siblingElement?.nextSibling);
+                if (!substitute)
+                    component.emitInsert();
                 return component;
             },
             append(...contents) {
@@ -3459,10 +3473,11 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     return component;
                 }
                 const elements = dom.append(...contents);
-                for (const element of elements)
+                const insertedElements = elements.filter(element => !insertionSubstituteNodes.has(element));
+                for (const element of insertedElements)
                     element.component?.emitInsert();
-                if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
-                    component.event.emit('childrenInsert', elements);
+                if (insertedElements.length && component.classes.has(Classes.ReceiveChildrenInsertEvents))
+                    component.event.emit('childrenInsert', insertedElements);
                 return component;
             },
             prepend(...contents) {
@@ -3475,10 +3490,11 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     return component;
                 }
                 const elements = dom.prepend(...contents);
-                for (const element of elements)
+                const insertedElements = elements.filter(element => !insertionSubstituteNodes.has(element));
+                for (const element of insertedElements)
                     element.component?.emitInsert();
-                if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
-                    component.event.emit('childrenInsert', elements);
+                if (insertedElements.length && component.classes.has(Classes.ReceiveChildrenInsertEvents))
+                    component.event.emit('childrenInsert', insertedElements);
                 return component;
             },
             insert(direction, sibling, ...contents) {
@@ -3491,10 +3507,11 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                     return component;
                 }
                 const elements = dom.insert(direction, sibling, ...contents);
-                for (const element of elements)
+                const insertedElements = elements.filter(element => !insertionSubstituteNodes.has(element));
+                for (const element of insertedElements)
                     element.component?.emitInsert();
-                if (component.classes.has(Classes.ReceiveChildrenInsertEvents))
-                    component.event.emit('childrenInsert', elements);
+                if (insertedElements.length && component.classes.has(Classes.ReceiveChildrenInsertEvents))
+                    component.event.emit('childrenInsert', insertedElements);
                 return component;
             },
             removeContents() {
@@ -4073,9 +4090,14 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
                         || (Component.is(child) && child.element === sibling)));
             }
             function nodeForInsertion(content) {
-                if (Component.is(content))
+                if (Component.is(content)) {
+                    const substitute = getInsertionSubstitute(content);
+                    if (substitute)
+                        return substitute;
                     virtualParentDetach.get(content)?.();
-                return Component.is(content) ? getDom(content).realiseForInsertion() : content;
+                    return getDom(content).realiseForInsertion();
+                }
+                return content;
             }
             function prepareVirtualChildren(contents) {
                 return contents.filter(Arrays_5.Truthy).map(content => {
@@ -4207,6 +4229,15 @@ define("kitsui/Component", ["require", "exports", "kitsui/utility/AnchorManipula
             return getDom(component);
         }
         Component.getDomController = getDomController;
+        function substituteInsertion(component, provider) {
+            insertionSubstitutes.set(component, provider);
+            return () => insertionSubstitutes.delete(component);
+        }
+        Component.substituteInsertion = substituteInsertion;
+        function moveBefore(parent, node, child) {
+            moveOrInsertBefore(parent, node, child);
+        }
+        Component.moveBefore = moveBefore;
         function wrap(element) {
             const component = Component();
             getDom(component).adoptElement(element);
@@ -6287,16 +6318,129 @@ define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function 
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = default_1;
+    class PlacementRun {
+        signal;
+        placements = new Map();
+        constructor(signal) {
+            this.signal = signal;
+        }
+        substitute(component) {
+            if (this.signal.aborted)
+                return;
+            this.placements.get(component)?.remove();
+            const anchor = document.createComment('kitsui-breakdown-part');
+            this.placements.set(component, anchor);
+            return anchor;
+        }
+        commit() {
+            const parents = new Set();
+            const componentByAnchor = new Map();
+            const placedComponentByElement = new Map();
+            for (const [component, anchor] of this.placements) {
+                componentByAnchor.set(anchor, component);
+                const element = component.element;
+                if (element)
+                    placedComponentByElement.set(element, component);
+                const parent = anchor.parentNode;
+                if (parent instanceof Element)
+                    parents.add(parent);
+            }
+            for (const parent of parents) {
+                const oldOrder = normaliseOldOrder(parent, componentByAnchor);
+                const newOrder = normaliseNewOrder(parent, componentByAnchor, placedComponentByElement);
+                if (ordersEqual(oldOrder, newOrder))
+                    continue;
+                const insertedComponents = new Set();
+                const insertedNodes = [];
+                for (const anchor of getAnchors(parent, componentByAnchor)) {
+                    const component = componentByAnchor.get(anchor);
+                    if (!component)
+                        continue;
+                    insertedComponents.add(component);
+                    const node = kitsui_1.Component.getDomController(component).realiseForInsertion();
+                    insertedNodes.push(node);
+                    kitsui_1.Component.moveBefore(parent, node, anchor);
+                }
+                for (const component of insertedComponents)
+                    component.emitInsert();
+                if (parent instanceof Element && insertedNodes.length)
+                    parent.component?.event.emit('childrenInsert', insertedNodes);
+            }
+            for (const parent of parents) {
+                const anchors = getAnchors(parent, componentByAnchor);
+                for (let i = anchors.length - 1; i >= 0; i--)
+                    anchors[i].remove();
+            }
+        }
+        cleanup() {
+            for (const anchor of this.placements.values())
+                anchor.remove();
+            this.placements.clear();
+        }
+    }
+    function getAnchors(parent, componentByAnchor) {
+        return [...parent.childNodes]
+            .filter((node) => node instanceof Comment && componentByAnchor.has(node));
+    }
+    function normaliseOldOrder(parent, componentByAnchor) {
+        const order = [];
+        for (const node of parent.childNodes) {
+            if (node instanceof Comment && componentByAnchor.has(node))
+                continue;
+            const component = node instanceof Element ? node.component : undefined;
+            if (component)
+                order.push({ type: 'part', component });
+            else
+                order.push({ type: 'node', node });
+        }
+        return order;
+    }
+    function normaliseNewOrder(parent, componentByAnchor, placedComponentByElement) {
+        const order = [];
+        for (const node of parent.childNodes) {
+            if (node instanceof Comment) {
+                const component = componentByAnchor.get(node);
+                if (component) {
+                    order.push({ type: 'part', component });
+                    continue;
+                }
+            }
+            if (node instanceof Element && placedComponentByElement.has(node))
+                continue;
+            const component = node instanceof Element ? node.component : undefined;
+            if (component)
+                order.push({ type: 'part', component });
+            else
+                order.push({ type: 'node', node });
+        }
+        return order;
+    }
+    function ordersEqual(a, b) {
+        if (a.length !== b.length)
+            return false;
+        return a.every((entry, index) => {
+            const other = b[index];
+            if (entry.type !== other.type)
+                return false;
+            if (entry.type === 'part' && other.type === 'part')
+                return entry.component === other.component;
+            return entry.type === 'node' && other.type === 'node' && entry.node === other.node;
+        });
+    }
     function default_1(owner, state, handler) {
         const store = (0, kitsui_1.Component)().setOwner(owner);
         kitsui_1.Component.getDomController(store).realiseForInsertion();
         const parts = new Map();
         const seen = new Set();
         let controller;
+        let activeRun;
         owner.removed.matchManual(true, () => {
             controller?.abort();
-            for (const part of parts.values())
+            activeRun?.cleanup();
+            for (const part of parts.values()) {
+                part.unuseInsertionSubstitute();
                 part.component.remove();
+            }
             parts.clear();
             store.remove();
         });
@@ -6313,7 +6457,8 @@ define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function 
             const state = (0, kitsui_1.State)(value);
             const component = (0, kitsui_1.Component)().setOwner(owner);
             initialiser?.(component, state);
-            part = { state, component };
+            const unuseInsertionSubstitute = kitsui_1.Component.substituteInsertion(component, component => activeRun?.substitute(component));
+            part = { state, component, unuseInsertionSubstitute };
             parts.set(unique, part);
             return component;
         };
@@ -6322,21 +6467,36 @@ define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function 
             controller?.abort();
             controller = new AbortController();
             const signal = controller.signal;
+            const run = new PlacementRun(signal);
             const InstancePart = (unique, value, initialiser) => {
                 if (signal.aborted)
                     return (0, kitsui_1.Component)().tweak(c => c.remove());
                 return Part(unique, value, initialiser);
             };
-            await handler(value, InstancePart, store);
-            if (signal.aborted)
-                return;
-            for (const [unique, part] of parts) {
-                if (!seen.has(unique)) {
-                    part.component.remove();
-                    parts.delete(unique);
+            try {
+                activeRun = run;
+                try {
+                    await handler(value, InstancePart, store);
                 }
+                finally {
+                    if (activeRun === run)
+                        activeRun = undefined;
+                }
+                if (signal.aborted)
+                    return;
+                run.commit();
+                for (const [unique, part] of parts) {
+                    if (!seen.has(unique)) {
+                        part.unuseInsertionSubstitute();
+                        part.component.remove();
+                        parts.delete(unique);
+                    }
+                }
+                seen.clear();
             }
-            seen.clear();
+            finally {
+                run.cleanup();
+            }
         });
     }
 });

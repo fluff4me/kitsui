@@ -1026,6 +1026,8 @@ declare module "kitsui/Component" {
         export function isRealised(component: Component): boolean;
         export const isRealized: typeof isRealised;
         export function getDomController(component: Component): ComponentDomController;
+        export function substituteInsertion(component: Component, provider: (component: Component) => Node | undefined): State.Unsubscribe;
+        export function moveBefore(parent: Element, node: Node, child: Node | null): void;
         export function wrap(element: HTMLElement): Component;
         export const SYMBOL_COMPONENT_TYPE_BRAND: unique symbol;
         export type BuilderLike<PARAMS extends any[] = any[], COMPONENT extends Component = Component> = Builder<PARAMS, COMPONENT> | Extension<PARAMS, COMPONENT>;
