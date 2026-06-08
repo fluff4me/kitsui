@@ -5834,20 +5834,622 @@ define("kitsui/component/Popover", ["require", "exports", "kitsui/Component", "k
     });
     exports.default = Popover;
 });
-define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_7, State_15) {
+define("kitsui/component/Breakdown", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_7, State_15) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = default_1;
     Component_7 = __importDefault(Component_7);
     State_15 = __importDefault(State_15);
+    class PlacementRun {
+        signal;
+        placements = new Map();
+        constructor(signal) {
+            this.signal = signal;
+        }
+        substitute(component) {
+            if (this.signal.aborted)
+                return;
+            this.placements.get(component)?.remove();
+            const anchor = document.createComment('kitsui-breakdown-part');
+            this.placements.set(component, anchor);
+            return anchor;
+        }
+        commit() {
+            const parents = new Set();
+            const componentByAnchor = new Map();
+            const placedComponentByElement = new Map();
+            for (const [component, anchor] of this.placements) {
+                componentByAnchor.set(anchor, component);
+                const element = component.element;
+                if (element)
+                    placedComponentByElement.set(element, component);
+                const parent = anchor.parentNode;
+                if (parent instanceof Element)
+                    parents.add(parent);
+            }
+            for (const parent of parents) {
+                const oldOrder = normaliseOldOrder(parent, componentByAnchor);
+                const newOrder = normaliseNewOrder(parent, componentByAnchor, placedComponentByElement);
+                if (ordersEqual(oldOrder, newOrder))
+                    continue;
+                const insertedComponents = new Set();
+                const insertedNodes = [];
+                for (const anchor of getAnchors(parent, componentByAnchor)) {
+                    const component = componentByAnchor.get(anchor);
+                    if (!component)
+                        continue;
+                    insertedComponents.add(component);
+                    const node = Component_7.default.getDomController(component).realiseForInsertion();
+                    insertedNodes.push(node);
+                    Component_7.default.moveBefore(parent, node, anchor);
+                }
+                for (const component of insertedComponents)
+                    component.emitInsert();
+                if (parent instanceof Element && insertedNodes.length)
+                    parent.component?.event.emit('childrenInsert', insertedNodes);
+            }
+            for (const parent of parents) {
+                const anchors = getAnchors(parent, componentByAnchor);
+                for (let i = anchors.length - 1; i >= 0; i--)
+                    anchors[i].remove();
+            }
+        }
+        cleanup() {
+            for (const anchor of this.placements.values())
+                anchor.remove();
+            this.placements.clear();
+        }
+    }
+    function getAnchors(parent, componentByAnchor) {
+        return [...parent.childNodes]
+            .filter((node) => node instanceof Comment && componentByAnchor.has(node));
+    }
+    function normaliseOldOrder(parent, componentByAnchor) {
+        const order = [];
+        for (const node of parent.childNodes) {
+            if (node instanceof Comment && componentByAnchor.has(node))
+                continue;
+            const component = node instanceof Element ? node.component : undefined;
+            if (component)
+                order.push({ type: 'part', component });
+            else
+                order.push({ type: 'node', node });
+        }
+        return order;
+    }
+    function normaliseNewOrder(parent, componentByAnchor, placedComponentByElement) {
+        const order = [];
+        for (const node of parent.childNodes) {
+            if (node instanceof Comment) {
+                const component = componentByAnchor.get(node);
+                if (component) {
+                    order.push({ type: 'part', component });
+                    continue;
+                }
+            }
+            if (node instanceof Element && placedComponentByElement.has(node))
+                continue;
+            const component = node instanceof Element ? node.component : undefined;
+            if (component)
+                order.push({ type: 'part', component });
+            else
+                order.push({ type: 'node', node });
+        }
+        return order;
+    }
+    function ordersEqual(a, b) {
+        if (a.length !== b.length)
+            return false;
+        return a.every((entry, index) => {
+            const other = b[index];
+            if (entry.type !== other.type)
+                return false;
+            if (entry.type === 'part' && other.type === 'part')
+                return entry.component === other.component;
+            return entry.type === 'node' && other.type === 'node' && entry.node === other.node;
+        });
+    }
+    function default_1(owner, state, handler) {
+        const store = (0, Component_7.default)().setOwner(owner);
+        Component_7.default.getDomController(store).realiseForInsertion();
+        const parts = new Map();
+        const seen = new Set();
+        let controller;
+        let activeRun;
+        owner.removed.matchManual(true, () => {
+            controller?.abort();
+            activeRun?.cleanup();
+            for (const part of parts.values()) {
+                part.unuseInsertionSubstitute();
+                part.component.remove();
+            }
+            parts.clear();
+            store.remove();
+        });
+        const Part = (unique, value, initialiser) => {
+            if (typeof value === 'function' && !initialiser)
+                initialiser = value, value = undefined;
+            value ??= null;
+            seen.add(unique);
+            let part = parts.get(unique);
+            if (part) {
+                part.state.value = value;
+                return part.component;
+            }
+            const state = (0, State_15.default)(value);
+            const component = (0, Component_7.default)().setOwner(owner);
+            initialiser?.(component, state);
+            const unuseInsertionSubstitute = Component_7.default.substituteInsertion(component, component => activeRun?.substitute(component));
+            part = { state, component, unuseInsertionSubstitute };
+            parts.set(unique, part);
+            return component;
+        };
+        state.use(owner, async (value) => {
+            seen.clear();
+            controller?.abort();
+            controller = new AbortController();
+            const signal = controller.signal;
+            const run = new PlacementRun(signal);
+            const InstancePart = (unique, value, initialiser) => {
+                if (signal.aborted)
+                    return (0, Component_7.default)().tweak(c => c.remove());
+                return Part(unique, value, initialiser);
+            };
+            try {
+                activeRun = run;
+                try {
+                    await handler(value, InstancePart, store);
+                }
+                finally {
+                    if (activeRun === run)
+                        activeRun = undefined;
+                }
+                if (signal.aborted)
+                    return;
+                run.commit();
+                for (const [unique, part] of parts) {
+                    if (!seen.has(unique)) {
+                        part.unuseInsertionSubstitute();
+                        part.component.remove();
+                        parts.delete(unique);
+                    }
+                }
+                seen.clear();
+            }
+            finally {
+                run.cleanup();
+            }
+        });
+    }
+});
+define("kitsui/component/Sortable", ["require", "exports", "kitsui/Component", "kitsui/component/Breakdown", "kitsui/utility/State"], function (require, exports, Component_8, Breakdown_1, State_16) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Component_8 = __importDefault(Component_8);
+    Breakdown_1 = __importDefault(Breakdown_1);
+    State_16 = __importDefault(State_16);
+    const POINTER_THRESHOLD = 6;
+    const AUTO_SCROLL_THRESHOLD = 36;
+    const AUTO_SCROLL_MAX_SPEED = 18;
+    const SortableImplementation = Component_8.default.Builder((component, rowsInput, key, render, options) => {
+        component.style('sortable');
+        const ownsRows = !State_16.default.is(rowsInput);
+        const rows = State_16.default.is(rowsInput) ? rowsInput : (0, State_16.default)(rowsInput);
+        const mutableRows = ownsRows ? rows : undefined;
+        const movingKey = (0, State_16.default)(undefined);
+        const elementKeys = new WeakMap();
+        const componentKeys = new WeakMap();
+        let slot;
+        let movingPart;
+        let pointerController;
+        let dragOrder;
+        let autoScrollFrame;
+        let autoScrollSession;
+        (0, Breakdown_1.default)(component, rows, (rows, Part) => {
+            const keyedRows = rows.map((row, index) => ({
+                key: key(row),
+                row,
+                index,
+            }));
+            for (const keyedRow of keyedRows) {
+                const rowPart = Part(keyedRow.key, {
+                    row: keyedRow.row,
+                    index: keyedRow.index,
+                }, (part, state) => {
+                    const row = state.map(part, state => state.row);
+                    const index = state.map(part, state => state.index);
+                    const draggable = State_16.default.Map(part, [row, index], (row, index) => options?.draggable?.(row, index) ?? true);
+                    const droppable = State_16.default.Map(part, [row, index], (row, index) => options?.droppable?.(row, index) ?? true);
+                    const payload = State_16.default.Map(part, [row, index], (row, index) => ({
+                        key: key(row),
+                        row,
+                        index,
+                    }));
+                    const rendered = render(row, index).appendTo(part);
+                    componentKeys.set(part, keyedRow.key);
+                    part.onRealise(part => {
+                        if (part.element)
+                            elementKeys.set(part.element, keyedRow.key);
+                    });
+                    rendered.style.bind(movingKey.map(part, key => key === payload.value.key), 'sortable-row-child--moving');
+                    part.style('sortable-row')
+                        .style.bind(draggable, 'sortable-row--draggable')
+                        .style.bind(droppable, 'sortable-row--droppable')
+                        .style.bind(movingKey.map(part, key => key === payload.value.key), 'sortable-row--moving-source')
+                        .tabIndex(draggable.value ? 'auto' : undefined)
+                        .event.subscribe('pointerdown', event => {
+                        if (!(event instanceof PointerEvent) || event.button !== 0 || !draggable.value)
+                            return;
+                        if (options?.inputFilter?.(event, row.value, index.value) === false)
+                            return;
+                        startPointerSort(part, event, payload.value);
+                    })
+                        .event.subscribe('keydown', event => {
+                        if (event.target !== part.element || !draggable.value)
+                            return;
+                        const direction = event.key === 'ArrowUp' || event.key === 'ArrowLeft'
+                            ? 'before'
+                            : event.key === 'ArrowDown' || event.key === 'ArrowRight'
+                                ? 'after'
+                                : undefined;
+                        if (!direction)
+                            return;
+                        const target = findKeyboardTarget(payload.value.key, direction);
+                        if (!target)
+                            return;
+                        event.preventDefault();
+                        commitDirectReorder(payload.value.key, target.key, direction);
+                        window.setTimeout(() => part.focus());
+                    })
+                        .event.subscribeCapture('click', event => {
+                        if (!part.element?.hasAttribute('data-sortable-suppress-click'))
+                            return;
+                        part.element.removeAttribute('data-sortable-suppress-click');
+                        event.preventDefault();
+                        event.stopPropagation();
+                    });
+                    draggable.subscribe(part, draggable => part.tabIndex(draggable ? 'auto' : undefined));
+                });
+                rowPart.appendTo(component);
+            }
+        });
+        function startPointerSort(part, event, payload) {
+            const host = component.element;
+            const element = part.element;
+            if (!host || !element)
+                return;
+            const sourceElement = element;
+            const start = pointFromPointer(event);
+            const sourceRect = element.getBoundingClientRect();
+            const grabOffset = {
+                x: start.x - sourceRect.left,
+                y: start.y - sourceRect.top,
+            };
+            const savedPosition = positionFromPointer(start, grabOffset);
+            dragOrder = rows.value.map(row => key(row));
+            let started = false;
+            pointerController?.abort();
+            pointerController = new AbortController();
+            document.addEventListener('pointermove', handleMove, { signal: pointerController.signal });
+            document.addEventListener('pointerup', handleUp, { signal: pointerController.signal });
+            document.addEventListener('pointercancel', handleCancel, { signal: pointerController.signal });
+            try {
+                element.setPointerCapture(event.pointerId);
+            }
+            catch { }
+            function handleMove(event) {
+                const pointer = pointFromPointer(event);
+                const delta = {
+                    x: pointer.x - start.x,
+                    y: pointer.y - start.y,
+                };
+                if (!started) {
+                    if (Math.hypot(delta.x, delta.y) <= POINTER_THRESHOLD)
+                        return;
+                    started = true;
+                    beginMoving(part, sourceRect, savedPosition, payload.key);
+                }
+                event.preventDefault();
+                moveMovingPart(part, sourceElement, grabOffset, pointer, payload.key);
+                updateAutoScroll({
+                    part,
+                    sourceElement,
+                    grabOffset,
+                    sourceKey: payload.key,
+                    pointer,
+                });
+            }
+            function handleUp(event) {
+                pointerController?.abort();
+                pointerController = undefined;
+                if (!started)
+                    return;
+                event.preventDefault();
+                part.element?.setAttribute('data-sortable-suppress-click', 'true');
+                commitSlotReorder(payload.key);
+                cleanupPointerSort();
+            }
+            function handleCancel() {
+                cleanupPointerSort();
+            }
+        }
+        function beginMoving(part, sourceRect, savedPosition, sourceKey) {
+            cleanupMovingState();
+            const host = component.element;
+            const element = part.element;
+            if (!host || !element)
+                return;
+            slot = (0, Component_8.default)()
+                .style('sortable-slot')
+                .style.setProperties({
+                height: `${sourceRect.height}px`,
+                width: `${sourceRect.width}px`,
+            });
+            host.insertBefore(Component_8.default.realise(slot), element);
+            movingPart = part;
+            movingKey.value = sourceKey;
+            part.style('sortable-row--moving')
+                .style.setProperties({
+                left: `${savedPosition.x}px`,
+                top: `${savedPosition.y}px`,
+                width: `${sourceRect.width}px`,
+            });
+        }
+        function moveMovingPart(part, sourceElement, grabOffset, pointer, sourceKey) {
+            const position = positionFromPointer(pointer, grabOffset);
+            part.style.setProperties({
+                left: `${position.x}px`,
+                top: `${position.y}px`,
+            });
+            moveSlot(sourceElement, position, sourceKey);
+            return position;
+        }
+        function positionFromPointer(pointer, grabOffset) {
+            const host = component.element;
+            const hostRect = host?.getBoundingClientRect();
+            if (!host || !hostRect)
+                return {
+                    x: 0,
+                    y: 0,
+                };
+            return {
+                x: pointer.x - hostRect.left + host.scrollLeft - grabOffset.x,
+                y: pointer.y - hostRect.top + host.scrollTop - grabOffset.y,
+            };
+        }
+        function moveSlot(sourceElement, position, sourceKey) {
+            const host = component.element;
+            const slotElement = slot?.element;
+            if (!host || !slotElement)
+                return;
+            const before = findItemBefore(sourceElement, position, [...host.children]);
+            host.insertBefore(slotElement, !before ? host.firstElementChild : before.nextElementSibling);
+            const beforeKey = before && keyForElement(before);
+            if (before && beforeKey === undefined)
+                return;
+            updateDragOrder(sourceKey, beforeKey);
+        }
+        function updateDragOrder(sourceKey, beforeKey) {
+            const order = [...dragOrder ?? rows.value.map(row => key(row))]
+                .filter(key => key !== sourceKey);
+            const insertIndex = beforeKey === undefined
+                ? 0
+                : order.indexOf(beforeKey) + 1;
+            order.splice(Math.max(0, insertIndex), 0, sourceKey);
+            dragOrder = order;
+        }
+        function keyForElement(element) {
+            const component = Component_8.default.get(element);
+            return elementKeys.get(element)
+                ?? (component && componentKeys.get(component));
+        }
+        function updateAutoScroll(session) {
+            autoScrollSession = session;
+            if (autoScrollFrame !== undefined)
+                return;
+            autoScrollFrame = requestAnimationFrame(autoScroll);
+        }
+        function autoScroll() {
+            autoScrollFrame = undefined;
+            const session = autoScrollSession;
+            const scrollContainer = findScrollContainer(component.element);
+            if (!session || !scrollContainer)
+                return;
+            const rect = scrollContainer.getBoundingClientRect();
+            const topDistance = session.pointer.y - rect.top;
+            const bottomDistance = rect.bottom - session.pointer.y;
+            const scrollDelta = topDistance < AUTO_SCROLL_THRESHOLD
+                ? -autoScrollSpeed(topDistance)
+                : bottomDistance < AUTO_SCROLL_THRESHOLD
+                    ? autoScrollSpeed(bottomDistance)
+                    : 0;
+            if (!scrollDelta)
+                return;
+            scrollContainer.scrollBy({ top: scrollDelta });
+            moveMovingPart(session.part, session.sourceElement, session.grabOffset, session.pointer, session.sourceKey);
+            autoScrollFrame = requestAnimationFrame(autoScroll);
+        }
+        function autoScrollSpeed(distance) {
+            const intensity = Math.max(0, Math.min(1, (AUTO_SCROLL_THRESHOLD - distance) / AUTO_SCROLL_THRESHOLD));
+            return Math.ceil(intensity * AUTO_SCROLL_MAX_SPEED);
+        }
+        function findScrollContainer(element) {
+            for (let parent = element instanceof HTMLElement ? element : element?.parentElement; parent; parent = parent.parentElement) {
+                const style = getComputedStyle(parent);
+                if (!/(auto|scroll|overlay)/.test(`${style.overflow}${style.overflowY}`))
+                    continue;
+                if (parent.scrollHeight > parent.clientHeight)
+                    return parent;
+            }
+            return document.scrollingElement;
+        }
+        function cleanupAutoScroll() {
+            if (autoScrollFrame !== undefined)
+                cancelAnimationFrame(autoScrollFrame);
+            autoScrollFrame = undefined;
+            autoScrollSession = undefined;
+        }
+        function findItemBefore(sourceElement, position, children) {
+            const hostBox = component.element?.getBoundingClientRect();
+            if (!hostBox)
+                return;
+            const hostScrollLeft = component.element?.scrollLeft ?? 0;
+            const hostScrollTop = component.element?.scrollTop ?? 0;
+            let lastTop;
+            const firstRealIndex = children.findIndex(child => child !== sourceElement && child !== slot?.element);
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                if (child === sourceElement || child === slot?.element)
+                    continue;
+                let { left, top, width, height } = child.getBoundingClientRect();
+                left = left - hostBox.left + hostScrollLeft;
+                top = top - hostBox.top + hostScrollTop;
+                if (i === firstRealIndex) {
+                    if (position.y < top)
+                        return;
+                    if (position.x < left && position.y < top + height)
+                        return;
+                }
+                if (lastTop !== undefined && lastTop !== top) {
+                    if (position.y < top)
+                        return findPreviousRealChild(children, i - 1, sourceElement);
+                    if (position.y >= top && position.y < top + height && position.x < left)
+                        return findPreviousRealChild(children, i - 1, sourceElement);
+                }
+                lastTop = top;
+                if (position.x >= left && position.x < left + width && position.y >= top && position.y < top + height)
+                    return child;
+            }
+            return findPreviousRealChild(children, children.length - 1, sourceElement);
+        }
+        function findPreviousRealChild(children, startIndex, sourceElement) {
+            for (let i = startIndex; i >= 0; i--) {
+                const child = children[i];
+                if (child !== sourceElement && child !== slot?.element)
+                    return child;
+            }
+        }
+        function cleanupPointerSort() {
+            pointerController?.abort();
+            pointerController = undefined;
+            cleanupMovingState();
+        }
+        function cleanupMovingState() {
+            movingPart?.style.remove('sortable-row--moving');
+            movingPart?.style.removeProperties('left', 'top', 'width');
+            movingPart = undefined;
+            slot?.remove();
+            slot = undefined;
+            movingKey.value = undefined;
+            dragOrder = undefined;
+            cleanupAutoScroll();
+        }
+        function commitSlotReorder(sourceKey) {
+            if (sourceKey === undefined)
+                return;
+            const oldRows = rows.value;
+            const entries = oldRows.map((row, index) => ({
+                key: key(row),
+                row,
+                index,
+            }));
+            const source = entries.find(entry => entry.key === sourceKey);
+            if (!source)
+                return;
+            const order = dragOrder ?? entries.map(entry => entry.key);
+            if (order.length !== entries.length || order.filter(key => key === sourceKey).length !== 1)
+                return;
+            const entriesByKey = new Map(entries.map(entry => [entry.key, entry]));
+            const nextEntries = order
+                .map(key => entriesByKey.get(key))
+                .filter((entry) => !!entry);
+            if (nextEntries.length !== entries.length)
+                return;
+            const nextRows = nextEntries.map(entry => entry.row);
+            if (arraysEqual(oldRows, nextRows))
+                return;
+            emitCommit(oldRows, nextRows, source, nextEntries.findIndex(entry => entry === source));
+        }
+        function commitDirectReorder(sourceKey, targetKeyValue, position) {
+            if (targetKeyValue === undefined || sourceKey === targetKeyValue)
+                return;
+            const oldRows = rows.value;
+            const entries = oldRows.map((row, index) => ({
+                key: key(row),
+                row,
+                index,
+            }));
+            const source = entries.find(entry => entry.key === sourceKey);
+            const target = entries.find(entry => entry.key === targetKeyValue);
+            if (!source || !target)
+                return;
+            const nextEntries = entries.filter(entry => entry !== source);
+            const targetIndex = nextEntries.findIndex(entry => entry === target);
+            if (targetIndex === -1)
+                return;
+            const insertIndex = targetIndex + (position === 'after' ? 1 : 0);
+            nextEntries.splice(insertIndex, 0, source);
+            const nextRows = nextEntries.map(entry => entry.row);
+            if (arraysEqual(oldRows, nextRows))
+                return;
+            emitCommit(oldRows, nextRows, source, nextEntries.findIndex(entry => entry === source));
+        }
+        function emitCommit(oldRows, nextRows, source, toIndex) {
+            const event = {
+                rows: nextRows,
+                oldRows,
+                item: source.row,
+                fromIndex: source.index,
+                toIndex,
+            };
+            if (!component.event.emit('commit', event).defaultPrevented)
+                mutableRows?.setValue(nextRows);
+        }
+        function arraysEqual(a, b) {
+            return a.length === b.length && a.every((value, index) => value === b[index]);
+        }
+        function findKeyboardTarget(sourceKey, position) {
+            const entries = rows.value.map((row, index) => ({
+                key: key(row),
+                row,
+                index,
+            }));
+            const sourceIndex = entries.findIndex(entry => entry.key === sourceKey);
+            if (sourceIndex === -1)
+                return;
+            const step = position === 'before' ? -1 : 1;
+            for (let i = sourceIndex + step; i >= 0 && i < entries.length; i += step)
+                if (options?.droppable?.(entries[i].row, entries[i].index) ?? true)
+                    return entries[i];
+        }
+        return component.extend(() => ({
+            rows,
+            event: component.event,
+        }));
+    }).setName('Sortable');
+    function pointFromPointer(event) {
+        return {
+            x: event.clientX,
+            y: event.clientY,
+        };
+    }
+    const Sortable = SortableImplementation;
+    exports.default = Sortable;
+});
+define("kitsui/ext/ComponentInsertionTransaction", ["require", "exports", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Component_9, State_17) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    Component_9 = __importDefault(Component_9);
+    State_17 = __importDefault(State_17);
     function ComponentInsertionTransaction(component, onEnd) {
         let unuseComponentRemove = component?.removed.useManual(removed => removed && onComponentRemove());
-        const closed = (0, State_15.default)(false);
+        const closed = (0, State_17.default)(false);
         let removed = false;
         const result = {
             isInsertionDestination: true,
             closed,
             get size() {
-                return component ? Component_7.default.getDomController(component).getChildren().length : 0;
+                return component ? Component_9.default.getDomController(component).getChildren().length : 0;
             },
             append(...contents) {
                 if (closed.value) {
@@ -5960,14 +6562,14 @@ define("kitsui/utility/AbortablePromise", ["require", "exports"], function (requ
     })(AbortablePromise || (AbortablePromise = {}));
     exports.default = AbortablePromise;
 });
-define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kitsui/ext/ComponentInsertionTransaction", "kitsui/utility/AbortablePromise", "kitsui/utility/State"], function (require, exports, Component_8, ComponentInsertionTransaction_1, AbortablePromise_1, State_16) {
+define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kitsui/ext/ComponentInsertionTransaction", "kitsui/utility/AbortablePromise", "kitsui/utility/State"], function (require, exports, Component_10, ComponentInsertionTransaction_1, AbortablePromise_1, State_18) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Component_8 = __importStar(Component_8);
+    Component_10 = __importStar(Component_10);
     ComponentInsertionTransaction_1 = __importDefault(ComponentInsertionTransaction_1);
     AbortablePromise_1 = __importDefault(AbortablePromise_1);
-    State_16 = __importDefault(State_16);
-    Component_8.default.extend(component => {
+    State_18 = __importDefault(State_18);
+    Component_10.default.extend(component => {
         let slot;
         component.extend(component => ({
             hasContent() {
@@ -5985,7 +6587,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             appendWhen(state, ...contents) {
                 const slot = Slot().appendTo(component).preserveContents();
-                let temporaryHolder = (0, Component_8.default)().setOwner(slot).append(...contents);
+                let temporaryHolder = (0, Component_10.default)().setOwner(slot).append(...contents);
                 slot.if(state, slot => {
                     slot.append(...contents);
                     releaseTemporaryHolder(temporaryHolder);
@@ -5995,7 +6597,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             prependWhen(state, ...contents) {
                 const slot = Slot().prependTo(component).preserveContents();
-                let temporaryHolder = (0, Component_8.default)().setOwner(slot).append(...contents);
+                let temporaryHolder = (0, Component_10.default)().setOwner(slot).append(...contents);
                 slot.if(state, slot => {
                     slot.append(...contents);
                     releaseTemporaryHolder(temporaryHolder);
@@ -6005,7 +6607,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             insertWhen(state, direction, sibling, ...contents) {
                 const slot = Slot().insertTo(component, direction, sibling).preserveContents();
-                let temporaryHolder = (0, Component_8.default)().setOwner(slot).append(...contents);
+                let temporaryHolder = (0, Component_10.default)().setOwner(slot).append(...contents);
                 slot.if(state, slot => {
                     slot.append(...contents);
                     releaseTemporaryHolder(temporaryHolder);
@@ -6015,7 +6617,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             appendToWhen(state, destination) {
                 const newSlot = Slot().appendTo(destination).preserveContents();
-                let temporaryHolder = (0, Component_8.default)().setOwner(newSlot).append(component);
+                let temporaryHolder = (0, Component_10.default)().setOwner(newSlot).append(component);
                 newSlot.if(state, slot => {
                     slot.append(component);
                     releaseTemporaryHolder(temporaryHolder);
@@ -6027,7 +6629,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             prependToWhen(state, destination) {
                 const newSlot = Slot().prependTo(destination).preserveContents();
-                let temporaryHolder = (0, Component_8.default)().setOwner(newSlot).append(component);
+                let temporaryHolder = (0, Component_10.default)().setOwner(newSlot).append(component);
                 newSlot.if(state, slot => {
                     slot.append(component);
                     releaseTemporaryHolder(temporaryHolder);
@@ -6039,7 +6641,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             },
             insertToWhen(state, destination, direction, sibling) {
                 const newSlot = Slot().insertTo(destination, direction, sibling).preserveContents();
-                let temporaryHolder = (0, Component_8.default)().setOwner(newSlot).append(component);
+                let temporaryHolder = (0, Component_10.default)().setOwner(newSlot).append(component);
                 newSlot.if(state, slot => {
                     slot.append(component);
                     releaseTemporaryHolder(temporaryHolder);
@@ -6053,25 +6655,25 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
         function releaseTemporaryHolder(temporaryHolder) {
             if (!temporaryHolder)
                 return;
-            Component_8.default.getDomController(temporaryHolder).takeChildren();
+            Component_10.default.getDomController(temporaryHolder).takeChildren();
             temporaryHolder.remove();
         }
     });
-    const Slot = Object.assign(Component_8.default.Builder((slot) => {
+    const Slot = Object.assign(Component_10.default.Builder((slot) => {
         let unuse;
         let cleanup;
         let abort;
         let abortTransaction;
-        const elses = (0, State_16.default)({ elseIfs: [] });
+        const elses = (0, State_18.default)({ elseIfs: [] });
         let unuseElses;
         let unuseOwner;
         let preserveContents = false;
         let inserted = false;
-        const hidden = (0, State_16.default)(false);
-        const useDisplayContents = (0, State_16.default)(true);
+        const hidden = (0, State_18.default)(false);
+        const useDisplayContents = (0, State_18.default)(true);
         let contentsOwner;
         return slot
-            .style.bindProperty('display', State_16.default.MapManual([hidden, useDisplayContents], (hidden, useDisplayContents) => hidden ? 'none' : useDisplayContents ? 'contents' : undefined))
+            .style.bindProperty('display', State_18.default.MapManual([hidden, useDisplayContents], (hidden, useDisplayContents) => hidden ? 'none' : useDisplayContents ? 'contents' : undefined))
             .extend(slot => ({
             useDisplayContents,
             noDisplayContents() {
@@ -6100,16 +6702,16 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 if (slot.removed.value)
                     return slot;
                 const wasArrayState = Array.isArray(state);
-                const wasObjectState = !wasArrayState && !State_16.default.is(state);
+                const wasObjectState = !wasArrayState && !State_18.default.is(state);
                 if (wasArrayState) {
-                    const owner = State_16.default.Owner.create();
+                    const owner = State_18.default.Owner.create();
                     unuseOwner = owner.remove;
-                    state = State_16.default.Map(owner, state, (...outputs) => outputs);
+                    state = State_18.default.Map(owner, state, (...outputs) => outputs);
                 }
                 else if (wasObjectState) {
-                    const owner = State_16.default.Owner.create();
+                    const owner = State_18.default.Owner.create();
                     unuseOwner = owner.remove;
-                    state = State_16.default.Use(owner, state);
+                    state = State_18.default.Use(owner, state);
                 }
                 unuse = state.use(slot, value => {
                     abort?.();
@@ -6119,11 +6721,11 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                     abortTransaction?.();
                     abortTransaction = undefined;
                     contentsOwner?.remove();
-                    contentsOwner = State_16.default.Owner.create();
-                    const component = (0, Component_8.default)().setOwner(contentsOwner);
+                    contentsOwner = State_18.default.Owner.create();
+                    const component = (0, Component_10.default)().setOwner(contentsOwner);
                     const transaction = Object.assign((0, ComponentInsertionTransaction_1.default)(component, () => {
                         slot.removeContents();
-                        slot.append(...Component_8.default.getDomController(component).takeChildren());
+                        slot.append(...Component_10.default.getDomController(component).takeChildren());
                         inserted = true;
                         component.remove();
                     }), {
@@ -6168,7 +6770,7 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                         }
                         let unuseElsesList;
                         const unuseElsesContainer = elses.useManual(elses => {
-                            unuseElsesList = State_16.default.MapManual(elses.elseIfs.map(({ state }) => state), (...elses) => elses.indexOf(true))
+                            unuseElsesList = State_18.default.MapManual(elses.elseIfs.map(({ state }) => state), (...elses) => elses.indexOf(true))
                                 .useManual(elseToUse => {
                                 const initialiser = elseToUse === -1 ? elses.else : elses.elseIfs[elseToUse].initialiser;
                                 if (!initialiser) {
@@ -6213,11 +6815,11 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
             .tweak(slot => slot.removed.matchManual(true, () => cleanup?.()));
         function handleSlotInitialiser(initialiser) {
             contentsOwner?.remove();
-            contentsOwner = State_16.default.Owner.create();
-            const component = (0, Component_8.default)().setOwner(contentsOwner);
+            contentsOwner = State_18.default.Owner.create();
+            const component = (0, Component_10.default)().setOwner(contentsOwner);
             const transaction = Object.assign((0, ComponentInsertionTransaction_1.default)(component, () => {
                 slot.removeContents();
-                slot.append(...Component_8.default.getDomController(component).takeChildren());
+                slot.append(...Component_10.default.getDomController(component).takeChildren());
                 inserted = true;
                 component.remove();
             }), {
@@ -6240,33 +6842,33 @@ define("kitsui/component/Slot", ["require", "exports", "kitsui/Component", "kits
                 result = undefined;
             transaction.close();
             abortTransaction = undefined;
-            if (Component_8.default.is(result)) {
+            if (Component_10.default.is(result)) {
                 result.appendTo(slot);
                 inserted = true;
                 cleanup = undefined;
                 return;
             }
-            if (Component_8.ComponentInsertionDestination.is(result)) {
+            if (Component_10.ComponentInsertionDestination.is(result)) {
                 cleanup = undefined;
                 return;
             }
             cleanup = result;
         }
     }), {
-        using: (value, initialiser) => Slot().use(State_16.default.get(value), initialiser),
+        using: (value, initialiser) => Slot().use(State_18.default.get(value), initialiser),
     });
     exports.default = Slot;
 });
-define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "kitsui/component/Popover"], function (require, exports, Component_9, Popover_1) {
+define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "kitsui/component/Popover"], function (require, exports, Component_11, Popover_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    Component_9 = __importDefault(Component_9);
+    Component_11 = __importDefault(Component_11);
     Popover_1 = __importDefault(Popover_1);
     var TooltipStyleTargets;
     (function (TooltipStyleTargets) {
         TooltipStyleTargets[TooltipStyleTargets["Tooltip"] = 0] = "Tooltip";
     })(TooltipStyleTargets || (TooltipStyleTargets = {}));
-    const Tooltip = (0, Component_9.default)((component) => {
+    const Tooltip = (0, Component_11.default)((component) => {
         const tooltip = component.and(Popover_1.default)
             .setDelay(200)
             .setMousePadding(0)
@@ -6277,10 +6879,10 @@ define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "k
             .anchor.add('aligned right', 'off bottom')
             .anchor.add('aligned right', 'off top');
     });
-    Component_9.default.extend(component => {
+    Component_11.default.extend(component => {
         component.extend((component) => ({
             setTooltip(initialiserOrTooltip) {
-                if (Component_9.default.is(initialiserOrTooltip))
+                if (Component_11.default.is(initialiserOrTooltip))
                     return component.setPopover('hover/longpress', initialiserOrTooltip);
                 const initialiser = initialiserOrTooltip;
                 return component.setPopover('hover/longpress', (popover, host) => initialiser(popover.and(Tooltip), host));
@@ -6289,7 +6891,7 @@ define("kitsui/component/Tooltip", ["require", "exports", "kitsui/Component", "k
     });
     exports.default = Tooltip;
 });
-define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/component/DragDrop", "kitsui/component/Label", "kitsui/component/Loading", "kitsui/component/Popover", "kitsui/component/Slot", "kitsui/component/Tooltip", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Dialog_2, DragDrop_1, Label_1, Loading_1, Popover_2, Slot_1, Tooltip_1, Component_10, State_17) {
+define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/component/DragDrop", "kitsui/component/Label", "kitsui/component/Loading", "kitsui/component/Popover", "kitsui/component/Sortable", "kitsui/component/Slot", "kitsui/component/Tooltip", "kitsui/Component", "kitsui/utility/State"], function (require, exports, Dialog_2, DragDrop_1, Label_1, Loading_1, Popover_2, Sortable_1, Slot_1, Tooltip_1, Component_12, State_19) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Kit = exports.State = exports.Component = void 0;
@@ -6298,10 +6900,11 @@ define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/compo
     Label_1 = __importStar(Label_1);
     Loading_1 = __importDefault(Loading_1);
     Popover_2 = __importDefault(Popover_2);
+    Sortable_1 = __importDefault(Sortable_1);
     Slot_1 = __importDefault(Slot_1);
     Tooltip_1 = __importDefault(Tooltip_1);
-    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_10).default; } });
-    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_17).default; } });
+    Object.defineProperty(exports, "Component", { enumerable: true, get: function () { return __importDefault(Component_12).default; } });
+    Object.defineProperty(exports, "State", { enumerable: true, get: function () { return __importDefault(State_19).default; } });
     var Kit;
     (function (Kit) {
         Kit.Label = Label_1.default;
@@ -6312,193 +6915,8 @@ define("kitsui", ["require", "exports", "kitsui/component/Dialog", "kitsui/compo
         Kit.Popover = Popover_2.default;
         Kit.Tooltip = Tooltip_1.default;
         Kit.DragDrop = DragDrop_1.default;
+        Kit.Sortable = Sortable_1.default;
     })(Kit || (exports.Kit = Kit = {}));
-});
-define("kitsui/component/Breakdown", ["require", "exports", "kitsui"], function (require, exports, kitsui_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = default_1;
-    class PlacementRun {
-        signal;
-        placements = new Map();
-        constructor(signal) {
-            this.signal = signal;
-        }
-        substitute(component) {
-            if (this.signal.aborted)
-                return;
-            this.placements.get(component)?.remove();
-            const anchor = document.createComment('kitsui-breakdown-part');
-            this.placements.set(component, anchor);
-            return anchor;
-        }
-        commit() {
-            const parents = new Set();
-            const componentByAnchor = new Map();
-            const placedComponentByElement = new Map();
-            for (const [component, anchor] of this.placements) {
-                componentByAnchor.set(anchor, component);
-                const element = component.element;
-                if (element)
-                    placedComponentByElement.set(element, component);
-                const parent = anchor.parentNode;
-                if (parent instanceof Element)
-                    parents.add(parent);
-            }
-            for (const parent of parents) {
-                const oldOrder = normaliseOldOrder(parent, componentByAnchor);
-                const newOrder = normaliseNewOrder(parent, componentByAnchor, placedComponentByElement);
-                if (ordersEqual(oldOrder, newOrder))
-                    continue;
-                const insertedComponents = new Set();
-                const insertedNodes = [];
-                for (const anchor of getAnchors(parent, componentByAnchor)) {
-                    const component = componentByAnchor.get(anchor);
-                    if (!component)
-                        continue;
-                    insertedComponents.add(component);
-                    const node = kitsui_1.Component.getDomController(component).realiseForInsertion();
-                    insertedNodes.push(node);
-                    kitsui_1.Component.moveBefore(parent, node, anchor);
-                }
-                for (const component of insertedComponents)
-                    component.emitInsert();
-                if (parent instanceof Element && insertedNodes.length)
-                    parent.component?.event.emit('childrenInsert', insertedNodes);
-            }
-            for (const parent of parents) {
-                const anchors = getAnchors(parent, componentByAnchor);
-                for (let i = anchors.length - 1; i >= 0; i--)
-                    anchors[i].remove();
-            }
-        }
-        cleanup() {
-            for (const anchor of this.placements.values())
-                anchor.remove();
-            this.placements.clear();
-        }
-    }
-    function getAnchors(parent, componentByAnchor) {
-        return [...parent.childNodes]
-            .filter((node) => node instanceof Comment && componentByAnchor.has(node));
-    }
-    function normaliseOldOrder(parent, componentByAnchor) {
-        const order = [];
-        for (const node of parent.childNodes) {
-            if (node instanceof Comment && componentByAnchor.has(node))
-                continue;
-            const component = node instanceof Element ? node.component : undefined;
-            if (component)
-                order.push({ type: 'part', component });
-            else
-                order.push({ type: 'node', node });
-        }
-        return order;
-    }
-    function normaliseNewOrder(parent, componentByAnchor, placedComponentByElement) {
-        const order = [];
-        for (const node of parent.childNodes) {
-            if (node instanceof Comment) {
-                const component = componentByAnchor.get(node);
-                if (component) {
-                    order.push({ type: 'part', component });
-                    continue;
-                }
-            }
-            if (node instanceof Element && placedComponentByElement.has(node))
-                continue;
-            const component = node instanceof Element ? node.component : undefined;
-            if (component)
-                order.push({ type: 'part', component });
-            else
-                order.push({ type: 'node', node });
-        }
-        return order;
-    }
-    function ordersEqual(a, b) {
-        if (a.length !== b.length)
-            return false;
-        return a.every((entry, index) => {
-            const other = b[index];
-            if (entry.type !== other.type)
-                return false;
-            if (entry.type === 'part' && other.type === 'part')
-                return entry.component === other.component;
-            return entry.type === 'node' && other.type === 'node' && entry.node === other.node;
-        });
-    }
-    function default_1(owner, state, handler) {
-        const store = (0, kitsui_1.Component)().setOwner(owner);
-        kitsui_1.Component.getDomController(store).realiseForInsertion();
-        const parts = new Map();
-        const seen = new Set();
-        let controller;
-        let activeRun;
-        owner.removed.matchManual(true, () => {
-            controller?.abort();
-            activeRun?.cleanup();
-            for (const part of parts.values()) {
-                part.unuseInsertionSubstitute();
-                part.component.remove();
-            }
-            parts.clear();
-            store.remove();
-        });
-        const Part = (unique, value, initialiser) => {
-            if (typeof value === 'function' && !initialiser)
-                initialiser = value, value = undefined;
-            value ??= null;
-            seen.add(unique);
-            let part = parts.get(unique);
-            if (part) {
-                part.state.value = value;
-                return part.component;
-            }
-            const state = (0, kitsui_1.State)(value);
-            const component = (0, kitsui_1.Component)().setOwner(owner);
-            initialiser?.(component, state);
-            const unuseInsertionSubstitute = kitsui_1.Component.substituteInsertion(component, component => activeRun?.substitute(component));
-            part = { state, component, unuseInsertionSubstitute };
-            parts.set(unique, part);
-            return component;
-        };
-        state.use(owner, async (value) => {
-            seen.clear();
-            controller?.abort();
-            controller = new AbortController();
-            const signal = controller.signal;
-            const run = new PlacementRun(signal);
-            const InstancePart = (unique, value, initialiser) => {
-                if (signal.aborted)
-                    return (0, kitsui_1.Component)().tweak(c => c.remove());
-                return Part(unique, value, initialiser);
-            };
-            try {
-                activeRun = run;
-                try {
-                    await handler(value, InstancePart, store);
-                }
-                finally {
-                    if (activeRun === run)
-                        activeRun = undefined;
-                }
-                if (signal.aborted)
-                    return;
-                run.commit();
-                for (const [unique, part] of parts) {
-                    if (!seen.has(unique)) {
-                        part.unuseInsertionSubstitute();
-                        part.component.remove();
-                        parts.delete(unique);
-                    }
-                }
-                seen.clear();
-            }
-            finally {
-                run.cleanup();
-            }
-        });
-    }
 });
 define("kitsui/utility/ActiveListener", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -6560,10 +6978,10 @@ define("kitsui/utility/ActiveListener", ["require", "exports"], function (requir
     exports.default = ActiveListener;
     Object.assign(window, { ActiveListener });
 });
-define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_18) {
+define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_20) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_18 = __importDefault(State_18);
+    State_20 = __importDefault(State_20);
     function Applicator(host, defaultValueOrApply, apply) {
         const defaultValue = !apply ? undefined : defaultValueOrApply;
         apply ??= defaultValueOrApply;
@@ -6572,7 +6990,7 @@ define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State
         return result;
         function makeApplicator(host) {
             return {
-                state: (0, State_18.default)(defaultValue),
+                state: (0, State_20.default)(defaultValue),
                 set: value => {
                     unbind?.();
                     setInternal(value);
@@ -6602,23 +7020,23 @@ define("kitsui/utility/Applicator", ["require", "exports", "kitsui/utility/State
     }
     exports.default = Applicator;
 });
-define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_19) {
+define("kitsui/utility/BrowserListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_21) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_19 = __importDefault(State_19);
+    State_21 = __importDefault(State_21);
     var BrowserListener;
     (function (BrowserListener) {
-        BrowserListener.isWebkit = (0, State_19.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
+        BrowserListener.isWebkit = (0, State_21.default)(/AppleWebKit/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent));
     })(BrowserListener || (BrowserListener = {}));
     exports.default = BrowserListener;
 });
-define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_20) {
+define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_22) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_20 = __importDefault(State_20);
+    State_22 = __importDefault(State_22);
     var FontsListener;
     (function (FontsListener) {
-        FontsListener.loaded = (0, State_20.default)(false);
+        FontsListener.loaded = (0, State_22.default)(false);
         async function listen() {
             await document.fonts.ready;
             FontsListener.loaded.asMutable?.setValue(true);
@@ -6627,25 +7045,25 @@ define("kitsui/utility/FontsListener", ["require", "exports", "kitsui/utility/St
     })(FontsListener || (FontsListener = {}));
     exports.default = FontsListener;
 });
-define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_21) {
+define("kitsui/utility/PageListener", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_23) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_21 = __importDefault(State_21);
+    State_23 = __importDefault(State_23);
     var PageListener;
     (function (PageListener) {
-        PageListener.visible = (0, State_21.default)(document.visibilityState === 'visible');
+        PageListener.visible = (0, State_23.default)(document.visibilityState === 'visible');
         document.addEventListener('visibilitychange', () => PageListener.visible.asMutable?.setValue(document.visibilityState === 'visible'));
     })(PageListener || (PageListener = {}));
     exports.default = PageListener;
 });
-define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "kitsui/utility/Task"], function (require, exports, State_22, Task_2) {
+define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "kitsui/utility/Task"], function (require, exports, State_24, Task_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_22 = __importDefault(State_22);
+    State_24 = __importDefault(State_24);
     Task_2 = __importDefault(Task_2);
     var Style;
     (function (Style) {
-        Style.properties = State_22.default.JIT(() => window.getComputedStyle(document.documentElement));
+        Style.properties = State_24.default.JIT(() => window.getComputedStyle(document.documentElement));
         const measured = {};
         function measure(property) {
             if (measured[property])
@@ -6658,7 +7076,7 @@ define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "k
                 element.style.opacity = '0';
                 element.style.position = 'fixed';
                 document.body.appendChild(element);
-                const state = measured[property] = (0, State_22.default)(0);
+                const state = measured[property] = (0, State_24.default)(0);
                 void Task_2.default.yield().then(() => {
                     state.value = element.clientWidth;
                     element.remove();
@@ -6670,13 +7088,13 @@ define("kitsui/utility/Style", ["require", "exports", "kitsui/utility/State", "k
     })(Style || (Style = {}));
     exports.default = Style;
 });
-define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_23) {
+define("kitsui/utility/TypeManipulator", ["require", "exports", "kitsui/utility/State"], function (require, exports, State_25) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    State_23 = __importDefault(State_23);
+    State_25 = __importDefault(State_25);
     const TypeManipulator = // Object.assign(
      function (host, onAdd, onRemove) {
-        const state = (0, State_23.default)(new Set());
+        const state = (0, State_25.default)(new Set());
         return Object.assign(add, {
             state,
             remove,

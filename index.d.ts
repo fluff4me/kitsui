@@ -1391,6 +1391,59 @@ declare module "kitsui/component/Popover" {
     };
     export default Popover;
 }
+declare module "kitsui/component/Breakdown" {
+    import Component from "kitsui/Component";
+    import State from "kitsui/utility/State";
+    interface BreakdownPartConstructor {
+        (unique: unknown): Component;
+        (unique: unknown, initialiser: (component: Component) => unknown): Component;
+        <T>(unique: unknown, value: T, initialiser: (component: Component, state: State<T>) => unknown): Component;
+    }
+    export default function <T>(owner: State.Owner, state: State<T>, handler: (value: T, Part: BreakdownPartConstructor, Store: Component) => unknown): void;
+}
+declare module "kitsui/component/Sortable" {
+    import type { ComponentEvents } from "kitsui/Component";
+    import Component from "kitsui/Component";
+    import type EventManipulator from "kitsui/utility/EventManipulator";
+    import State from "kitsui/utility/State";
+    type SortableEvents<T> = {
+        commit(event: Sortable.CommitEvent<T>): unknown;
+    };
+    interface SortableExtensions<T> {
+        readonly rows: State<readonly T[]>;
+        readonly event: EventManipulator<this, ComponentEvents & SortableEvents<T>>;
+    }
+    type Sortable<T> = Omit<Component, 'event'> & SortableExtensions<T>;
+    interface SortableOptions<T> {
+        /** Optional method to determine if a row is draggable */
+        draggable?(row: T, index: number): boolean;
+        /** Optional method to determine if a row is droppable */
+        droppable?(row: T, index: number): boolean;
+        /** Optional method to filter input events */
+        inputFilter?(event: PointerEvent, row: T, index: number): boolean;
+    }
+    namespace Sortable {
+        type Params<T> = [
+            rowsInput: readonly T[] | State<readonly T[]>,
+            key: (row: T) => unknown,
+            render: (row: State<T>, index: State<number>) => Component,
+            options?: SortableOptions<T>
+        ];
+        interface Builder extends Omit<Component.Builder<Params<unknown>, Sortable<unknown>>, 'from'> {
+            <T>(...params: Params<T>): Sortable<T>;
+            from<COMPONENT extends Component, T>(component: COMPONENT | undefined, ...params: Params<T>): COMPONENT & Sortable<T>;
+        }
+        interface CommitEvent<T> {
+            readonly rows: readonly T[];
+            readonly oldRows: readonly T[];
+            readonly item: T;
+            readonly fromIndex: number;
+            readonly toIndex: number;
+        }
+    }
+    const Sortable: Sortable.Builder;
+    export default Sortable;
+}
 declare module "kitsui/ext/ComponentInsertionTransaction" {
     import Component from "kitsui/Component";
     import type { ComponentInsertionDestination } from "kitsui/Component";
@@ -1504,6 +1557,7 @@ declare module "kitsui" {
     import _Label, { LabelTarget as _LabelTarget } from "kitsui/component/Label";
     import _Loading from "kitsui/component/Loading";
     import _Popover from "kitsui/component/Popover";
+    import _Sortable from "kitsui/component/Sortable";
     import _Slot from "kitsui/component/Slot";
     import _Tooltip from "kitsui/component/Tooltip";
     export { default as Component } from "kitsui/Component";
@@ -1532,16 +1586,9 @@ declare module "kitsui" {
         const Tooltip: import("kitsui/Component").default.Builder<[], _Tooltip>;
         type DragDrop<T> = _DragDrop<T>;
         const DragDrop: typeof _DragDrop;
+        type Sortable<T> = _Sortable<T>;
+        const Sortable: _Sortable.Builder;
     }
-}
-declare module "kitsui/component/Breakdown" {
-    import { Component, State } from "kitsui";
-    interface BreakdownPartConstructor {
-        (unique: unknown): Component;
-        (unique: unknown, initialiser: (component: Component) => unknown): Component;
-        <T>(unique: unknown, value: T, initialiser: (component: Component, state: State<T>) => unknown): Component;
-    }
-    export default function <T>(owner: State.Owner, state: State<T>, handler: (value: T, Part: BreakdownPartConstructor, Store: Component) => unknown): void;
 }
 declare module "kitsui/utility/ActiveListener" {
     import type Component from "kitsui/Component";
