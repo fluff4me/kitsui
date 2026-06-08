@@ -3,6 +3,7 @@ import _DragDrop from 'component/DragDrop'
 import _Label, { LabelTarget as _LabelTarget } from 'component/Label'
 import _Loading from 'component/Loading'
 import _Popover from 'component/Popover'
+import _Sortable from 'component/Sortable'
 import _Slot from 'component/Slot'
 import _Tooltip from 'component/Tooltip'
 
@@ -26,4 +27,6 @@ export namespace Kit {
 	export const Tooltip = _Tooltip
 	export type DragDrop<T> = _DragDrop<T>
 	export const DragDrop = _DragDrop
+	export type Sortable<T> = _Sortable<T>
+	export const Sortable = _Sortable
 }

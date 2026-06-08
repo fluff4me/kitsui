@@ -1,4 +1,5 @@
-import { Component, State } from 'kitsui'
+import Component from 'Component'
+import State from 'utility/State'
 
 interface BreakdownPart<T> {
 	state: State.Mutable<T>
@@ -148,7 +149,7 @@ function ordersEqual (a: OrderEntry[], b: OrderEntry[]): boolean {
 	})
 }
 
-export default function<T> (owner: State.Owner, state: State<T>, handler: (value: T, Part: BreakdownPartConstructor, Store: Component) => unknown): void {
+export default function <T> (owner: State.Owner, state: State<T>, handler: (value: T, Part: BreakdownPartConstructor, Store: Component) => unknown): void {
 	const store = Component().setOwner(owner)
 	Component.getDomController(store).realiseForInsertion()
 	const parts = new Map<unknown, BreakdownPart<unknown>>()
