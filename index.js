@@ -6032,7 +6032,6 @@ define("kitsui/component/Sortable", ["require", "exports", "kitsui/Component", "
     const AUTO_SCROLL_THRESHOLD = 36;
     const AUTO_SCROLL_MAX_SPEED = 18;
     const SortableImplementation = Component_8.default.Builder((component, rowsInput, key, render, options) => {
-        component.style('sortable');
         const ownsRows = !State_16.default.is(rowsInput);
         const rows = State_16.default.is(rowsInput) ? rowsInput : (0, State_16.default)(rowsInput);
         const mutableRows = ownsRows ? rows : undefined;
@@ -6045,6 +6044,9 @@ define("kitsui/component/Sortable", ["require", "exports", "kitsui/Component", "
         let dragOrder;
         let autoScrollFrame;
         let autoScrollSession;
+        const sortable = component.extend(() => ({
+            rows,
+        }));
         (0, Breakdown_1.default)(component, rows, (rows, Part) => {
             const keyedRows = rows.map((row, index) => ({
                 key: key(row),
@@ -6395,14 +6397,14 @@ define("kitsui/component/Sortable", ["require", "exports", "kitsui/Component", "
             emitCommit(oldRows, nextRows, source, nextEntries.findIndex(entry => entry === source));
         }
         function emitCommit(oldRows, nextRows, source, toIndex) {
-            const event = {
+            const result = sortable.event.emit('Commit', {
                 rows: nextRows,
                 oldRows,
                 item: source.row,
                 fromIndex: source.index,
                 toIndex,
-            };
-            if (!component.event.emit('commit', event).defaultPrevented)
+            });
+            if (!result.defaultPrevented)
                 mutableRows?.setValue(nextRows);
         }
         function arraysEqual(a, b) {
@@ -6422,10 +6424,7 @@ define("kitsui/component/Sortable", ["require", "exports", "kitsui/Component", "
                 if (options?.droppable?.(entries[i].row, entries[i].index) ?? true)
                     return entries[i];
         }
-        return component.extend(() => ({
-            rows,
-            event: component.event,
-        }));
+        return sortable;
     }).setName('Sortable');
     function pointFromPointer(event) {
         return {

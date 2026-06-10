@@ -1409,7 +1409,7 @@ declare module "kitsui/component/Sortable" {
     import Component from "kitsui/Component";
     import State from "kitsui/utility/State";
     interface SortableEvents<T> extends ComponentEvents {
-        commit(event: Sortable.CommitEvent<T>): unknown;
+        Commit(event: Sortable.CommitEvent<T>): unknown;
     }
     interface SortableExtensions<T> {
         readonly rows: State<readonly T[]>;
