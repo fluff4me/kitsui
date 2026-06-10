@@ -997,6 +997,9 @@ declare module "kitsui/Component" {
     function Component<PARAMS extends any[], COMPONENT extends Component | undefined>(initial: keyof HTMLElementTagNameMap | (() => Component), builder: (component: Component, ...params: PARAMS) => COMPONENT): Component.Builder<PARAMS, COMPONENT>;
     function Component<PARAMS extends any[], COMPONENT extends Component | undefined>(initial: keyof HTMLElementTagNameMap | (() => Component), builder: (component: Component, ...params: PARAMS) => Promise<COMPONENT>): Component.BuilderAsync<PARAMS, COMPONENT>;
     namespace Component {
+        export interface WithEvents<EVENTS extends Record<string, any>> extends Omit<Component, 'event'> {
+            readonly event: EventManipulator<this, EVENTS>;
+        }
         export interface StyleHost<STYLE> {
             styleTargets: StyleTargets<this, STYLE> & {
                 [KEY in keyof STYLE]: State<ComponentName | undefined>;
@@ -1404,16 +1407,15 @@ declare module "kitsui/component/Breakdown" {
 declare module "kitsui/component/Sortable" {
     import type { ComponentEvents } from "kitsui/Component";
     import Component from "kitsui/Component";
-    import type EventManipulator from "kitsui/utility/EventManipulator";
     import State from "kitsui/utility/State";
-    type SortableEvents<T> = {
+    interface SortableEvents<T> extends ComponentEvents {
         commit(event: Sortable.CommitEvent<T>): unknown;
-    };
+    }
     interface SortableExtensions<T> {
         readonly rows: State<readonly T[]>;
-        readonly event: EventManipulator<this, ComponentEvents & SortableEvents<T>>;
     }
-    type Sortable<T> = Omit<Component, 'event'> & SortableExtensions<T>;
+    interface Sortable<T> extends Component.WithEvents<SortableEvents<T>>, SortableExtensions<T> {
+    }
     interface SortableOptions<T> {
         /** Optional method to determine if a row is draggable */
         draggable?(row: T, index: number): boolean;
