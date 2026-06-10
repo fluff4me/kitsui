@@ -4,7 +4,7 @@ import Breakdown from 'component/Breakdown'
 import State from 'utility/State'
 
 interface SortableEvents<T> extends ComponentEvents {
-	commit (event: Sortable.CommitEvent<T>): unknown
+	Commit (event: Sortable.CommitEvent<T>): unknown
 }
 
 interface SortableExtensions<T> {
@@ -53,8 +53,6 @@ const SortableImplementation = Component.Builder(<T> (
 	render: (row: State<T>, index: State<number>) => Component,
 	options?: SortableOptions<T>,
 ): Sortable<T> => {
-	component.style('sortable' as never)
-
 	const ownsRows = !State.is(rowsInput)
 	const rows = State.is<readonly T[]>(rowsInput) ? rowsInput : State<readonly T[]>(rowsInput)
 	const mutableRows = ownsRows ? rows as State.Mutable<readonly T[]> : undefined
@@ -68,6 +66,10 @@ const SortableImplementation = Component.Builder(<T> (
 	let dragOrder: unknown[] | undefined
 	let autoScrollFrame: number | undefined
 	let autoScrollSession: AutoScrollSession | undefined
+
+	const sortable: Sortable<T> = component.extend<SortableExtensions<T>>(() => ({
+		rows,
+	}))
 
 	Breakdown(component, rows, (rows, Part) => {
 		const keyedRows = rows.map((row, index) => ({
@@ -493,14 +495,14 @@ const SortableImplementation = Component.Builder(<T> (
 	}
 
 	function emitCommit (oldRows: readonly T[], nextRows: readonly T[], source: SortablePayload<T>, toIndex: number) {
-		const event: Sortable.CommitEvent<T> = {
+		const result = sortable.event.emit('Commit', {
 			rows: nextRows,
 			oldRows,
 			item: source.row,
 			fromIndex: source.index,
 			toIndex,
-		}
-		if (!component.event.emit('commit' as never, event as never).defaultPrevented)
+		})
+		if (!result.defaultPrevented)
 			mutableRows?.setValue(nextRows)
 	}
 
@@ -524,10 +526,7 @@ const SortableImplementation = Component.Builder(<T> (
 				return entries[i]
 	}
 
-	return component.extend<SortableExtensions<T>>(() => ({
-		rows,
-		event: component.event as never,
-	}))
+	return sortable
 }).setName('Sortable')
 
 function pointFromPointer (event: PointerEvent) {
