@@ -1,19 +1,18 @@
 import type { ComponentEvents } from 'Component'
 import Component from 'Component'
 import Breakdown from 'component/Breakdown'
-import type EventManipulator from 'utility/EventManipulator'
 import State from 'utility/State'
 
-type SortableEvents<T> = {
+interface SortableEvents<T> extends ComponentEvents {
 	commit (event: Sortable.CommitEvent<T>): unknown
 }
 
 interface SortableExtensions<T> {
 	readonly rows: State<readonly T[]>
-	readonly event: EventManipulator<this, ComponentEvents & SortableEvents<T>>
 }
 
-type Sortable<T> = Omit<Component, 'event'> & SortableExtensions<T>
+interface Sortable<T> extends Component.WithEvents<SortableEvents<T>>, SortableExtensions<T> {
+}
 
 interface SortableRowState<T> {
 	readonly row: T

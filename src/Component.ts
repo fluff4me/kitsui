@@ -1658,6 +1658,10 @@ function emitRemove (component: Component | undefined) {
 let canBuildComponents = false
 namespace Component {
 
+	export interface WithEvents<EVENTS extends Record<string, any>> extends Omit<Component, 'event'> {
+		readonly event: EventManipulator<this, EVENTS>
+	}
+
 	export interface StyleHost<STYLE> {
 		// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 		styleTargets: StyleTargets<this, STYLE> & { [KEY in keyof STYLE]: State<ComponentName | undefined> }
