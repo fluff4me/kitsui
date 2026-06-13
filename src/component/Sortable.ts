@@ -56,6 +56,7 @@ const SortableImplementation = Component.Builder(<T> (
 	const ownsRows = !State.is(rowsInput)
 	const rows = State.is<readonly T[]>(rowsInput) ? rowsInput : State<readonly T[]>(rowsInput)
 	const mutableRows = ownsRows ? rows as State.Mutable<readonly T[]> : undefined
+	// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 	const movingKey = State<unknown | undefined>(undefined)
 	const elementKeys = new WeakMap<Element, unknown>()
 	const componentKeys = new WeakMap<Component, unknown>()
