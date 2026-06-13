@@ -6035,6 +6035,7 @@ define("kitsui/component/Sortable", ["require", "exports", "kitsui/Component", "
         const ownsRows = !State_16.default.is(rowsInput);
         const rows = State_16.default.is(rowsInput) ? rowsInput : (0, State_16.default)(rowsInput);
         const mutableRows = ownsRows ? rows : undefined;
+        // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
         const movingKey = (0, State_16.default)(undefined);
         const elementKeys = new WeakMap();
         const componentKeys = new WeakMap();
