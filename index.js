@@ -154,7 +154,16 @@ define("kitsui/utility/Timeout", ["require", "exports"], function (require, expo
         // 			throw new Error('Active timeout found after reusable timeouts')
         // }
         const rAF = self.requestAnimationFrame ?? (cb => self.setTimeout(cb, 10));
-        process();
+        let processRequested = false;
+        function hasActiveTimeouts() {
+            return timeouts.some(timeout => timeout.until !== 0);
+        }
+        function requestProcess() {
+            if (processRequested || !hasActiveTimeouts())
+                return;
+            processRequested = true;
+            rAF(process);
+        }
         function process() {
             const now = Date.now();
             let firstRealTimeoutIndex;
@@ -183,7 +192,10 @@ define("kitsui/utility/Timeout", ["require", "exports"], function (require, expo
                 catch (e) {
                     console.error('Error in Timeout callback:', e);
                 }
-            rAF(process);
+            if (hasActiveTimeouts())
+                rAF(process);
+            else
+                processRequested = false;
         }
         function unuseTimeout(index, firstRealTimeoutIndex) {
             const timeout = timeouts[index];
@@ -211,6 +223,7 @@ define("kitsui/utility/Timeout", ["require", "exports"], function (require, expo
                 timeout.id = nextTimeoutId++;
                 timeout.until = Date.now() + ms;
                 timeout.cb = cb;
+                requestProcess();
                 // validateTimeouts()
                 return timeout.id;
             }
@@ -220,6 +233,7 @@ define("kitsui/utility/Timeout", ["require", "exports"], function (require, expo
                 cb,
             };
             timeouts.unshift(timeout);
+            requestProcess();
             // validateTimeouts()
             return timeout.id;
         }
