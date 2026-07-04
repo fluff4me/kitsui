@@ -92,6 +92,7 @@ declare module "kitsui/utility/State" {
     }
     interface MutableState<T> extends MutableStateSimple<T> {
         setValue(value: T): this;
+        updateValue(updaterFunction: (value: T) => T): this;
         bind(owner: State.Owner, state: State<T>): State.Unsubscribe;
         bindManual(state: State<T>): State.Unsubscribe;
     }

@@ -293,6 +293,11 @@ define("kitsui/utility/State", ["require", "exports", "kitsui/utility/Arrays", "
                 setValue(value);
                 return result;
             },
+            updateValue(updaterFunction) {
+                unuseBoundState?.();
+                setValue(updaterFunction(result[SYMBOL_VALUE]));
+                return result;
+            },
             comparator: value => comparator === false ? false
                 : result[SYMBOL_VALUE] === value || comparator?.(result[SYMBOL_VALUE], value) || false,
             emit: oldValue => {
