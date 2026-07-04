@@ -49,6 +49,7 @@ interface MutableStateSimple<T> extends State<T> {
 
 interface MutableState<T> extends MutableStateSimple<T> {
 	setValue (value: T): this
+	updateValue (updaterFunction: (value: T) => T): this
 	bind (owner: State.Owner, state: State<T>): State.Unsubscribe
 	bindManual (state: State<T>): State.Unsubscribe
 }
@@ -87,6 +88,11 @@ function State<T> (defaultValue: T, comparator?: State.ComparatorFunction<T>): S
 		setValue (value) {
 			unuseBoundState?.()
 			setValue(value)
+			return result
+		},
+		updateValue (updaterFunction) {
+			unuseBoundState?.()
+			setValue(updaterFunction(result[SYMBOL_VALUE]))
 			return result
 		},
 		comparator: value => comparator === false ? false
